@@ -1,0 +1,60 @@
+# Master Prompt: MovieManager (Flutter macOS)
+
+Build a high-performance, native-feeling macOS application using Flutter to manage and organize video files across multiple local directories.
+
+## Core Technical Stack
+- **Framework**: Flutter (macOS desktop target).
+- **Backend Database**: `drift` (SQLite) for structured, reactive data persistence.
+- **Video Processing**: `ffmpeg_kit_flutter_new` for metadata extraction and thumbnail generation.
+- **System Integration**: `url_launcher` or `open_filex` to trigger the system-default video player.
+- **AI/ML**: Method Channels to Apple's Native `NaturalLanguage` framework (Foundation) for intelligent tag suggestions.
+- **UI Architecture**: `macos_ui` for native aesthetics and `flutter_riverpod` for state management.
+- **Concurrency**: Background scanning and processing must use Dart `Isolates` to keep the UI at 60fps.
+
+## Functional Requirements
+
+### 1. Folder Management & Scanning
+- Allow users to add one or more root folders.
+- **Recursive Scanning**: On folder addition, perform a recursive search for video files (`.mp4`, `.mkv`, `.mov`, `.avi`). 
+- **Persistence**: Store folder paths, file paths, and relative subfolder depths in SQLite.
+- **Startup Sync**: Automatically scan registered folders on launch to detect added, moved, or deleted files.
+- **Visual Feedback**: The footer should show a "System Tray" style status (e.g., "Scanning 'Movies'...", "Extracting thumbnails (14/50)").
+
+### 2. Media Processing Pipeline
+- **Metadata**: Extract title, duration, bitrate, and resolution using FFprobe.
+- **Thumbnails**: Extract a frame at the 10% mark of the video. **Store thumbnails as BLOBs directly in the SQLite database** for self-contained management.
+- **Flow**: Information must appear in the UI immediately as it is discovered/processed.
+
+### 3. Grid View UI
+- **Layout**: A responsive grid of fixed-size cells.
+- **Cell Details**:
+    - **Visual**: 16:9 thumbnail at the top.
+    - **Text**: Video title (bold), duration overlay on thumbnail.
+    - **Path Context**: Show the relative path from the root folder (e.g., `Root > Subfolder A`) to provide context without filename clutter.
+    - **Hover State**: On hover for 1.5s, expand a semi-transparent overlay showing the full description and detailed metadata.
+- **Tags Input**: Each cell contains an inline "Chip" input for adding custom tags.
+
+### 4. Intelligence Features (Apple Foundation)
+- Implement a Swift Method Channel to use `NLTagger` and `NLLanguageRecognizer`.
+- **Auto-Suggestions**: Analyze the video title and description to extract keywords (nouns/proper nouns) and suggest them as tags.
+- Store suggested vs. user-added tags separately in the schema.
+
+### 5. Filtering & Sorting
+- **Filter**: A top-bar multi-select "Tag Cloud" for inclusive filtering (Tag A OR Tag B).
+- **Sort**: Dropdown to sort by: Duration (Asc/Desc), Date Added, or Title.
+
+## Implementation Guidelines (Gaps Filled)
+- **Sandboxing**: Ensure `com.apple.security.files.user-selected.read-write` entitlement is enabled. Use `file_picker` to grant security-scoped bookmarks for persistable folder access.
+- **External Drives & Integrity**: 
+    - Support folders on external drives. 
+    - On startup, check if root folders are reachable. If a drive is disconnected, mark files as "Offline" (grey out thumbnails, disable playback).
+    - If a file exists but is moved/deleted while the app is closed, update the DB status accordingly.
+- **Playback**: When a cell is clicked, use the system-default application to open and play the video file.
+- **Async Safety**: Ensure the database connection handles concurrent writes from the background Isolate and reads from the main UI Isolate.
+
+## Deliverables
+1. Flutter project structure.
+2. `drift` database schema definition.
+3. Method Channel implementation (Dart & Swift) for Natural Language processing.
+4. UI components for the Grid and Filter Bar.
+5. Background worker (Isolate) logic for the scanner.
