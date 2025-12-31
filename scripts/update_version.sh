@@ -9,7 +9,7 @@ if [ ! -f "$PUBSPEC" ]; then
 fi
 
 # Read current version line
-# Expected format: version: 1.0.0+1
+# Expected format: version: 0.0.1
 VERSION_LINE=$(grep "^version: " "$PUBSPEC")
 
 if [ -z "$VERSION_LINE" ]; then
@@ -19,25 +19,32 @@ fi
 
 # Extract version components
 # Remove "version: " prefix
-CURRENT_FULL_VERSION=${VERSION_LINE#version: }
+CURRENT_VERSION=${VERSION_LINE#version: }
 
-# Split dimensions
-# Assuming format X.Y.Z+N
-BASE_VERSION=$(echo "$CURRENT_FULL_VERSION" | cut -d'+' -f1)
-BUILD_NUMBER=$(echo "$CURRENT_FULL_VERSION" | cut -d'+' -f2)
+# Check if there is a '+' (user requested no +, but just in case for safety/cleanup)
+# If found, strip it for calculation, or handle error?
+# We will assume strictly X.Y.Z format as requested.
+# Strip anything after + just in case, but user said "Lets not use +"
+CLEAN_VERSION=$(echo "$CURRENT_VERSION" | cut -d'+' -f1)
 
-if [ -z "$BUILD_NUMBER" ] || [ "$BUILD_NUMBER" == "$BASE_VERSION" ]; then
-    # Case where there is no +N, e.g. 1.0.0. Initialize build number to 1
-    NEW_BUILD_NUMBER=1
-else
-    NEW_BUILD_NUMBER=$((BUILD_NUMBER + 1))
+# Split by dot
+IFS='.' read -r -a PARTS <<< "$CLEAN_VERSION"
+
+MAJOR=${PARTS[0]}
+MINOR=${PARTS[1]}
+PATCH=${PARTS[2]}
+
+if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
+    echo "Error: Version format $CURRENT_VERSION not recognized. Expected X.Y.Z"
+    exit 1
 fi
 
-NEW_FULL_VERSION="${BASE_VERSION}+${NEW_BUILD_NUMBER}"
+# Increment Patch version
+NEW_PATCH=$((PATCH + 1))
+
+NEW_FULL_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
 # Update pubspec.yaml
-# Use sed to replace the line
-# -i '' for macOS sed compatibility (no backup)
 if [[ "$OSTYPE" == "darwin"* ]]; then
   sed -i '' "s/^version: .*/version: $NEW_FULL_VERSION/" "$PUBSPEC"
 else
