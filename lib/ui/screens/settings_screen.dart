@@ -48,23 +48,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     });
 
-    return MacosWindow(
-      child: MacosScaffold(
-        toolBar: ToolBar(
-          title: const Text('Settings'),
-          leading: MacosIconButton(
+    return MacosScaffold(
+      backgroundColor: MacosTheme.of(context).canvasColor,
+      toolBar: ToolBar(
+        decoration: BoxDecoration(
+          color: MacosTheme.of(context).canvasColor,
+        ),
+        centerTitle: false,
+        title: const Text('Back'),
+        leading: Transform.translate(
+          offset: const Offset(-10, 0),
+          child: MacosIconButton(
             icon: const MacosIcon(CupertinoIcons.back),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
-        children: [
-          ContentArea(
-            builder: (context, controller) {
-              if (settingsAsync.isLoading) {
-                 return const Center(child: ProgressCircle());
-              }
-              
-              return Padding(
+      ),
+      children: [
+        ContentArea(
+          builder: (context, controller) {
+            if (settingsAsync.isLoading) {
+               return const Center(child: ProgressCircle());
+            }
+            
+            return Container(
+              color: MacosTheme.of(context).canvasColor,
+              child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,6 +82,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 10),
                     Expanded(child: _FolderList()),
                     
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 20),
+                    
+                    Text('Appearance', style: MacosTheme.of(context).typography.headline),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const SizedBox(width: 200, child: Text('Theme')),
+                        MacosPopupButton<String>(
+                          value: settingsAsync.value?['themeMode']?.toString() ?? 'system',
+                          onChanged: (String? mode) {
+                            if (mode != null) {
+                              ref.read(settingsProvider.notifier).updateTheme(mode);
+                            }
+                          },
+                          items: const [
+                            MacosPopupMenuItem(value: 'system', child: Text('System')),
+                            MacosPopupMenuItem(value: 'light', child: Text('Light')),
+                            MacosPopupMenuItem(value: 'dark', child: Text('Dark')),
+                          ],
+                        ),
+                      ],
+                    ),
+
                     const SizedBox(height: 20),
                     const Divider(),
                     const SizedBox(height: 20),
@@ -101,11 +135,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _buildPreferenceRow(context, 'Batch Processing Size', _batchSizeController),
                   ],
                 ),
-              );
-            },
-          ),
-        ],
-      ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

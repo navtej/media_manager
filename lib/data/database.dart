@@ -8,7 +8,7 @@ import 'tables.dart';
 
 part 'database.g.dart';
 
-enum SortOption { title, duration, addedAt }
+enum SortOption { title, duration, addedAt, size }
 enum SortDirection { asc, desc }
 
 @DriftDatabase(tables: [Folders, Videos, Tags], daos: [VideosDao, FoldersDao, TagsDao])
@@ -150,6 +150,8 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
           return OrderingTerm(expression: t.duration, mode: mode);
         } else if (sortBy == SortOption.addedAt) {
           return OrderingTerm(expression: t.fileCreatedAt, mode: mode);
+        } else if (sortBy == SortOption.size) {
+          return OrderingTerm(expression: t.size, mode: mode);
         } else {
           return OrderingTerm(expression: t.title, mode: mode);
         }
@@ -192,6 +194,8 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
         query.orderBy([OrderingTerm(expression: videos.duration, mode: mode)]);
       } else if (sortBy == SortOption.addedAt) {
         query.orderBy([OrderingTerm(expression: videos.fileCreatedAt, mode: mode)]);
+      } else if (sortBy == SortOption.size) {
+        query.orderBy([OrderingTerm(expression: videos.size, mode: mode)]);
       } else {
         query.orderBy([OrderingTerm(expression: videos.title, mode: mode)]);
       }
@@ -218,6 +222,8 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
             return OrderingTerm(expression: t.duration, mode: mode);
           } else if (sortBy == SortOption.addedAt) {
             return OrderingTerm(expression: t.fileCreatedAt, mode: mode);
+          } else if (sortBy == SortOption.size) {
+            return OrderingTerm(expression: t.size, mode: mode);
           } else {
             return OrderingTerm(expression: t.title, mode: mode);
           }

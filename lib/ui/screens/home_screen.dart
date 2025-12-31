@@ -76,23 +76,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _SidebarNavItem(
-                  label: 'Release Title',
-                  icon: CupertinoIcons.textformat_abc,
-                  selected: ref.watch(selectedSortProvider) == SortOption.title,
-                  onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.title),
-                ),
-                _SidebarNavItem(
-                  label: 'Creation Date',
-                  icon: CupertinoIcons.calendar,
-                  selected: ref.watch(selectedSortProvider) == SortOption.addedAt,
-                  onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.addedAt),
-                ),
-                _SidebarNavItem(
-                  label: 'Video Duration',
-                  icon: CupertinoIcons.timer,
-                  selected: ref.watch(selectedSortProvider) == SortOption.duration,
-                  onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.duration),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                       _GridSortItem(
+                          label: 'Title',
+                          icon: CupertinoIcons.textformat_abc,
+                          selected: ref.watch(selectedSortProvider) == SortOption.title,
+                          onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.title),
+                       ),
+                       _GridSortItem(
+                          label: 'Date',
+                          icon: CupertinoIcons.calendar,
+                          selected: ref.watch(selectedSortProvider) == SortOption.addedAt,
+                          onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.addedAt),
+                       ),
+                       _GridSortItem(
+                          label: 'Duration',
+                          icon: CupertinoIcons.timer,
+                          selected: ref.watch(selectedSortProvider) == SortOption.duration,
+                          onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.duration),
+                       ),
+                       _GridSortItem(
+                          label: 'Size',
+                          icon: CupertinoIcons.floppy_disk,
+                          selected: ref.watch(selectedSortProvider) == SortOption.size,
+                          onTap: () => ref.read(selectedSortProvider.notifier).set(SortOption.size),
+                       ),
+                    ],
+                  ),
                 ),
                 
                 const Divider(height: 24, indent: 16, endIndent: 16),
@@ -303,6 +318,59 @@ class _SidebarNavItem extends StatelessWidget {
               style: theme.typography.body.copyWith(
                 color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.8),
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GridSortItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GridSortItem({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        // Half width minus spacing
+        width: 95, 
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? theme.primaryColor.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.7),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.typography.body.copyWith(
+                  fontSize: 12, // Slightly smaller font
+                  color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.8),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

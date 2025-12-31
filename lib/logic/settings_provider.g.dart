@@ -13,7 +13,7 @@ part of 'settings_provider.dart';
 final settingsProvider = SettingsProvider._();
 
 final class SettingsProvider
-    extends $AsyncNotifierProvider<Settings, Map<String, int>> {
+    extends $AsyncNotifierProvider<Settings, Map<String, dynamic>> {
   SettingsProvider._()
     : super(
         from: null,
@@ -33,20 +33,24 @@ final class SettingsProvider
   Settings create() => Settings();
 }
 
-String _$settingsHash() => r'1a2d4d687ad8e79c1e70bcc175c0f7e1bcfd1573';
+String _$settingsHash() => r'4b182b77bde3c00ff8b13c59659aa22010229f88';
 
-abstract class _$Settings extends $AsyncNotifier<Map<String, int>> {
-  FutureOr<Map<String, int>> build();
+abstract class _$Settings extends $AsyncNotifier<Map<String, dynamic>> {
+  FutureOr<Map<String, dynamic>> build();
   @$mustCallSuper
   @override
   void runBuild() {
     final ref =
-        this.ref as $Ref<AsyncValue<Map<String, int>>, Map<String, int>>;
+        this.ref
+            as $Ref<AsyncValue<Map<String, dynamic>>, Map<String, dynamic>>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<AsyncValue<Map<String, int>>, Map<String, int>>,
-              AsyncValue<Map<String, int>>,
+              AnyNotifier<
+                AsyncValue<Map<String, dynamic>>,
+                Map<String, dynamic>
+              >,
+              AsyncValue<Map<String, dynamic>>,
               Object?,
               Object?
             >;

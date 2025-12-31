@@ -7,6 +7,8 @@ import 'ui/screens/home_screen.dart';
 import 'package:flutter/services.dart';
 import 'ui/screens/settings_screen.dart';
 
+import 'logic/settings_provider.dart';
+
 void main() {
   runApp(const ProviderScope(child: MovieManagerApp()));
 }
@@ -23,59 +25,71 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformMenuBar(
-      menus: [
-        PlatformMenu(
-          label: 'Media Manager',
+    return Consumer(
+      builder: (context, ref, _) {
+        final settings = ref.watch(settingsProvider);
+        final themeModeString = settings.value?['themeMode'] ?? 'system';
+        final themeMode = switch (themeModeString) {
+            'light' => ThemeMode.light,
+            'dark' => ThemeMode.dark,
+            _ => ThemeMode.system,
+        };
+
+        return PlatformMenuBar(
           menus: [
-            PlatformMenuItemGroup(
-              members: [
-                PlatformMenuItem(
-                  label: 'About Media Manager',
-                  onSelected: () {
-                    showMacosAlertDialog(
-                      context: _navigatorKey.currentContext!,
-                      builder: (_) => MacosAlertDialog(
-                        appIcon: const MacosIcon(CupertinoIcons.film),
-                        title: const Text('Media Manager'),
-                        message: const Text('Version 1.0.0'),
-                        primaryButton: PushButton(
-                          controlSize: ControlSize.large,
-                          child: const Text('OK'),
-                          onPressed: () => Navigator.of(_navigatorKey.currentContext!).pop(),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                PlatformMenuItem(
-                  label: 'Preferences...',
-                  shortcut: const CharacterActivator(',', meta: true),
-                  onSelected: () {
-                    _navigatorKey.currentState?.push(
-                      CupertinoPageRoute(builder: (_) => const SettingsScreen()),
-                    );
-                  },
-                ),
-                PlatformMenuItem(
-                  label: 'Quit Media Manager',
-                  shortcut: const CharacterActivator('q', meta: true),
-                  onSelected: () => SystemNavigator.pop(),
+            PlatformMenu(
+              label: 'Media Manager',
+              menus: [
+                PlatformMenuItemGroup(
+                  members: [
+                    PlatformMenuItem(
+                      label: 'About Media Manager',
+                      onSelected: () {
+                        showMacosAlertDialog(
+                          context: _navigatorKey.currentContext!,
+                          builder: (_) => MacosAlertDialog(
+                            appIcon: const MacosIcon(CupertinoIcons.film),
+                            title: const Text('Media Manager'),
+                            message: const Text('Version 1.0.0'),
+                            primaryButton: PushButton(
+                              controlSize: ControlSize.large,
+                              child: const Text('OK'),
+                              onPressed: () => Navigator.of(_navigatorKey.currentContext!).pop(),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    PlatformMenuItem(
+                      label: 'Preferences...',
+                      shortcut: const CharacterActivator(',', meta: true),
+                      onSelected: () {
+                        _navigatorKey.currentState?.push(
+                          CupertinoPageRoute(builder: (_) => const SettingsScreen()),
+                        );
+                      },
+                    ),
+                    PlatformMenuItem(
+                      label: 'Quit Media Manager',
+                      shortcut: const CharacterActivator('q', meta: true),
+                      onSelected: () => SystemNavigator.pop(),
+                    ),
+                  ],
                 ),
               ],
             ),
           ],
-        ),
-      ],
-      child: MacosApp(
-        navigatorKey: _navigatorKey,
-        title: 'Media Manager',
-        theme: MacosThemeData.light(),
-        darkTheme: MacosThemeData.dark(),
-        themeMode: ThemeMode.dark,
-        debugShowCheckedModeBanner: false,
-        home: const HomeScreen(),
-      ),
+          child: MacosApp(
+            navigatorKey: _navigatorKey,
+            title: 'Media Manager',
+            theme: MacosThemeData.light(),
+            darkTheme: MacosThemeData.dark(),
+            themeMode: themeMode,
+            debugShowCheckedModeBanner: false,
+            home: const HomeScreen(),
+          ),
+        );
+      }
     );
   }
 }

@@ -6,13 +6,16 @@ part 'settings_provider.g.dart';
 @Riverpod(keepAlive: true)
 class Settings extends _$Settings {
   @override
-  FutureOr<Map<String, int>> build() async {
+  FutureOr<Map<String, dynamic>> build() async {
     final prefs = await SharedPreferences.getInstance();
     final interval = prefs.getInt('scan_interval') ?? 5;
     final batchSize = prefs.getInt('batch_size') ?? 4;
+    final themeMode = prefs.getString('theme_mode') ?? 'system';
+    
     return {
       'scanInterval': interval,
       'batchSize': batchSize,
+      'themeMode': themeMode,
     };
   }
 
@@ -24,9 +27,23 @@ class Settings extends _$Settings {
     await prefs.setInt('scan_interval', interval);
     await prefs.setInt('batch_size', batchSize);
     
+    final currentTheme = state.value?['themeMode'] ?? 'system';
+    
     state = AsyncValue.data({
       'scanInterval': interval,
       'batchSize': batchSize,
+      'themeMode': currentTheme,
+    });
+  }
+
+  Future<void> updateTheme(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_mode', mode);
+    
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({
+      ...currentData,
+      'themeMode': mode,
     });
   }
 }

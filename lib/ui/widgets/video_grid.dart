@@ -239,6 +239,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
       child: MacosTextField(
         controller: _tagController,
         placeholder: 'Add tag...',
+        placeholderStyle: const TextStyle(color: MacosColors.systemGrayColor),
         style: const TextStyle(fontSize: 11),
         onSubmitted: (val) async {
           if (val.trim().isNotEmpty) {
