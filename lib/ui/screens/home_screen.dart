@@ -20,6 +20,26 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    ref.read(searchQueryProvider.notifier).set(_searchController.text);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Force initialization of library controller
@@ -217,14 +237,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-               // Search Bar
-               Padding(
-                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                 child: MacosSearchField(
-                   placeholder: 'Search videos...',
-                   onChanged: (value) => ref.read(searchQueryProvider.notifier).set(value),
-                 ),
-               ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: MacosSearchField(
+                    controller: _searchController,
+                    placeholder: 'Search videos...',
+                  ),
+                ),
                // Grid
                Expanded(
                  child: CustomScrollView(
