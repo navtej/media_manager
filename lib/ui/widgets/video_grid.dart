@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:drift/drift.dart' hide Column;
+import 'package:path/path.dart' as p;
 import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
@@ -179,6 +180,8 @@ class _VideoGridItemState extends State<VideoGridItem> {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      // Folder Path (above tags)
+                      _FolderPathWidget(video: video),
                       // Tags Section
                       Expanded(
                         child: _VideoTagList(videoId: video.id),
@@ -238,16 +241,24 @@ class _VideoGridItemState extends State<VideoGridItem> {
       height: 24,
       child: MacosTextField(
         controller: _tagController,
-        placeholder: 'Add tag...',
+        placeholder: 'Add tags (comma-separated)...',
         placeholderStyle: const TextStyle(color: MacosColors.systemGrayColor),
         style: const TextStyle(fontSize: 11),
         onSubmitted: (val) async {
           if (val.trim().isNotEmpty) {
-            await ref.read(tagsDaoProvider).insertTag(TagsCompanion.insert(
-              videoId: widget.video.id,
-              tagText: val.trim(),
-              source: const Value('user'),
-            ));
+            // Split by comma and process each tag
+            final tags = val.split(',')
+                .map((t) => t.trim())
+                .where((t) => t.isNotEmpty)
+                .toSet(); // Use Set to discard duplicates
+            
+            for (final tag in tags) {
+              await ref.read(tagsDaoProvider).insertTag(TagsCompanion.insert(
+                videoId: widget.video.id,
+                tagText: tag,
+                source: const Value('user'),
+              ));
+            }
             _tagController.clear();
           }
         },
@@ -354,5 +365,72 @@ class _VideoTagList extends ConsumerWidget {
         );
       }
     );
+  }
+}
+
+class _FolderPathWidget extends ConsumerWidget {
+  final Video video;
+  const _FolderPathWidget({required this.video});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final foldersAsync = ref.watch(foldersDaoProvider).getAllFolders();
+    
+    return FutureBuilder<List<Folder>>(
+      future: foldersAsync,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
+        
+        final folders = snapshot.data!;
+        final folder = folders.where((f) => f.id == video.folderId).firstOrNull;
+        if (folder == null) return const SizedBox();
+        
+        final relativePath = _getRelativeFolderPath(video.absolutePath, folder.path);
+        if (relativePath.isEmpty) return const SizedBox();
+        
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: GestureDetector(
+            onTap: () => ref.read(searchQueryProvider.notifier).set(relativePath),
+            child: MacosTooltip(
+              message: 'Click to filter by folder: $relativePath',
+              child: Text(
+                relativePath,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _getRelativeFolderPath(String absolutePath, String rootPath) {
+    final videoDir = p.dirname(absolutePath);
+    if (videoDir == rootPath || !videoDir.startsWith(rootPath)) {
+      return ''; // Video is at root level
+    }
+    
+    final relativePath = videoDir.substring(rootPath.length);
+    // Remove leading separator and split
+    final parts = relativePath.split(p.separator).where((s) => s.isNotEmpty);
+    
+    // Convert each part to Title Case
+    final titleCased = parts.map((part) => _toTitleCase(part));
+    
+    return titleCased.join(' / ');
+  }
+
+  String _toTitleCase(String text) {
+    if (text.isEmpty) return text;
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 }

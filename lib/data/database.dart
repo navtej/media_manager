@@ -185,7 +185,12 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
       }
       
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        query.where(videos.title.like('%$searchQuery%'));
+        // Search both title and absolutePath (contains folder path) - case insensitive
+        final lowerQuery = searchQuery.toLowerCase();
+        query.where(
+          videos.title.lower().like('%$lowerQuery%') |
+          videos.absolutePath.lower().like('%$lowerQuery%')
+        );
       }
       
       // Ordering for Joined Query
@@ -211,7 +216,12 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
         query.where((t) => t.isFavorite.equals(true));
       }
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        query.where((t) => t.title.like('%$searchQuery%'));
+        // Search both title and absolutePath (contains folder path) - case insensitive
+        final lowerQuery = searchQuery.toLowerCase();
+        query.where((t) => 
+          t.title.lower().like('%$lowerQuery%') |
+          t.absolutePath.lower().like('%$lowerQuery%')
+        );
       }
       
       // Ordering for Simple Query

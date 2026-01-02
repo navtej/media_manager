@@ -407,10 +407,19 @@ class LibraryController extends _$LibraryController {
           // Emoji Regex (Simple range based)
           promptText = promptText.replaceAll(RegExp(r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]', unicode: true), '');
           
+          // Extract hashtags before they get processed
+          // Matches #word where word can contain letters, numbers, underscores (supports camelCase and underscore variants)
+          final hashtagRegex = RegExp(r'#([a-zA-Z][a-zA-Z0-9_]*)(?:\s|$|[^\w])');
+          final extractedHashtags = hashtagRegex.allMatches(promptText)
+              .map((m) => m.group(1)!)
+              .take(7)
+              .toList();
+          
           return {
             'id': v.id,
             'title': v.title,
             'prompt': promptText,
+            'extractedHashtags': extractedHashtags,
           };
         }).toList();
 
@@ -427,8 +436,12 @@ class LibraryController extends _$LibraryController {
         for (final res in (results as List)) {
           final id = res['id'] as int;
           final suggestions = (res['suggestions'] as List).cast<String>();
+          final extractedHashtags = (res['extractedHashtags'] as List?)?.cast<String>() ?? [];
           
-          for (final tag in suggestions) {
+          // Combine AI suggestions with extracted hashtags (using Set to prevent duplicates)
+          final allTags = <String>{...suggestions, ...extractedHashtags};
+          
+          for (final tag in allTags) {
             batchTags.add(TagsCompanion(
               videoId: drift.Value(id),
               tagText: drift.Value(tag),
@@ -468,6 +481,7 @@ Future<List<Map<String, dynamic>>> _aiIsolateWorker(Map<String, dynamic> args) a
     final id = task['id'] as int;
     final title = task['title'] as String;
     final prompt = task['prompt'] as String;
+    final extractedHashtags = (task['extractedHashtags'] as List?)?.cast<String>() ?? <String>[];
     
     try {
       final now = DateTime.now();
@@ -478,10 +492,10 @@ Future<List<Map<String, dynamic>>> _aiIsolateWorker(Map<String, dynamic> args) a
       final end = DateTime.now();
       print('DEBUG ISOLATE: Serial AI Task COMPLETE for: $title at ${end.minute}:${end.second}.${end.millisecond}');
       
-      results.add({'id': id, 'suggestions': suggestions});
+      results.add({'id': id, 'suggestions': suggestions, 'extractedHashtags': extractedHashtags});
     } catch (e) {
       print('ERROR in AI Isolate for $title: $e');
-      results.add({'id': id, 'suggestions': <String>[]});
+      results.add({'id': id, 'suggestions': <String>[], 'extractedHashtags': extractedHashtags});
     }
   }
   

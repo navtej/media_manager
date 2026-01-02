@@ -45,6 +45,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Force initialization of library controller
     ref.watch(libraryControllerProvider);
     
+    // Sync search controller with state (e.g. when clicking a folder path)
+    ref.listen(searchQueryProvider, (previous, next) {
+      if (next != _searchController.text) {
+        _searchController.text = next;
+      }
+    });
+
+    final hasActiveFilters = ref.watch(searchQueryProvider).isNotEmpty || 
+                           ref.watch(selectedTagsProvider).isNotEmpty;
+
     return MacosWindow(
       child: Row(
         children: [
@@ -68,13 +78,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   label: 'All Videos',
                   icon: CupertinoIcons.film,
                   selected: ref.watch(selectedCategoryProvider) == LibraryCategory.all,
-                  onTap: () => ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.all),
+                  onTap: () {
+                    ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.all);
+                    ref.read(searchQueryProvider.notifier).set('');
+                    ref.read(selectedTagsProvider.notifier).clear();
+                  },
                 ),
                 _SidebarNavItem(
                   label: 'Favorites',
                   icon: CupertinoIcons.heart,
                   selected: ref.watch(selectedCategoryProvider) == LibraryCategory.favorites,
-                  onTap: () => ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.favorites),
+                  onTap: () {
+                    ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.favorites);
+                    ref.read(searchQueryProvider.notifier).set('');
+                    ref.read(selectedTagsProvider.notifier).clear();
+                  },
                 ),
                 const Divider(height: 24, indent: 16, endIndent: 16),
                 
@@ -131,7 +149,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 
                 const Divider(height: 24, indent: 16, endIndent: 16),
-                const _SidebarHeader(text: 'TAGS'),
+                Row(
+                  children: [
+                    const Expanded(child: _SidebarHeader(text: 'TAGS')),
+                    if (hasActiveFilters)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: MacosIconButton(
+                          icon: const Icon(CupertinoIcons.clear_circled, size: 14),
+                          onPressed: () {
+                            ref.read(searchQueryProvider.notifier).set('');
+                            ref.read(selectedTagsProvider.notifier).clear();
+                          },
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 8),
 
                 // SCROLLABLE TAGS SECTION
