@@ -18,7 +18,7 @@ class SelectedCategory extends _$SelectedCategory {
 @riverpod
 class SelectedSort extends _$SelectedSort {
   @override
-  SortOption build() => SortOption.title;
+  SortOption build() => SortOption.addedAt;
   
   void set(SortOption sort) => state = sort;
 }
@@ -26,7 +26,7 @@ class SelectedSort extends _$SelectedSort {
 @riverpod
 class SelectedSortDirection extends _$SelectedSortDirection {
   @override
-  SortDirection build() => SortDirection.asc;
+  SortDirection build() => SortDirection.desc;
   
   void toggle() => state = state == SortDirection.asc ? SortDirection.desc : SortDirection.asc;
 }
