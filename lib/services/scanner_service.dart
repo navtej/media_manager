@@ -21,29 +21,32 @@ class ScannerService {
   }
 
   static void _scannerEntryPoint(_ScannerMessage message) {
-    print('DEBUG ISOLATE: Scanner started for ${message.roots}');
-    final extensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
-    
-    for (final rootPath in message.roots) {
-      final dir = Directory(rootPath);
-      print('DEBUG ISOLATE: Checking directory $rootPath, exists: ${dir.existsSync()}');
-      if (!dir.existsSync()) continue;
+    try {
+      print('DEBUG ISOLATE: Scanner started for ${message.roots}');
+      final extensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
+      
+      for (final rootPath in message.roots) {
+        final dir = Directory(rootPath);
+        print('DEBUG ISOLATE: Checking directory $rootPath, exists: ${dir.existsSync()}');
+        if (!dir.existsSync()) continue;
 
-      try {
-        print('DEBUG ISOLATE: Listing files in $rootPath...');
-        final entities = dir.listSync(recursive: true, followLinks: false);
-        for (final entity in entities) {
-          if (entity is File) {
-            if (extensions.contains(p.extension(entity.path).toLowerCase())) {
-               message.sendPort.send(entity.path);
+        try {
+          print('DEBUG ISOLATE: Listing files in $rootPath...');
+          final entities = dir.listSync(recursive: true, followLinks: false);
+          for (final entity in entities) {
+            if (entity is File) {
+              if (extensions.contains(p.extension(entity.path).toLowerCase())) {
+                 message.sendPort.send(entity.path);
+              }
             }
           }
+        } catch (e) {
+          print('Error scanning $rootPath: $e');
         }
-      } catch (e) {
-        print('Error scanning $rootPath: $e');
       }
+    } finally {
+      message.sendPort.send('DONE');
     }
-    message.sendPort.send('DONE');
   }
 }
 

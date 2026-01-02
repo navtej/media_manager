@@ -41,7 +41,24 @@ class LibraryController extends _$LibraryController {
   @override
   Future<void> build() async {
     print('DEBUG: LibraryController.build starting');
-    // Trigger startup scan
+    
+    // Get initial settings and setup timer
+    final settings = await ref.read(settingsProvider.future);
+    final initialInterval = settings['scanInterval'] ?? 5;
+    _setupTimer(initialInterval);
+
+    // Listen for settings changes to update the timer
+    ref.listen(settingsProvider, (previous, next) {
+      final oldInterval = previous?.value?['scanInterval'];
+      final newInterval = next.value?['scanInterval'];
+      
+      if (newInterval != null && oldInterval != newInterval) {
+        print('DEBUG: Scan interval changed from $oldInterval to $newInterval. Updating timer.');
+        _setupTimer(newInterval);
+      }
+    });
+
+    // Trigger startup scan in the background
     Future.microtask(() {
       print('DEBUG: LibraryController microtask triggering syncAll');
       syncAll();
@@ -51,12 +68,18 @@ class LibraryController extends _$LibraryController {
   Future<void> syncAll() async {
     if (_isScanning) {
       print('DEBUG: syncAll ignored, scan already in progress');
+      // Set status briefly to inform user why it was ignored if they clicked button
+      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!_isScanning) ref.read(scanStatusProvider.notifier).setStatus('');
+      });
       return;
     }
 
     try {
       _isScanning = true;
-      await _resetTimer();
+      ref.read(scanStatusProvider.notifier).setStatus('Checking for updates...');
+      
       print('DEBUG: syncAll starting...');
       final folderDao = ref.read(foldersDaoProvider);
       final videoDao = ref.read(videosDaoProvider);
@@ -123,16 +146,19 @@ class LibraryController extends _$LibraryController {
       print(stack);
     } finally {
       _isScanning = false;
+      ref.read(scanStatusProvider.notifier).setStatus('');
     }
   }
 
-  Future<void> _resetTimer() async {
-    _periodicTimer?.cancel();
-    final settings = await ref.read(settingsProvider.future);
-    final interval = settings['scanInterval'] ?? 5;
+  void _setupTimer(int interval) {
+    if (_periodicTimer != null) {
+      print('DEBUG: Cancelling existing refresh timer');
+      _periodicTimer?.cancel();
+    }
     
-    print('DEBUG: Starting periodic scan with interval: $interval minutes');
+    print('DEBUG: Creating new periodic scan timer with interval: $interval minutes');
     _periodicTimer = Timer.periodic(Duration(minutes: interval), (_) {
+      print('DEBUG: Periodic scan timer triggered');
       syncAll();
     });
   }
@@ -140,6 +166,7 @@ class LibraryController extends _$LibraryController {
   Future<void> addFolder(String path) async {
     if (_isScanning) {
       print('DEBUG: addFolder ignored, scan already in progress');
+      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
       return;
     }
     print('DEBUG: addFolder called with $path');
@@ -247,6 +274,7 @@ class LibraryController extends _$LibraryController {
   Future<void> rebuildLibrary() async {
     if (_isScanning) {
       print('DEBUG: rebuildLibrary ignored, scan in progress');
+      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
       return;
     }
     
@@ -257,14 +285,22 @@ class LibraryController extends _$LibraryController {
       final db = ref.read(databaseProvider);
       await db.clearAllData();
       
-      print('DEBUG: Library cleared, restarting syncAll...');
-      // Reset scanning flag to allow syncAll to proceed
-      _isScanning = false; 
-      await syncAll();
+      print('DEBUG: Library cleared, starting full sync...');
+      
+      // Perform sync logic directly here to keep _isScanning = true
+      final folderDao = ref.read(foldersDaoProvider);
+      final folders = await folderDao.getAllFolders();
+      for (final f in folders) {
+        await scanFolder(f.path, f.id);
+      }
+      
+      print('DEBUG: Rebuild completed successfully');
     } catch (e) {
       print('ERROR rebuilding library: $e');
-      _isScanning = false;
       ref.read(scanStatusProvider.notifier).setStatus('Rebuild failed');
+    } finally {
+      _isScanning = false;
+      ref.read(scanStatusProvider.notifier).setStatus('');
     }
   }
   
