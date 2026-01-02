@@ -45,10 +45,6 @@ NEW_PATCH=$((PATCH + 1))
 NEW_FULL_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
 # Update pubspec.yaml
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  sed -i '' "s/^version: .*/version: $NEW_FULL_VERSION/" "$PUBSPEC"
-else
-  sed -i "s/^version: .*/version: $NEW_FULL_VERSION/" "$PUBSPEC"
-fi
+sed "s/^version: .*/version: $NEW_FULL_VERSION/" "$PUBSPEC" > "$PUBSPEC.tmp" && mv "$PUBSPEC.tmp" "$PUBSPEC"
 
 echo "$NEW_FULL_VERSION"
