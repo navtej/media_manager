@@ -130,21 +130,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    _buildPreferenceRow(context, 'Scan Interval (min)', _intervalController),
+                    const SizedBox(height: 10),
+                    _buildPreferenceRow(context, 'Batch Size', _batchSizeController),
                     const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 20),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('About', style: MacosTheme.of(context).typography.headline),
-                        PushButton(
-                          controlSize: ControlSize.large,
-                          child: const Text('About'),
-                          onPressed: () => showAppAboutDialog(context),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
