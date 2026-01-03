@@ -260,6 +260,10 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
   Future<void> deleteTag(int videoId, String tagText) {
     return (delete(tags)..where((t) => t.videoId.equals(videoId) & t.tagText.equals(tagText))).go();
   }
+
+  Future<void> deleteTagFromAllVideos(String tagText) {
+    return (delete(tags)..where((t) => t.tagText.equals(tagText))).go();
+  }
   Future<List<Tag>> getTagsForVideo(int videoId) => (select(tags)..where((t) => t.videoId.equals(videoId))).get();
   Stream<List<Tag>> watchTagsForVideo(int videoId) => (select(tags)..where((t) => t.videoId.equals(videoId))).watch();
   

@@ -6,6 +6,7 @@ import 'ui/screens/home_screen.dart';
 
 import 'package:flutter/services.dart';
 import 'ui/screens/settings_screen.dart';
+import 'ui/widgets/about_dialog.dart';
 
 import 'logic/settings_provider.dart';
 
@@ -45,19 +46,7 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
                     PlatformMenuItem(
                       label: 'About Media Manager',
                       onSelected: () {
-                        showMacosAlertDialog(
-                          context: _navigatorKey.currentContext!,
-                          builder: (_) => MacosAlertDialog(
-                            appIcon: const MacosIcon(CupertinoIcons.film),
-                            title: const Text('Media Manager'),
-                            message: const Text('Version 1.0.0'),
-                            primaryButton: PushButton(
-                              controlSize: ControlSize.large,
-                              child: const Text('OK'),
-                              onPressed: () => Navigator.of(_navigatorKey.currentContext!).pop(),
-                            ),
-                          ),
-                        );
+                        showAppAboutDialog(_navigatorKey.currentContext!);
                       },
                     ),
                     PlatformMenuItem(

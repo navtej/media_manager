@@ -322,6 +322,8 @@ class _SidebarHeader extends StatelessWidget {
         child: Text(
           text,
           textAlign: TextAlign.left,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
           style: MacosTheme.of(context).typography.caption1.copyWith(
                 color: MacosTheme.of(context).typography.caption1.color?.withOpacity(0.5),
                 fontWeight: FontWeight.bold,
@@ -365,11 +367,15 @@ class _SidebarNavItem extends StatelessWidget {
               color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.7),
             ),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: theme.typography.body.copyWith(
-                color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.8),
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: theme.typography.body.copyWith(
+                  color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.8),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
             ),
           ],

@@ -79,7 +79,7 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
   );
 });
 
-final allTagsProvider = StreamProvider.autoDispose<List<String>>((ref) {
+final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>((ref) {
   final selected = ref.watch(selectedTagsProvider);
   final stream = ref.watch(tagsDaoProvider).watchTagsWithCounts();
   
@@ -91,8 +91,8 @@ final allTagsProvider = StreamProvider.autoDispose<List<String>>((ref) {
       ref.read(selectedTagsProvider.notifier).deselectIfMissing(tags);
     });
 
-    final sorted = List<String>.from(tags);
-    sorted.sort((a, b) {
+    final sortedTags = List<String>.from(tags);
+    sortedTags.sort((a, b) {
       // 1. By Selection status (selected first)
       final aSelected = selected.contains(a);
       final bSelected = selected.contains(b);
@@ -107,6 +107,7 @@ final allTagsProvider = StreamProvider.autoDispose<List<String>>((ref) {
       // 3. Alphabetically
       return a.compareTo(b);
     });
-    return sorted;
+
+    return sortedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
   });
 });
