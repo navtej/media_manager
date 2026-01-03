@@ -24,4 +24,12 @@ class NaturalLanguageService {
       print("Failed to open in Finder: '${e.message}'.");
     }
   }
+
+  Future<void> playVideo(String path) async {
+    try {
+      await _channel.invokeMethod('playVideo', {'path': path});
+    } on PlatformException catch (e) {
+      print("Failed to play video: '${e.message}'.");
+    }
+  }
 }

@@ -218,7 +218,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
         MacosIconButton(
           padding: EdgeInsets.zero,
           icon: const Icon(CupertinoIcons.play_fill, size: 16),
-          onPressed: () => launchUrl(Uri.file(widget.video.absolutePath)),
+          onPressed: () => NaturalLanguageService().playVideo(widget.video.absolutePath),
         ),
         // Finder
         MacosIconButton(

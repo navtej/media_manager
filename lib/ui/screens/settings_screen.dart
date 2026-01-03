@@ -5,6 +5,7 @@ import 'package:macos_ui/macos_ui.dart';
 import '../../logic/library_controller.dart';
 import 'package:flutter/services.dart';
 import '../../data/providers.dart';
+import '../widgets/about_dialog.dart';
 
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
@@ -130,9 +131,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    _buildPreferenceRow(context, 'Scanning Interval (minutes)', _intervalController),
-                    const SizedBox(height: 10),
-                    _buildPreferenceRow(context, 'Batch Processing Size', _batchSizeController),
+                    const Divider(),
+                    const SizedBox(height: 20),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('About', style: MacosTheme.of(context).typography.headline),
+                        PushButton(
+                          controlSize: ControlSize.large,
+                          child: const Text('About'),
+                          onPressed: () => showAppAboutDialog(context),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
