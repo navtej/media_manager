@@ -110,7 +110,6 @@ class MainFlutterWindow: NSWindow {
                 result(FlutterError(code: "UNSUPPORTED", message: "MacOS 15+ required", details: nil))
             }
         }
-        }
       } else if call.method == "openInFinder" {
         guard let args = call.arguments as? [String: Any],
               let path = args["path"] as? String else {
