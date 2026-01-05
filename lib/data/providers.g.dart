@@ -172,3 +172,42 @@ final class TagsDaoProvider
 }
 
 String _$tagsDaoHash() => r'de4ac29767040e0decf830b84549fbe1d513f411';
+
+@ProviderFor(allUniqueTags)
+final allUniqueTagsProvider = AllUniqueTagsProvider._();
+
+final class AllUniqueTagsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<String>>,
+          List<String>,
+          Stream<List<String>>
+        >
+    with $FutureModifier<List<String>>, $StreamProvider<List<String>> {
+  AllUniqueTagsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'allUniqueTagsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$allUniqueTagsHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<List<String>> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<List<String>> create(Ref ref) {
+    return allUniqueTags(ref);
+  }
+}
+
+String _$allUniqueTagsHash() => r'0926d5f694824477a05333d247fee659bbd93b72';

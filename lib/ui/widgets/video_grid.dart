@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+// import 'package:flutter/material.dart'; // Unnecessary
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import 'package:url_launcher/url_launcher.dart';
+// import 'package:url_launcher/url_launcher.dart'; // Unused
+import 'package:flutter/services.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:path/path.dart' as p;
 import '../../data/database.dart';
@@ -100,7 +101,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
             ),
             boxShadow: _isHovering ? [
               BoxShadow(
-                color: theme.primaryColor.withOpacity(0.2),
+                color: theme.primaryColor.withValues(alpha: 0.2),
                 blurRadius: 10,
                 spreadRadius: 2,
               )
@@ -132,7 +133,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                         Positioned.fill(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: MacosColors.black.withOpacity(0.85),
+                              color: MacosColors.black.withValues(alpha: 0.85),
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
                             ),
                             padding: const EdgeInsets.all(8),
@@ -173,7 +174,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                           Text(
                             _formatDuration(video.duration),
                             style: theme.typography.caption1.copyWith(
-                              color: theme.typography.caption1.color?.withOpacity(0.5),
+                              color: theme.typography.caption1.color?.withValues(alpha: 0.5),
                               fontSize: 10,
                             ),
                           ),
@@ -188,7 +189,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                       ),
                       const SizedBox(height: 4),
                       // Add Tag Input
-                      _buildTagInput(ref),
+                      _TagAutocompleteInput(video: video),
                     ],
                   ),
                 ),
@@ -236,35 +237,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  Widget _buildTagInput(WidgetRef ref) {
-    return Container(
-      height: 24,
-      child: MacosTextField(
-        controller: _tagController,
-        placeholder: 'Add tags (comma-separated)...',
-        placeholderStyle: const TextStyle(color: MacosColors.systemGrayColor),
-        style: const TextStyle(fontSize: 11),
-        onSubmitted: (val) async {
-          if (val.trim().isNotEmpty) {
-            // Split by comma and process each tag
-            final tags = val.split(',')
-                .map((t) => t.trim())
-                .where((t) => t.isNotEmpty)
-                .toSet(); // Use Set to discard duplicates
-            
-            for (final tag in tags) {
-              await ref.read(tagsDaoProvider).insertTag(TagsCompanion.insert(
-                videoId: widget.video.id,
-                tagText: tag,
-                source: const Value('user'),
-              ));
-            }
-            _tagController.clear();
-          }
-        },
-      ),
-    );
-  }
+  // Removed _buildTagInput and replaced with _TagAutocompleteInput class below
 
   void _confirmDelete(WidgetRef ref) {
     showMacosAlertDialog(
@@ -351,9 +324,9 @@ class _VideoTagList extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: isSelected 
                         ? MacosTheme.of(context).primaryColor 
-                        : MacosTheme.of(context).primaryColor.withOpacity(0.1),
+                        : MacosTheme.of(context).primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: MacosTheme.of(context).primaryColor.withOpacity(0.3)),
+                    border: Border.all(color: MacosTheme.of(context).primaryColor.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -450,5 +423,247 @@ class _FolderPathWidget extends ConsumerWidget {
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1).toLowerCase();
     }).join(' ');
+  }
+}
+
+class _TagAutocompleteInput extends ConsumerStatefulWidget {
+  final Video video;
+  const _TagAutocompleteInput({required this.video});
+
+  @override
+  ConsumerState<_TagAutocompleteInput> createState() => _TagAutocompleteInputState();
+}
+
+class _TagAutocompleteInputState extends ConsumerState<_TagAutocompleteInput> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  List<String> _suggestions = [];
+  int _selectedIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChanged);
+    _controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _hideOverlay();
+    _focusNode.removeListener(_onFocusChanged);
+    _controller.removeListener(_onTextChanged);
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus) {
+      _hideOverlay();
+    }
+  }
+
+  void _onTextChanged() {
+    final text = _controller.text;
+    if (text.isEmpty) {
+      _hideOverlay();
+      return;
+    }
+
+    // Get the last part after comma
+    final parts = text.split(',');
+    final query = parts.last.trim().toLowerCase();
+
+    if (query.isEmpty) {
+      _hideOverlay();
+      return;
+    }
+
+    final allTagsAsync = ref.read(allUniqueTagsProvider);
+    final allTags = allTagsAsync.value ?? [];
+    
+    final filtered = allTags
+        .where((tag) => tag.toLowerCase().contains(query))
+        .take(5)
+        .toList();
+
+    if (filtered.isNotEmpty) {
+      setState(() {
+        _suggestions = filtered;
+        _selectedIndex = -1;
+      });
+      _showOverlay();
+    } else {
+      _hideOverlay();
+    }
+  }
+
+  void _showOverlay() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.markNeedsBuild();
+      return;
+    }
+
+    final overlay = Overlay.of(context);
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        final theme = MacosTheme.of(context);
+        return Positioned(
+          width: 200,
+          child: CompositedTransformFollower(
+            link: _layerLink,
+            showWhenUnlinked: false,
+            offset: const Offset(0, 4), // Show BELOW input
+            followerAnchor: Alignment.topLeft,
+            targetAnchor: Alignment.bottomLeft,
+            child: TapRegion(
+              onTapOutside: (_) => _hideOverlay(),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: theme.canvasColor,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.dividerColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: MacosColors.black.withValues(alpha: 0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _suggestions.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final tag = entry.value;
+                    final isHighlighted = index == _selectedIndex;
+
+                    return MouseRegion(
+                      onEnter: (_) => setState(() => _selectedIndex = index),
+                      child: GestureDetector(
+                        onTap: () => _selectTag(tag),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isHighlighted ? theme.primaryColor.withValues(alpha: 0.1) : null,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isHighlighted ? theme.primaryColor : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(_overlayEntry!);
+  }
+
+  void _hideOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _selectTag(String tag) {
+    final text = _controller.text;
+    final parts = text.split(',');
+    parts.removeLast();
+    parts.add(tag);
+    
+    final newText = '${parts.join(', ')}, ';
+    _controller.text = newText;
+    _controller.selection = TextSelection.fromPosition(TextPosition(offset: newText.length));
+    
+    _hideOverlay();
+    _focusNode.requestFocus();
+  }
+
+  Future<void> _submitTags() async {
+    final val = _controller.text;
+    if (val.trim().isNotEmpty) {
+      final tags = val.split(',')
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toSet();
+      
+      for (final tag in tags) {
+        await ref.read(tagsDaoProvider).insertTag(TagsCompanion.insert(
+          videoId: widget.video.id,
+          tagText: tag,
+          source: const Value('user'),
+        ));
+      }
+      _controller.clear();
+      _hideOverlay();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Watch to keep the provider alive and ensure data is ready
+    ref.watch(allUniqueTagsProvider);
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: SizedBox(
+        height: 24,
+        child: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent) {
+              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                if (_overlayEntry != null && _suggestions.isNotEmpty) {
+                  setState(() {
+                    _selectedIndex = (_selectedIndex + 1) % _suggestions.length;
+                  });
+                  _overlayEntry!.markNeedsBuild();
+                  return KeyEventResult.handled;
+                }
+              } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                if (_overlayEntry != null && _suggestions.isNotEmpty) {
+                  setState(() {
+                    _selectedIndex = (_selectedIndex - 1 + _suggestions.length) % _suggestions.length;
+                  });
+                  _overlayEntry!.markNeedsBuild();
+                  return KeyEventResult.handled;
+                }
+              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+                if (_overlayEntry != null && _selectedIndex != -1) {
+                  _selectTag(_suggestions[_selectedIndex]);
+                  return KeyEventResult.handled;
+                }
+              } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+                if (_overlayEntry != null) {
+                  _hideOverlay();
+                  return KeyEventResult.handled;
+                }
+              }
+            }
+            return KeyEventResult.ignored;
+          },
+          child: MacosTextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            placeholder: 'Add tags...',
+            placeholderStyle: const TextStyle(color: MacosColors.systemGrayColor),
+            style: const TextStyle(fontSize: 11),
+            onSubmitted: (_) => _submitTags(),
+          ),
+        ),
+      ),
+    );
   }
 }

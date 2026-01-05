@@ -135,7 +135,7 @@ final class LibraryControllerProvider
   LibraryController create() => LibraryController();
 }
 
-String _$libraryControllerHash() => r'e084f7671970f327f08b711b8a068c6ddf4cc99f';
+String _$libraryControllerHash() => r'02e55e62249496a79effe4a7cdaba7c3d65a4b58';
 
 abstract class _$LibraryController extends $AsyncNotifier<void> {
   FutureOr<void> build();

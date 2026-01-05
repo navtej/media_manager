@@ -93,7 +93,7 @@ final class SelectedSortProvider
   }
 }
 
-String _$selectedSortHash() => r'60f54db6d779b5a74a6613c6c38ff7a0950d73d7';
+String _$selectedSortHash() => r'1da1b43d614fb59e45ae9044526a111e0cb1fdcd';
 
 abstract class _$SelectedSort extends $Notifier<SortOption> {
   SortOption build();
@@ -146,7 +146,7 @@ final class SelectedSortDirectionProvider
 }
 
 String _$selectedSortDirectionHash() =>
-    r'bf95bf01c93c25106dceb02e7dbb5f5848e7c093';
+    r'97001b6c3df6c5e2ddb80b6faaadccbbacc83283';
 
 abstract class _$SelectedSortDirection extends $Notifier<SortDirection> {
   SortDirection build();

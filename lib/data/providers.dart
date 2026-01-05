@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+// import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'database.dart';
 
@@ -22,4 +22,8 @@ VideosDao videosDao(Ref ref) {
 @riverpod
 TagsDao tagsDao(Ref ref) {
   return ref.watch(databaseProvider).tagsDao;
+}
+@riverpod
+Stream<List<String>> allUniqueTags(Ref ref) {
+  return ref.watch(tagsDaoProvider).watchAllUniqueTags();
 }
