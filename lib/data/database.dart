@@ -205,7 +205,16 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
         query.orderBy([OrderingTerm(expression: videos.title, mode: mode)]);
       }
       
-      return query.map((row) => row.readTable(videos)).watch();
+      return query.map((row) => row.readTable(videos)).watch().map((list) {
+        final seenCheck = <int>{};
+        final uniqueVideos = <Video>[];
+        for (final v in list) {
+          if (seenCheck.add(v.id)) {
+            uniqueVideos.add(v);
+          }
+        }
+        return uniqueVideos;
+      });
     } 
     
     // CASE 2: Search only (No Tags)
@@ -249,12 +258,32 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
 class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
   TagsDao(AppDatabase db) : super(db);
   
-  Future<int> insertTag(TagsCompanion tag) => into(tags).insert(tag, mode: InsertMode.insertOrIgnore);
+  Future<int> insertTag(TagsCompanion tag) {
+    final normalizedText = _normalizeTag(tag.tagText.value);
+    return into(tags).insert(tag.copyWith(tagText: Value(normalizedText)), mode: InsertMode.insertOrIgnore);
+  }
   
   Future<void> insertTagsBatch(List<TagsCompanion> companions) {
     return batch((b) {
-      b.insertAll(tags, companions, mode: InsertMode.insertOrIgnore);
+      final normalizedCompanions = companions.map((c) {
+        final normalizedText = _normalizeTag(c.tagText.value);
+        return c.copyWith(tagText: Value(normalizedText));
+      }).toList();
+      b.insertAll(tags, normalizedCompanions, mode: InsertMode.insertOrIgnore);
     });
+  }
+
+  String _normalizeTag(String tag) {
+    String s = tag;
+    // 1. Split CamelCase (e.g., testBest -> test Best)
+    s = s.replaceAllMapped(RegExp(r'(?<=[a-z])(?=[A-Z])'), (Match m) => ' ');
+    // 2. Handle multiple uppercase (e.g., ASDBest -> ASD Best)
+    s = s.replaceAllMapped(RegExp(r'([A-Z]+)([A-Z][a-z])'), (Match m) => '${m.group(1)} ${m.group(2)}');
+    // 3. Split Numbers at end (e.g., gsd3 -> gsd 3)
+    s = s.replaceAllMapped(RegExp(r'(?<=[a-zA-Z])(?=[0-9]+$)'), (Match m) => ' ');
+    
+    // 4. Lowercase and trim
+    return s.trim().toLowerCase();
   }
   
   Future<void> deleteTag(int videoId, String tagText) {

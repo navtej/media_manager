@@ -342,25 +342,43 @@ class _VideoTagList extends ConsumerWidget {
           child: Wrap(
             spacing: 4,
             runSpacing: 4,
-            children: tags.map((t) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: MacosTheme.of(context).primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: MacosTheme.of(context).primaryColor.withOpacity(0.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(t.tagText, style: const TextStyle(fontSize: 10)),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: () => ref.read(tagsDaoProvider).deleteTag(videoId, t.tagText),
-                    child: const Icon(CupertinoIcons.xmark, size: 8),
+            children: tags.map((t) {
+              final isSelected = ref.watch(selectedTagsProvider).contains(t.tagText);
+              return GestureDetector(
+                onTap: () => ref.read(selectedTagsProvider.notifier).toggle(t.tagText),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? MacosTheme.of(context).primaryColor 
+                        : MacosTheme.of(context).primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: MacosTheme.of(context).primaryColor.withOpacity(0.3)),
                   ),
-                ],
-              ),
-            )).toList(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        t.tagText, 
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isSelected ? MacosColors.white : null,
+                        )
+                      ),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: () => ref.read(tagsDaoProvider).deleteTag(videoId, t.tagText),
+                        child: Icon(
+                          CupertinoIcons.xmark, 
+                          size: 8,
+                          color: isSelected ? MacosColors.white.withOpacity(0.8) : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         );
       }

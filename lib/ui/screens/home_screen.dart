@@ -94,10 +94,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ref.read(selectedTagsProvider.notifier).clear();
                   },
                 ),
-                const Divider(height: 24, indent: 16, endIndent: 16),
+                const Divider(height: 8, indent: 16, endIndent: 16),
                 
                 Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
+                  padding: const EdgeInsets.only(right: 12.0),
                   child: Row(
                     children: [
                       const Expanded(child: _SidebarHeader(text: 'SORT BY')),
@@ -113,7 +113,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   child: Wrap(
@@ -148,10 +148,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
                 
-                const Divider(height: 24, indent: 16, endIndent: 16),
+                const Divider(height: 8, indent: 16, endIndent: 16),
                 Row(
                   children: [
-                    const Expanded(child: _SidebarHeader(text: 'TAGS')),
+                    Expanded(child: _SidebarHeader(text: 'TAGS (${ref.watch(allTagsProvider).asData?.value.length ?? 0})')),
                     if (hasActiveFilters)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
@@ -165,7 +165,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
 
                 // SCROLLABLE TAGS SECTION
                 Expanded(
@@ -177,10 +177,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
                 
-                const Divider(height: 24, indent: 16, endIndent: 16),
+                const Divider(height: 8, indent: 16, endIndent: 16),
                 const _LibraryStatsBox(),
-                const Divider(height: 24, indent: 16, endIndent: 16),
-                 _SidebarNavItem(
+                const Divider(height: 8, indent: 16, endIndent: 16),
+                _SidebarNavItem(
+                  label: 'Tags Management',
+                  icon: CupertinoIcons.tag,
+                  selected: false,
+                  onTap: () {
+                    // Placeholder for Tags Management
+                    showMacosAlertDialog(
+                      context: context,
+                      builder: (_) => MacosAlertDialog(
+                        appIcon: const MacosIcon(CupertinoIcons.tag),
+                        title: const Text('Tags Management'),
+                        message: const Text('This feature is coming soon.'),
+                        primaryButton: PushButton(
+                          controlSize: ControlSize.large,
+                          child: const Text('OK'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                _SidebarNavItem(
                   label: 'Settings',
                   icon: CupertinoIcons.settings,
                   selected: false,
@@ -190,7 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     );
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -354,7 +375,7 @@ class _SidebarNavItem extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: selected ? theme.primaryColor.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
@@ -423,7 +444,7 @@ class _GridSortItem extends StatelessWidget {
               child: Text(
                 label,
                 style: theme.typography.body.copyWith(
-                  fontSize: 12, // Slightly smaller font
+                  fontSize: 10, // Slightly smaller font
                   color: selected ? theme.primaryColor : theme.typography.body.color?.withOpacity(0.8),
                   fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                 ),
@@ -447,7 +468,7 @@ class _LibraryStatsBox extends ConsumerWidget {
     
     return statsSync.when(
       data: (stats) => Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         margin: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: MacosTheme.of(context).canvasColor.withOpacity(0.5),
@@ -458,9 +479,9 @@ class _LibraryStatsBox extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _StatRow(label: 'Videos', value: '${stats.totalCount}'),
-            const SizedBox(height: 4),
+            const SizedBox(height: 1),
             _StatRow(label: 'Duration', value: stats.formattedDuration),
-            const SizedBox(height: 4),
+            const SizedBox(height: 1),
             _StatRow(label: 'Size', value: stats.formattedSize),
           ],
         ),
