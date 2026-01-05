@@ -217,28 +217,28 @@ abstract class _$SearchQuery extends $Notifier<String> {
   }
 }
 
-@ProviderFor(SelectedTags)
-final selectedTagsProvider = SelectedTagsProvider._();
+@ProviderFor(PrimarySelectedTags)
+final primarySelectedTagsProvider = PrimarySelectedTagsProvider._();
 
-final class SelectedTagsProvider
-    extends $NotifierProvider<SelectedTags, List<String>> {
-  SelectedTagsProvider._()
+final class PrimarySelectedTagsProvider
+    extends $NotifierProvider<PrimarySelectedTags, List<String>> {
+  PrimarySelectedTagsProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'selectedTagsProvider',
+        name: r'primarySelectedTagsProvider',
         isAutoDispose: true,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$selectedTagsHash();
+  String debugGetCreateSourceHash() => _$primarySelectedTagsHash();
 
   @$internal
   @override
-  SelectedTags create() => SelectedTags();
+  PrimarySelectedTags create() => PrimarySelectedTags();
 
   /// {@macro riverpod.override_with_value}
   Override overrideWithValue(List<String> value) {
@@ -249,9 +249,10 @@ final class SelectedTagsProvider
   }
 }
 
-String _$selectedTagsHash() => r'2945b05cf7e783625753edf72bacf9985324765a';
+String _$primarySelectedTagsHash() =>
+    r'6c36bc85661c0d5a3cbfead04462cac9d6cabba3';
 
-abstract class _$SelectedTags extends $Notifier<List<String>> {
+abstract class _$PrimarySelectedTags extends $Notifier<List<String>> {
   List<String> build();
   @$mustCallSuper
   @override
@@ -268,3 +269,98 @@ abstract class _$SelectedTags extends $Notifier<List<String>> {
     element.handleCreate(ref, build);
   }
 }
+
+@ProviderFor(SecondarySelectedTags)
+final secondarySelectedTagsProvider = SecondarySelectedTagsProvider._();
+
+final class SecondarySelectedTagsProvider
+    extends $NotifierProvider<SecondarySelectedTags, List<String>> {
+  SecondarySelectedTagsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'secondarySelectedTagsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$secondarySelectedTagsHash();
+
+  @$internal
+  @override
+  SecondarySelectedTags create() => SecondarySelectedTags();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<String> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<String>>(value),
+    );
+  }
+}
+
+String _$secondarySelectedTagsHash() =>
+    r'a27d4683c7e1684e57f8f9ac6736f7be11a4d0e4';
+
+abstract class _$SecondarySelectedTags extends $Notifier<List<String>> {
+  List<String> build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<List<String>, List<String>>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<List<String>, List<String>>,
+              List<String>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+@ProviderFor(combinedSelectedTags)
+final combinedSelectedTagsProvider = CombinedSelectedTagsProvider._();
+
+final class CombinedSelectedTagsProvider
+    extends $FunctionalProvider<List<String>, List<String>, List<String>>
+    with $Provider<List<String>> {
+  CombinedSelectedTagsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'combinedSelectedTagsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$combinedSelectedTagsHash();
+
+  @$internal
+  @override
+  $ProviderElement<List<String>> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  List<String> create(Ref ref) {
+    return combinedSelectedTags(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(List<String> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<List<String>>(value),
+    );
+  }
+}
+
+String _$combinedSelectedTagsHash() =>
+    r'2a88e91bb2bbc918f15d0a5e1adaf83604efde4b';

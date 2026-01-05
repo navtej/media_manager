@@ -40,7 +40,40 @@ class SearchQuery extends _$SearchQuery {
 }
 
 @riverpod
-class SelectedTags extends _$SelectedTags {
+class PrimarySelectedTags extends _$PrimarySelectedTags {
+  @override
+  List<String> build() => [];
+
+  void toggle(String tag) {
+    if (state.contains(tag)) {
+      state = state.where((t) => t != tag).toList();
+    } else {
+      state = [...state, tag];
+    }
+    
+    // Logic: If primary becomes empty, we might want to clear secondary?
+    // Implementation plan says: "Clearing the Top filtering (Primary) will automatically clear the Related filtering (Secondary)."
+    // We can check if state is empty.
+    if (state.isEmpty) {
+       ref.read(secondarySelectedTagsProvider.notifier).clear();
+    }
+  }
+  
+  void clear() {
+    state = [];
+    ref.read(secondarySelectedTagsProvider.notifier).clear();
+  }
+
+  void deselectIfMissing(List<String> availableTags) {
+    final newState = state.where((t) => availableTags.contains(t)).toList();
+    if (newState.length != state.length) {
+      state = newState;
+    }
+  }
+}
+
+@riverpod
+class SecondarySelectedTags extends _$SecondarySelectedTags {
   @override
   List<String> build() => [];
 
@@ -53,17 +86,18 @@ class SelectedTags extends _$SelectedTags {
   }
   
   void clear() => state = [];
+}
 
-  void deselectIfMissing(List<String> availableTags) {
-    final newState = state.where((t) => availableTags.contains(t)).toList();
-    if (newState.length != state.length) {
-      state = newState;
-    }
-  }
+@riverpod
+List<String> combinedSelectedTags(Ref ref) {
+  final primary = ref.watch(primarySelectedTagsProvider);
+  final secondary = ref.watch(secondarySelectedTagsProvider);
+  return <String>{...primary, ...secondary}.toList();
 }
 
 final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
-  final tags = ref.watch(selectedTagsProvider);
+  final primaryTags = ref.watch(primarySelectedTagsProvider);
+  final secondaryTags = ref.watch(secondarySelectedTagsProvider);
   final category = ref.watch(selectedCategoryProvider);
   final sort = ref.watch(selectedSortProvider);
   final direction = ref.watch(selectedSortDirectionProvider);
@@ -71,7 +105,8 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
   final dao = ref.watch(videosDaoProvider);
   
   return dao.searchVideos(
-    tags, 
+    tagsAny: primaryTags,
+    tagsAll: secondaryTags, 
     searchQuery: searchQuery,
     favoritesOnly: category == LibraryCategory.favorites,
     sortBy: sort,
@@ -80,7 +115,7 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
 });
 
 final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>((ref) {
-  final selected = ref.watch(selectedTagsProvider);
+  final selected = ref.watch(primarySelectedTagsProvider);
   final stream = ref.watch(tagsDaoProvider).watchTagsWithCounts();
   
   return stream.map((tagCounts) {
@@ -88,7 +123,7 @@ final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>(
     
     // Prune selected tags that no longer exist
     Future.microtask(() {
-      ref.read(selectedTagsProvider.notifier).deselectIfMissing(tags);
+      ref.read(primarySelectedTagsProvider.notifier).deselectIfMissing(tags);
     });
 
     final sortedTags = List<String>.from(tags);
@@ -110,4 +145,42 @@ final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>(
 
     return sortedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
   });
+});
+
+final relatedTagsProvider = FutureProvider.autoDispose<List<MapEntry<String, int>>>((ref) async {
+  print('DEBUG: relatedTagsProvider computing...');
+  final primarySelected = ref.watch(primarySelectedTagsProvider);
+  print('DEBUG: primary selected tags: $primarySelected');
+  
+  if (primarySelected.isEmpty) {
+    print('DEBUG: No tags selected, returning empty related.');
+    return [];
+  }
+
+  final filteredVideos = await ref.watch(filteredVideosProvider.future);
+  print('DEBUG: filteredVideos count: ${filteredVideos.length}');
+  
+  if (filteredVideos.isEmpty) {
+    print('DEBUG: No filtered videos, returning empty related.');
+    return [];
+  }
+
+  final videoIds = filteredVideos.map((v) => v.id).toList();
+  final tagCounts = await ref.read(tagsDaoProvider).getTagsWithCountsForVideos(videoIds);
+  print('DEBUG: Raw tag counts from DAO: ${tagCounts.length}');
+  
+  // Filter out tags that are already selected in PRIMARY.
+  // We DO want to show tags selected in Secondary (so they can be unselected).
+  final relatedTags = tagCounts.keys.where((t) => !primarySelected.contains(t)).toList();
+  print('DEBUG: Related tags after filtering selected: ${relatedTags.length}');
+
+  // Sort by popularity (count desc) then alpha
+  relatedTags.sort((a, b) {
+    final aCount = tagCounts[a] ?? 0;
+    final bCount = tagCounts[b] ?? 0;
+    if (aCount != bCount) return bCount.compareTo(aCount);
+    return a.compareTo(b);
+  });
+
+  return relatedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
 });

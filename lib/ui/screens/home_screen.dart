@@ -53,7 +53,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
 
     final hasActiveFilters = ref.watch(searchQueryProvider).isNotEmpty || 
-                           ref.watch(selectedTagsProvider).isNotEmpty;
+                           ref.watch(combinedSelectedTagsProvider).isNotEmpty;
 
     return MacosWindow(
       child: Row(
@@ -81,7 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onTap: () {
                     ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.all);
                     ref.read(searchQueryProvider.notifier).set('');
-                    ref.read(selectedTagsProvider.notifier).clear();
+                    ref.read(primarySelectedTagsProvider.notifier).clear();
                   },
                 ),
                 _SidebarNavItem(
@@ -91,7 +91,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onTap: () {
                     ref.read(selectedCategoryProvider.notifier).set(LibraryCategory.favorites);
                     ref.read(searchQueryProvider.notifier).set('');
-                    ref.read(selectedTagsProvider.notifier).clear();
+                    ref.read(primarySelectedTagsProvider.notifier).clear();
                   },
                 ),
                 const Divider(height: 8, indent: 16, endIndent: 16),
@@ -159,7 +159,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           icon: const Icon(CupertinoIcons.clear_circled, size: 14),
                           onPressed: () {
                             ref.read(searchQueryProvider.notifier).set('');
-                            ref.read(selectedTagsProvider.notifier).clear();
+                            ref.read(primarySelectedTagsProvider.notifier).clear();
                           },
                         ),
                       ),
@@ -167,12 +167,77 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
 
-                // SCROLLABLE TAGS SECTION
+                // TAGS SECTION - Split 80/20
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SingleChildScrollView(
-                      child: const FilterBar(),
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        return Column(
+                          children: [
+                            // TOP SECTION (All Tags) - 80%
+                            Expanded(
+                              flex: 4,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: ref.watch(allTagsProvider).when(
+                                        data: (tags) => TagCloud(
+                                          tags: tags, 
+                                          selectedTags: ref.watch(primarySelectedTagsProvider).toSet(),
+                                          onTagSelected: (tag) => ref.read(primarySelectedTagsProvider.notifier).toggle(tag),
+                                          enableDelete: true
+                                        ),
+                                        loading: () => const Center(child: ProgressCircle(radius: 10)),
+                                        error: (_, __) => const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            const Divider(height: 16),
+                            
+                            // BOTTOM SECTION (Related Tags) - 20%
+                            Expanded(
+                              flex: 1,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: ref.watch(relatedTagsProvider).when(
+                                        data: (tags) {
+                                          if (tags.isEmpty) {
+                                            return const Padding(
+                                              padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                              child: Text(
+                                                'Select a tag above to see related tags.',
+                                                style: TextStyle(fontSize: 10, color: Colors.grey),
+                                              ),
+                                            );
+                                          }
+                                          return TagCloud(
+                                            tags: tags,
+                                            selectedTags: ref.watch(secondarySelectedTagsProvider).toSet(),
+                                            onTagSelected: (tag) => ref.read(secondarySelectedTagsProvider.notifier).toggle(tag), 
+                                            enableDelete: false
+                                          );
+                                        },
+                                        loading: () => const Center(child: ProgressCircle(radius: 10)),
+                                        error: (err, stack) => Text('Error: $err', style: const TextStyle(color: Colors.red, fontSize: 10)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),

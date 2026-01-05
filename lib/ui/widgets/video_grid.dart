@@ -316,9 +316,9 @@ class _VideoTagList extends ConsumerWidget {
             spacing: 4,
             runSpacing: 4,
             children: tags.map((t) {
-              final isSelected = ref.watch(selectedTagsProvider).contains(t.tagText);
+              final isSelected = ref.watch(combinedSelectedTagsProvider).contains(t.tagText);
               return GestureDetector(
-                onTap: () => ref.read(selectedTagsProvider.notifier).toggle(t.tagText),
+                onTap: () => ref.read(primarySelectedTagsProvider.notifier).toggle(t.tagText),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(

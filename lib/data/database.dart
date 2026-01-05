@@ -161,97 +161,78 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return query.watch();
   }
 
-  Stream<List<Video>> searchVideos(
-    List<String> tags, {
+  Stream<List<Video>> searchVideos({
+    List<String> tagsAny = const [], // OR logic (Primary)
+    List<String> tagsAll = const [], // AND logic (Secondary)
     String? searchQuery,
     bool favoritesOnly = false, 
     SortOption sortBy = SortOption.title,
     SortDirection direction = SortDirection.asc,
   }) {
     // If no tags and no search, use watchAllVideos
-    if (tags.isEmpty && (searchQuery == null || searchQuery.isEmpty)) {
+    if (tagsAny.isEmpty && tagsAll.isEmpty && (searchQuery == null || searchQuery.isEmpty)) {
       return watchAllVideos(favoritesOnly: favoritesOnly, sortBy: sortBy, direction: direction);
     }
     
-    // CASE 1: Searching with Tags (Inner Join)
-    if (tags.isNotEmpty) {
-      final query = select(videos).join([
-         innerJoin(this.tags, this.tags.videoId.equalsExp(videos.id))
-      ]);
-      query.where(this.tags.tagText.isIn(tags));
-      
-      if (favoritesOnly) {
-        query.where(videos.isFavorite.equals(true));
-      }
-      
-      if (searchQuery != null && searchQuery.isNotEmpty) {
-        // Search both title and absolutePath (contains folder path) - case insensitive
-        final lowerQuery = searchQuery.toLowerCase();
-        query.where(
-          videos.title.lower().like('%$lowerQuery%') |
-          videos.absolutePath.lower().like('%$lowerQuery%')
-        );
-      }
-      
-      // Ordering for Joined Query
-      final mode = direction == SortDirection.asc ? OrderingMode.asc : OrderingMode.desc;
-      if (sortBy == SortOption.duration) {
-        query.orderBy([OrderingTerm(expression: videos.duration, mode: mode)]);
-      } else if (sortBy == SortOption.addedAt) {
-        query.orderBy([OrderingTerm(expression: videos.fileCreatedAt, mode: mode)]);
-      } else if (sortBy == SortOption.size) {
-        query.orderBy([OrderingTerm(expression: videos.size, mode: mode)]);
-      } else {
-        query.orderBy([OrderingTerm(expression: videos.title, mode: mode)]);
-      }
-      
-      return query.map((row) => row.readTable(videos)).watch().map((list) {
-        final seenCheck = <int>{};
-        final uniqueVideos = <Video>[];
-        for (final v in list) {
-          if (seenCheck.add(v.id)) {
-            uniqueVideos.add(v);
-          }
-        }
-        return uniqueVideos;
-      });
-    } 
-    
-    // CASE 2: Search only (No Tags)
-    else {
-      final query = select(videos);
-      
-      if (favoritesOnly) {
-        query.where((t) => t.isFavorite.equals(true));
-      }
-      if (searchQuery != null && searchQuery.isNotEmpty) {
-        // Search both title and absolutePath (contains folder path) - case insensitive
-        final lowerQuery = searchQuery.toLowerCase();
-        query.where((t) => 
-          t.title.lower().like('%$lowerQuery%') |
-          t.absolutePath.lower().like('%$lowerQuery%')
-        );
-      }
-      
-      // Ordering for Simple Query
-      final mode = direction == SortDirection.asc ? OrderingMode.asc : OrderingMode.desc;
-      query.orderBy([
-        (t) {
-          if (sortBy == SortOption.duration) {
-            return OrderingTerm(expression: t.duration, mode: mode);
-          } else if (sortBy == SortOption.addedAt) {
-            return OrderingTerm(expression: t.fileCreatedAt, mode: mode);
-          } else if (sortBy == SortOption.size) {
-            return OrderingTerm(expression: t.size, mode: mode);
-          } else {
-            return OrderingTerm(expression: t.title, mode: mode);
-          }
-        }
-      ]);
-      
-      return query.watch();
+    // Build WHERE clause components
+    final variables = <Variable>[];
+    final conditions = <String>[];
+
+    // 1. OR Logic (Attributes Any)
+    if (tagsAny.isNotEmpty) {
+      final placeholders = tagsAny.map((_) => '?').join(',');
+      conditions.add('id IN (SELECT video_id FROM tags WHERE tag_text IN ($placeholders))');
+      variables.addAll(tagsAny.map((t) => Variable.withString(t)));
     }
-  }
+
+    // 2. AND Logic (Attributes All)
+    if (tagsAll.isNotEmpty) {
+      final placeholders = tagsAll.map((_) => '?').join(',');
+      conditions.add('id IN (SELECT video_id FROM tags WHERE tag_text IN ($placeholders) GROUP BY video_id HAVING COUNT(DISTINCT tag_text) = ?)');
+      variables.addAll(tagsAll.map((t) => Variable.withString(t)));
+      variables.add(Variable.withInt(tagsAll.length));
+    }
+
+    if (favoritesOnly) {
+      conditions.add('is_favorite = 1');
+    }
+
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      conditions.add('(lower(title) LIKE ? OR lower(absolute_path) LIKE ?)');
+      variables.add(Variable.withString('%${searchQuery.toLowerCase()}%'));
+      variables.add(Variable.withString('%${searchQuery.toLowerCase()}%'));
+    }
+
+    String whereClause = '';
+    if (conditions.isNotEmpty) {
+      whereClause = 'WHERE ${conditions.join(' AND ')}';
+    }
+
+    String orderBy = 'ORDER BY title ASC';
+    final mode = direction == SortDirection.asc ? 'ASC' : 'DESC';
+    switch (sortBy) {
+      case SortOption.title:
+        orderBy = 'ORDER BY title $mode';
+        break;
+      case SortOption.duration:
+        orderBy = 'ORDER BY duration $mode';
+        break;
+      case SortOption.addedAt:
+        orderBy = 'ORDER BY file_created_at $mode';
+        break;
+      case SortOption.size:
+        orderBy = 'ORDER BY size $mode';
+        break;
+    }
+
+    final sql = 'SELECT * FROM videos $whereClause $orderBy';
+
+    return customSelect(sql, variables: variables, readsFrom: {videos, this.tags})
+      .watch()
+      .map((rows) => rows.map((row) => videos.map(row.data)).toList());
+  } 
+    
+
 }
 
 @DriftAccessor(tables: [Tags])
@@ -328,6 +309,28 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
       }
       return results;
     });
+  }
+
+  Future<Map<String, int>> getTagsWithCountsForVideos(List<int> videoIds) async {
+    if (videoIds.isEmpty) return {};
+    
+    final countExp = tags.id.count();
+    final query = selectOnly(tags)
+      ..addColumns([tags.tagText, countExp])
+      ..where(tags.videoId.isIn(videoIds))
+      ..groupBy([tags.tagText]);
+    
+    final rows = await query.get();
+    
+    final results = <String, int>{};
+    for (final row in rows) {
+      final text = row.read(tags.tagText);
+      final count = row.read(countExp);
+      if (text != null && count != null) {
+        results[text] = count;
+      }
+    }
+    return results;
   }
 
   Future<void> pruneEmptyTags() async {
