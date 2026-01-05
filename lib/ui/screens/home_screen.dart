@@ -11,6 +11,7 @@ import '../../logic/stats_provider.dart';
 import '../../logic/filter_controller.dart';
 import '../../data/database.dart';
 import 'settings_screen.dart';
+import 'tag_management_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -246,23 +247,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const _LibraryStatsBox(),
                 const Divider(height: 8, indent: 16, endIndent: 16),
                 _SidebarNavItem(
-                  label: 'Tags Management',
+                  label: 'Tag Management',
                   icon: CupertinoIcons.tag,
                   selected: false,
                   onTap: () {
-                    // Placeholder for Tags Management
-                    showMacosAlertDialog(
-                      context: context,
-                      builder: (_) => MacosAlertDialog(
-                        appIcon: const MacosIcon(CupertinoIcons.tag),
-                        title: const Text('Tags Management'),
-                        message: const Text('This feature is coming soon.'),
-                        primaryButton: PushButton(
-                          controlSize: ControlSize.large,
-                          child: const Text('OK'),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(builder: (_) => const TagManagementScreen()),
                     );
                   },
                 ),

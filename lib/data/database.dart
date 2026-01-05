@@ -347,4 +347,275 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
     // Let's add a manual cleanup query.
     await customStatement('DELETE FROM tags WHERE video_id NOT IN (SELECT id FROM videos)');
   }
+
+  // ============== TAG MANAGEMENT OPERATIONS ==============
+
+  /// Renames a tag across all videos, handling conflicts.
+  /// Returns a result with counts of updated and skipped videos.
+  /// Note: oldTagText should be the exact tag text from the database
+  Future<TagRenameResult> renameTag(String oldTagText, String newTagText) async {
+    final normalizedNew = _normalizeTag(newTagText);
+    
+    if (normalizedNew.isEmpty) {
+      throw ArgumentError('New tag name cannot be empty');
+    }
+    
+    // Use oldTagText exactly as passed - it comes from the database
+    final exactOldTag = oldTagText;
+    
+    // Check if old and new are effectively the same
+    if (normalizedNew == exactOldTag.trim().toLowerCase()) {
+      return TagRenameResult(updated: 0, skipped: 0);
+    }
+    
+    return transaction(() async {
+      // Get all video IDs with the old tag (exact match)
+      final videosWithOldTag = await (selectOnly(tags)
+        ..addColumns([tags.videoId])
+        ..where(tags.tagText.equals(exactOldTag))
+      ).map((row) => row.read(tags.videoId)!).get();
+      
+      if (videosWithOldTag.isEmpty) {
+        return TagRenameResult(updated: 0, skipped: 0);
+      }
+      
+      // Get video IDs that already have the new tag (conflicts)
+      final videosWithNewTag = await (selectOnly(tags)
+        ..addColumns([tags.videoId])
+        ..where(tags.tagText.equals(normalizedNew) & tags.videoId.isIn(videosWithOldTag))
+      ).map((row) => row.read(tags.videoId)!).get();
+      
+      final conflictVideoIds = videosWithNewTag.toSet();
+      
+      // Delete old tag from conflicting videos (they already have new tag)
+      if (conflictVideoIds.isNotEmpty) {
+        await (delete(tags)
+          ..where((t) => t.tagText.equals(exactOldTag) & t.videoId.isIn(conflictVideoIds.toList()))
+        ).go();
+      }
+      
+      // Update old tag to new tag for non-conflicting videos
+      final nonConflictVideoIds = videosWithOldTag.where((id) => !conflictVideoIds.contains(id)).toList();
+      if (nonConflictVideoIds.isNotEmpty) {
+        await (update(tags)
+          ..where((t) => t.tagText.equals(exactOldTag) & t.videoId.isIn(nonConflictVideoIds))
+        ).write(TagsCompanion(tagText: Value(normalizedNew)));
+      }
+      
+      return TagRenameResult(
+        updated: nonConflictVideoIds.length,
+        skipped: conflictVideoIds.length,
+      );
+    });
+  }
+
+  /// Merges multiple tags into a single target tag.
+  /// Returns result with count of videos affected.
+  /// Note: sourceTagTexts should be exact tag texts from the database
+  Future<TagMergeResult> mergeTags(List<String> sourceTagTexts, String targetTagText) async {
+    final normalizedTarget = _normalizeTag(targetTagText);
+    // Use exact source tags from database
+    final exactSources = sourceTagTexts.toSet();
+    
+    if (exactSources.isEmpty) {
+      return TagMergeResult(videosAffected: 0, tagsRemoved: 0);
+    }
+    if (normalizedTarget.isEmpty) {
+      throw ArgumentError('Target tag name cannot be empty');
+    }
+    
+    // Remove target from sources if it's there (no need to merge into itself)
+    // Check both exact match and normalized match
+    exactSources.removeWhere((s) => s == normalizedTarget || s.trim().toLowerCase() == normalizedTarget);
+    if (exactSources.isEmpty) {
+      return TagMergeResult(videosAffected: 0, tagsRemoved: 0);
+    }
+    
+    return transaction(() async {
+      // Get all video IDs with any source tag (exact match)
+      final videosWithSourceTags = await (selectOnly(tags, distinct: true)
+        ..addColumns([tags.videoId])
+        ..where(tags.tagText.isIn(exactSources.toList()))
+      ).map((row) => row.read(tags.videoId)!).get();
+      
+      if (videosWithSourceTags.isEmpty) {
+        return TagMergeResult(videosAffected: 0, tagsRemoved: exactSources.length);
+      }
+      
+      // Get video IDs that already have the target tag
+      final videosWithTargetTag = await (selectOnly(tags)
+        ..addColumns([tags.videoId])
+        ..where(tags.tagText.equals(normalizedTarget) & tags.videoId.isIn(videosWithSourceTags))
+      ).map((row) => row.read(tags.videoId)!).get();
+      
+      final videosNeedingTargetTag = videosWithSourceTags.where((id) => !videosWithTargetTag.contains(id)).toList();
+      
+      // Add target tag to videos that don't have it
+      if (videosNeedingTargetTag.isNotEmpty) {
+        final newTags = videosNeedingTargetTag.map((videoId) => 
+          TagsCompanion.insert(videoId: videoId, tagText: normalizedTarget)
+        ).toList();
+        await insertTagsBatch(newTags);
+      }
+      
+      // Delete all source tags (exact match)
+      await (delete(tags)..where((t) => t.tagText.isIn(exactSources.toList()))).go();
+      
+      return TagMergeResult(
+        videosAffected: videosWithSourceTags.length,
+        tagsRemoved: exactSources.length,
+      );
+    });
+  }
+
+  /// Adds tags to multiple videos in batch.
+  Future<void> addTagsToVideos(List<int> videoIds, List<String> tagTexts) async {
+    if (videoIds.isEmpty || tagTexts.isEmpty) return;
+    
+    final normalizedTags = tagTexts.map((t) => _normalizeTag(t)).where((t) => t.isNotEmpty).toList();
+    if (normalizedTags.isEmpty) return;
+    
+    final companions = <TagsCompanion>[];
+    for (final videoId in videoIds) {
+      for (final tagText in normalizedTags) {
+        companions.add(TagsCompanion.insert(videoId: videoId, tagText: tagText));
+      }
+    }
+    await insertTagsBatch(companions);
+  }
+
+  /// Removes specific tags from multiple videos.
+  Future<void> removeTagsFromVideos(List<int> videoIds, List<String> tagTexts) async {
+    if (videoIds.isEmpty || tagTexts.isEmpty) return;
+    
+    final normalizedTags = tagTexts.map((t) => t.trim().toLowerCase()).toList();
+    await (delete(tags)
+      ..where((t) => t.videoId.isIn(videoIds) & t.tagText.isIn(normalizedTags))
+    ).go();
+  }
+
+  /// Gets all tags with their video counts and source info for management UI.
+  Stream<List<TagInfo>> watchAllTagsWithInfo() {
+    return customSelect('''
+      SELECT 
+        tag_text,
+        COUNT(*) as video_count,
+        COUNT(CASE WHEN source = 'user' THEN 1 END) as user_count,
+        COUNT(CASE WHEN source = 'auto' THEN 1 END) as auto_count
+      FROM tags
+      GROUP BY tag_text
+      ORDER BY tag_text ASC
+    ''', readsFrom: {tags}).watch().map((rows) {
+      return rows.map((row) {
+        final userCount = row.read<int>('user_count');
+        final autoCount = row.read<int>('auto_count');
+        String sourceType;
+        if (userCount > 0 && autoCount > 0) {
+          sourceType = 'mixed';
+        } else if (autoCount > 0) {
+          sourceType = 'auto';
+        } else {
+          sourceType = 'user';
+        }
+        return TagInfo(
+          tagText: row.read<String>('tag_text')!,
+          videoCount: row.read<int>('video_count'),
+          sourceType: sourceType,
+        );
+      }).toList();
+    });
+  }
+
+  Future<TagStatistics> getTagStatistics() async {
+    final uniqueTagsResult = await customSelect(
+      'SELECT COUNT(DISTINCT tag_text) as count FROM tags'
+    ).getSingle();
+    final uniqueCount = uniqueTagsResult.read<int>('count');
+
+    final totalResult = await customSelect(
+      'SELECT COUNT(*) as count FROM tags'
+    ).getSingle();
+    final totalAssignments = totalResult.read<int>('count');
+
+    final userResult = await customSelect(
+      "SELECT COUNT(*) as count FROM tags WHERE source = 'user'"
+    ).getSingle();
+    final userTags = userResult.read<int>('count');
+
+    final autoResult = await customSelect(
+      "SELECT COUNT(*) as count FROM tags WHERE source = 'auto'"
+    ).getSingle();
+    final autoTags = autoResult.read<int>('count');
+
+    final tagsPerVideoResult = await customSelect(
+      'SELECT video_id, COUNT(*) as tag_count FROM tags GROUP BY video_id'
+    ).get();
+    
+    int minTags = 0, maxTags = 0;
+    double avgTags = 0;
+    if (tagsPerVideoResult.isNotEmpty) {
+      final counts = tagsPerVideoResult.map((r) => r.read<int>('tag_count')).toList();
+      minTags = counts.reduce((a, b) => a < b ? a : b);
+      maxTags = counts.reduce((a, b) => a > b ? a : b);
+      avgTags = counts.reduce((a, b) => a + b) / counts.length;
+    }
+
+    return TagStatistics(
+      uniqueTagCount: uniqueCount,
+      totalAssignments: totalAssignments,
+      userTags: userTags,
+      autoTags: autoTags,
+      minTagsPerVideo: minTags,
+      maxTagsPerVideo: maxTags,
+      avgTagsPerVideo: avgTags,
+    );
+  }
+}
+
+// ============== TAG MANAGEMENT MODELS ==============
+
+class TagRenameResult {
+  final int updated;
+  final int skipped;
+  
+  const TagRenameResult({required this.updated, required this.skipped});
+}
+
+class TagMergeResult {
+  final int videosAffected;
+  final int tagsRemoved;
+  
+  const TagMergeResult({required this.videosAffected, required this.tagsRemoved});
+}
+
+class TagInfo {
+  final String tagText;
+  final int videoCount;
+  final String sourceType; // 'user', 'auto', or 'mixed'
+  
+  const TagInfo({
+    required this.tagText,
+    required this.videoCount,
+    required this.sourceType,
+  });
+}
+
+class TagStatistics {
+  final int uniqueTagCount;
+  final int totalAssignments;
+  final int userTags;
+  final int autoTags;
+  final int minTagsPerVideo;
+  final int maxTagsPerVideo;
+  final double avgTagsPerVideo;
+  
+  const TagStatistics({
+    required this.uniqueTagCount,
+    required this.totalAssignments,
+    required this.userTags,
+    required this.autoTags,
+    required this.minTagsPerVideo,
+    required this.maxTagsPerVideo,
+    required this.avgTagsPerVideo,
+  });
 }
