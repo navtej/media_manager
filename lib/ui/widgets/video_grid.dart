@@ -342,7 +342,7 @@ class _VideoTagList extends ConsumerWidget {
                       GestureDetector(
                         onTap: () => ref.read(tagsDaoProvider).deleteTag(videoId, t.tagText),
                         child: Icon(
-                          CupertinoIcons.xmark, 
+                          CupertinoIcons.trash, 
                           size: 8,
                           color: isSelected ? MacosColors.white.withOpacity(0.8) : null,
                         ),

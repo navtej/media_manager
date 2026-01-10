@@ -93,7 +93,7 @@ class TagCloud extends ConsumerWidget {
                         );
                       },
                       child: Icon(
-                        CupertinoIcons.xmark,
+                        CupertinoIcons.trash,
                         size: 9, // Slightly smaller
                         color: isSelected ? MacosColors.white.withOpacity(0.8) : theme.typography.body.color?.withOpacity(0.5),
                       ),
