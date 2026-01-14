@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/cupertino.dart';
 // import 'package:flutter/material.dart'; // Unnecessary
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +12,9 @@ import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/maintenance_controller.dart';
 import '../../services/natural_language_service.dart';
+import 'package:icon_craft/icon_craft.dart';
 
 class SliverVideoGrid extends ConsumerWidget {
   const SliverVideoGrid({super.key});
@@ -121,12 +124,14 @@ class _VideoGridItemState extends State<VideoGridItem> {
                     children: [
                       ClipRRect(
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
-                        child: video.thumbnailBlob != null
-                            ? Image.memory(video.thumbnailBlob!, fit: BoxFit.cover)
-                            : Container(
-                                color: MacosColors.black,
-                                child: const Icon(CupertinoIcons.play_circle, color: MacosColors.white, size: 40),
-                              ),
+                        child: video.thumbnailPath != null 
+                             ? Image.file(File(video.thumbnailPath!), fit: BoxFit.cover)
+                             : (video.thumbnailBlob != null
+                                ? Image.memory(video.thumbnailBlob!, fit: BoxFit.cover)
+                                : Container(
+                                    color: MacosColors.black,
+                                    child: const Icon(CupertinoIcons.play_circle, color: MacosColors.white, size: 40),
+                                  )),
                       ),
                       // Hover Details Overlay
                       if (_isThumbnailHovering)
@@ -233,6 +238,32 @@ class _VideoGridItemState extends State<VideoGridItem> {
           icon: const Icon(CupertinoIcons.trash, size: 16),
           onPressed: () => _confirmDelete(ref),
         ),
+        // Clear all tags
+        MacosTooltip(
+          message: 'Clear all tags',
+          child: MacosIconButton(
+            padding: EdgeInsets.zero,
+            icon: const IconCraft(
+              Icon(
+                CupertinoIcons.tag,
+                size: 16,
+              ),
+              Icon(
+                CupertinoIcons.clear_thick,
+                size: 10,
+              ),
+              alignment: Alignment(1.2, -1.1),
+              secondaryIconSizeFactor: 0.5,
+
+              decoration: const IconDecoration(
+                border: IconBorder(
+                  width: 4.0,
+                ),
+              ),
+            ),
+            onPressed: () => ref.read(tagsDaoProvider).deleteAllTagsForVideo(widget.video.id),
+          ),
+        ),
       ],
     );
   }
@@ -250,7 +281,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
           controlSize: ControlSize.large,
           child: const Text('Delete'),
           onPressed: () {
-            ref.read(libraryControllerProvider.notifier).deleteVideo(widget.video.id);
+            ref.read(maintenanceControllerProvider.notifier).deleteVideo(widget.video.id);
             Navigator.of(context).pop();
           },
         ),
@@ -331,20 +362,27 @@ class _VideoTagList extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        t.tagText, 
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isSelected ? MacosColors.white : null,
-                        )
+                      Flexible(
+                        child: Text(
+                          t.tagText, 
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected ? MacosColors.white : null,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 6), // Increased width
                       GestureDetector(
+                        behavior: HitTestBehavior.opaque, // Better hit testing
                         onTap: () => ref.read(tagsDaoProvider).deleteTag(videoId, t.tagText),
-                        child: Icon(
-                          CupertinoIcons.trash, 
-                          size: 8,
-                          color: isSelected ? MacosColors.white.withOpacity(0.8) : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2.0), // Padding around the icon for better hit area
+                          child: Icon(
+                            CupertinoIcons.trash, 
+                            size: 9, // Slightly larger
+                            color: isSelected ? MacosColors.white.withOpacity(0.8) : null,
+                          ),
                         ),
                       ),
                     ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/ai_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/stats_provider.dart';
 import '../../logic/filter_controller.dart';
@@ -18,9 +19,13 @@ class StatusFooter extends ConsumerWidget {
     
     final totalVideosSync = ref.watch(libraryStatsProvider);
     final visibleVideosSync = ref.watch(filteredVideosProvider);
+    final selectedCountSync = ref.watch(selectedVideoCountProvider);
 
     final totalCount = totalVideosSync.when(data: (s) => s.totalCount, error: (_, __) => 0, loading: () => 0);
+    // Visible is what is currently rendered/fetched (pagination limit)
     final visibleCount = visibleVideosSync.when(data: (v) => v.length, error: (_, __) => 0, loading: () => 0);
+    // Selected is the total matches for the current filter
+    final selectedCount = selectedCountSync.when(data: (c) => c, error: (_, __) => 0, loading: () => 0);
 
     return Container(
       height: 32,
@@ -59,7 +64,7 @@ class StatusFooter extends ConsumerWidget {
           if (statusMsg == null) ...[
             const Spacer(),
             Text(
-              'Videos : $visibleCount / $totalCount',
+              'Loaded: $visibleCount / Selected: $selectedCount / Total: $totalCount',
               style: const TextStyle(
                 fontSize: 11, 
                 color: MacosColors.white,

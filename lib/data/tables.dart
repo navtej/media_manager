@@ -16,6 +16,7 @@ class Videos extends Table {
   IntColumn get size => integer().withDefault(const Constant(0))(); // in bytes
   BlobColumn get thumbnailBlob => blob().nullable()();
   TextColumn get metadataJson => text().withDefault(const Constant('{}'))();
+  TextColumn get thumbnailPath => text().nullable()();
   BoolColumn get isOffline => boolean().withDefault(const Constant(false))();
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
@@ -34,4 +35,20 @@ class Tags extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [{videoId, tagText}];
+}
+
+// Normalized Schema Tables
+class TagDefinitions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().unique()();
+  TextColumn get source => text().withDefault(const Constant('user'))(); // 'user', 'auto', 'mixed'
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class VideoTags extends Table {
+  IntColumn get videoId => integer().references(Videos, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId => integer().references(TagDefinitions, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {videoId, tagId};
 }

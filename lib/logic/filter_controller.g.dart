@@ -217,6 +217,58 @@ abstract class _$SearchQuery extends $Notifier<String> {
   }
 }
 
+@ProviderFor(TagFilterQuery)
+final tagFilterQueryProvider = TagFilterQueryProvider._();
+
+final class TagFilterQueryProvider
+    extends $NotifierProvider<TagFilterQuery, String> {
+  TagFilterQueryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'tagFilterQueryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$tagFilterQueryHash();
+
+  @$internal
+  @override
+  TagFilterQuery create() => TagFilterQuery();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String>(value),
+    );
+  }
+}
+
+String _$tagFilterQueryHash() => r'e4e0daa9ee6fc4ba18726eff0c036c5cbdbe7cdd';
+
+abstract class _$TagFilterQuery extends $Notifier<String> {
+  String build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<String, String>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String, String>,
+              String,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(PrimarySelectedTags)
 final primarySelectedTagsProvider = PrimarySelectedTagsProvider._();
 
@@ -250,7 +302,7 @@ final class PrimarySelectedTagsProvider
 }
 
 String _$primarySelectedTagsHash() =>
-    r'6c36bc85661c0d5a3cbfead04462cac9d6cabba3';
+    r'68a44904eac559fd65961e1cd4a90d0f385d38b5';
 
 abstract class _$PrimarySelectedTags extends $Notifier<List<String>> {
   List<String> build();
@@ -364,3 +416,54 @@ final class CombinedSelectedTagsProvider
 
 String _$combinedSelectedTagsHash() =>
     r'2a88e91bb2bbc918f15d0a5e1adaf83604efde4b';
+
+@ProviderFor(VideoLimit)
+final videoLimitProvider = VideoLimitProvider._();
+
+final class VideoLimitProvider extends $NotifierProvider<VideoLimit, int> {
+  VideoLimitProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'videoLimitProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$videoLimitHash();
+
+  @$internal
+  @override
+  VideoLimit create() => VideoLimit();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(int value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<int>(value),
+    );
+  }
+}
+
+String _$videoLimitHash() => r'10e99d7906e6e3541efb257f11c8a4deb615bfe6';
+
+abstract class _$VideoLimit extends $Notifier<int> {
+  int build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<int, int>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<int, int>,
+              int,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

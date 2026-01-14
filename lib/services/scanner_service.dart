@@ -5,47 +5,84 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 class ScannerService {
-  final Set<String> _videoExtensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
+  // Common video extensions
+  static const Set<String> _videoExtensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
 
-  Future<void> scanFolders(List<String> rootPaths, Function(String) onVideoFound) async {
+  /// Scans folders and returns a stream of file path batches.
+  /// Using batches reduces Isolate communication overhead.
+  Stream<List<String>> scanPaths(List<String> rootPaths) {
     final receivePort = ReceivePort();
-    await Isolate.spawn(_scannerEntryPoint, _ScannerMessage(rootPaths, receivePort.sendPort));
+    final controller = StreamController<List<String>>();
 
-    await for (final message in receivePort) {
-      if (message == 'DONE') {
-        break;
-      } else if (message is String) {
-        onVideoFound(message);
-      }
-    }
+    // Spawn the isolate
+    Isolate.spawn< _ScannerMessage>(
+      _scannerEntryPoint,
+      _ScannerMessage(rootPaths, receivePort.sendPort),
+    ).then((isolate) {
+        // Handle stream from isolate
+        receivePort.listen((message) {
+          if (message == 'DONE') {
+            controller.close();
+            receivePort.close();
+            isolate.kill();
+          } else if (message is List<String>) {
+            controller.add(message);
+          } else if (message is String && message.startsWith('ERROR')) {
+            controller.addError(message);
+          }
+        });
+    });
+
+    return controller.stream;
   }
 
   static void _scannerEntryPoint(_ScannerMessage message) {
+    // Forward to async scanner
+    _asyncScanner(message);
+  }
+
+
+  static Future<void> _asyncScanner(_ScannerMessage message) async {
+    final sendPort = message.sendPort;
+    final buffer = <String>[];
+    const int batchSize = 100;
+
+    void flush() {
+      if (buffer.isNotEmpty) {
+        sendPort.send(List<String>.from(buffer));
+        buffer.clear();
+      }
+    }
+
     try {
-      print('DEBUG ISOLATE: Scanner started for ${message.roots}');
-      final extensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
-      
       for (final rootPath in message.roots) {
         final dir = Directory(rootPath);
-        print('DEBUG ISOLATE: Checking directory $rootPath, exists: ${dir.existsSync()}');
-        if (!dir.existsSync()) continue;
+        if (!await dir.exists()) continue;
 
         try {
-          print('DEBUG ISOLATE: Listing files in $rootPath...');
-          final entities = dir.listSync(recursive: true, followLinks: false);
-          for (final entity in entities) {
+          // Use non-recursive stream if we want to control recursion, but recursive list() is fine 
+          // as long as we process the stream.
+          await for (final entity in dir.list(recursive: true, followLinks: false)) {
             if (entity is File) {
-              if (extensions.contains(p.extension(entity.path).toLowerCase())) {
-                 message.sendPort.send(entity.path);
-              }
+               final ext = p.extension(entity.path).toLowerCase();
+               if (_videoExtensions.contains(ext)) {
+                 buffer.add(entity.path);
+                 if (buffer.length >= batchSize) {
+                   flush();
+                 }
+               }
             }
           }
         } catch (e) {
-          print('Error scanning $rootPath: $e');
+          print('Scanner Error in $rootPath: $e');
         }
       }
+      // Final flush
+      flush();
+    } catch (e) {
+      print('Scanner Critical Error: $e');
     } finally {
-      message.sendPort.send('DONE');
+      sendPort.send('DONE');
     }
   }
 }

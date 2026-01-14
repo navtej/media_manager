@@ -47,3 +47,36 @@ final class LibraryStatsProvider
 }
 
 String _$libraryStatsHash() => r'90e77f9633c383af8500672ead864fa987354056';
+
+@ProviderFor(dataFolderSize)
+final dataFolderSizeProvider = DataFolderSizeProvider._();
+
+final class DataFolderSizeProvider
+    extends $FunctionalProvider<AsyncValue<int>, int, FutureOr<int>>
+    with $FutureModifier<int>, $FutureProvider<int> {
+  DataFolderSizeProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'dataFolderSizeProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$dataFolderSizeHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<int> $createElement($ProviderPointer pointer) =>
+      $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<int> create(Ref ref) {
+    return dataFolderSize(ref);
+  }
+}
+
+String _$dataFolderSizeHash() => r'd7eef207e0a63e534df1f057e6d8cab5e81e15fe';

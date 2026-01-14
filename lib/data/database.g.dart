@@ -396,6 +396,17 @@ class $VideosTable extends Videos with TableInfo<$VideosTable, Video> {
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
   );
+  static const VerificationMeta _thumbnailPathMeta = const VerificationMeta(
+    'thumbnailPath',
+  );
+  @override
+  late final GeneratedColumn<String> thumbnailPath = GeneratedColumn<String>(
+    'thumbnail_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isOfflineMeta = const VerificationMeta(
     'isOffline',
   );
@@ -475,6 +486,7 @@ class $VideosTable extends Videos with TableInfo<$VideosTable, Video> {
     size,
     thumbnailBlob,
     metadataJson,
+    thumbnailPath,
     isOffline,
     isFavorite,
     addedAt,
@@ -550,6 +562,15 @@ class $VideosTable extends Videos with TableInfo<$VideosTable, Video> {
         metadataJson.isAcceptableOrUnknown(
           data['metadata_json']!,
           _metadataJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('thumbnail_path')) {
+      context.handle(
+        _thumbnailPathMeta,
+        thumbnailPath.isAcceptableOrUnknown(
+          data['thumbnail_path']!,
+          _thumbnailPathMeta,
         ),
       );
     }
@@ -634,6 +655,10 @@ class $VideosTable extends Videos with TableInfo<$VideosTable, Video> {
         DriftSqlType.string,
         data['${effectivePrefix}metadata_json'],
       )!,
+      thumbnailPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thumbnail_path'],
+      ),
       isOffline: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_offline'],
@@ -672,6 +697,7 @@ class Video extends DataClass implements Insertable<Video> {
   final int size;
   final Uint8List? thumbnailBlob;
   final String metadataJson;
+  final String? thumbnailPath;
   final bool isOffline;
   final bool isFavorite;
   final DateTime addedAt;
@@ -686,6 +712,7 @@ class Video extends DataClass implements Insertable<Video> {
     required this.size,
     this.thumbnailBlob,
     required this.metadataJson,
+    this.thumbnailPath,
     required this.isOffline,
     required this.isFavorite,
     required this.addedAt,
@@ -705,6 +732,9 @@ class Video extends DataClass implements Insertable<Video> {
       map['thumbnail_blob'] = Variable<Uint8List>(thumbnailBlob);
     }
     map['metadata_json'] = Variable<String>(metadataJson);
+    if (!nullToAbsent || thumbnailPath != null) {
+      map['thumbnail_path'] = Variable<String>(thumbnailPath);
+    }
     map['is_offline'] = Variable<bool>(isOffline);
     map['is_favorite'] = Variable<bool>(isFavorite);
     map['added_at'] = Variable<DateTime>(addedAt);
@@ -727,6 +757,9 @@ class Video extends DataClass implements Insertable<Video> {
           ? const Value.absent()
           : Value(thumbnailBlob),
       metadataJson: Value(metadataJson),
+      thumbnailPath: thumbnailPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thumbnailPath),
       isOffline: Value(isOffline),
       isFavorite: Value(isFavorite),
       addedAt: Value(addedAt),
@@ -751,6 +784,7 @@ class Video extends DataClass implements Insertable<Video> {
       size: serializer.fromJson<int>(json['size']),
       thumbnailBlob: serializer.fromJson<Uint8List?>(json['thumbnailBlob']),
       metadataJson: serializer.fromJson<String>(json['metadataJson']),
+      thumbnailPath: serializer.fromJson<String?>(json['thumbnailPath']),
       isOffline: serializer.fromJson<bool>(json['isOffline']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
@@ -770,6 +804,7 @@ class Video extends DataClass implements Insertable<Video> {
       'size': serializer.toJson<int>(size),
       'thumbnailBlob': serializer.toJson<Uint8List?>(thumbnailBlob),
       'metadataJson': serializer.toJson<String>(metadataJson),
+      'thumbnailPath': serializer.toJson<String?>(thumbnailPath),
       'isOffline': serializer.toJson<bool>(isOffline),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'addedAt': serializer.toJson<DateTime>(addedAt),
@@ -787,6 +822,7 @@ class Video extends DataClass implements Insertable<Video> {
     int? size,
     Value<Uint8List?> thumbnailBlob = const Value.absent(),
     String? metadataJson,
+    Value<String?> thumbnailPath = const Value.absent(),
     bool? isOffline,
     bool? isFavorite,
     DateTime? addedAt,
@@ -803,6 +839,9 @@ class Video extends DataClass implements Insertable<Video> {
         ? thumbnailBlob.value
         : this.thumbnailBlob,
     metadataJson: metadataJson ?? this.metadataJson,
+    thumbnailPath: thumbnailPath.present
+        ? thumbnailPath.value
+        : this.thumbnailPath,
     isOffline: isOffline ?? this.isOffline,
     isFavorite: isFavorite ?? this.isFavorite,
     addedAt: addedAt ?? this.addedAt,
@@ -827,6 +866,9 @@ class Video extends DataClass implements Insertable<Video> {
       metadataJson: data.metadataJson.present
           ? data.metadataJson.value
           : this.metadataJson,
+      thumbnailPath: data.thumbnailPath.present
+          ? data.thumbnailPath.value
+          : this.thumbnailPath,
       isOffline: data.isOffline.present ? data.isOffline.value : this.isOffline,
       isFavorite: data.isFavorite.present
           ? data.isFavorite.value
@@ -852,6 +894,7 @@ class Video extends DataClass implements Insertable<Video> {
           ..write('size: $size, ')
           ..write('thumbnailBlob: $thumbnailBlob, ')
           ..write('metadataJson: $metadataJson, ')
+          ..write('thumbnailPath: $thumbnailPath, ')
           ..write('isOffline: $isOffline, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('addedAt: $addedAt, ')
@@ -871,6 +914,7 @@ class Video extends DataClass implements Insertable<Video> {
     size,
     $driftBlobEquality.hash(thumbnailBlob),
     metadataJson,
+    thumbnailPath,
     isOffline,
     isFavorite,
     addedAt,
@@ -889,6 +933,7 @@ class Video extends DataClass implements Insertable<Video> {
           other.size == this.size &&
           $driftBlobEquality.equals(other.thumbnailBlob, this.thumbnailBlob) &&
           other.metadataJson == this.metadataJson &&
+          other.thumbnailPath == this.thumbnailPath &&
           other.isOffline == this.isOffline &&
           other.isFavorite == this.isFavorite &&
           other.addedAt == this.addedAt &&
@@ -905,6 +950,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
   final Value<int> size;
   final Value<Uint8List?> thumbnailBlob;
   final Value<String> metadataJson;
+  final Value<String?> thumbnailPath;
   final Value<bool> isOffline;
   final Value<bool> isFavorite;
   final Value<DateTime> addedAt;
@@ -919,6 +965,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
     this.size = const Value.absent(),
     this.thumbnailBlob = const Value.absent(),
     this.metadataJson = const Value.absent(),
+    this.thumbnailPath = const Value.absent(),
     this.isOffline = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.addedAt = const Value.absent(),
@@ -934,6 +981,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
     this.size = const Value.absent(),
     this.thumbnailBlob = const Value.absent(),
     this.metadataJson = const Value.absent(),
+    this.thumbnailPath = const Value.absent(),
     this.isOffline = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.addedAt = const Value.absent(),
@@ -951,6 +999,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
     Expression<int>? size,
     Expression<Uint8List>? thumbnailBlob,
     Expression<String>? metadataJson,
+    Expression<String>? thumbnailPath,
     Expression<bool>? isOffline,
     Expression<bool>? isFavorite,
     Expression<DateTime>? addedAt,
@@ -966,6 +1015,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
       if (size != null) 'size': size,
       if (thumbnailBlob != null) 'thumbnail_blob': thumbnailBlob,
       if (metadataJson != null) 'metadata_json': metadataJson,
+      if (thumbnailPath != null) 'thumbnail_path': thumbnailPath,
       if (isOffline != null) 'is_offline': isOffline,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (addedAt != null) 'added_at': addedAt,
@@ -983,6 +1033,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
     Value<int>? size,
     Value<Uint8List?>? thumbnailBlob,
     Value<String>? metadataJson,
+    Value<String?>? thumbnailPath,
     Value<bool>? isOffline,
     Value<bool>? isFavorite,
     Value<DateTime>? addedAt,
@@ -998,6 +1049,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
       size: size ?? this.size,
       thumbnailBlob: thumbnailBlob ?? this.thumbnailBlob,
       metadataJson: metadataJson ?? this.metadataJson,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       isOffline: isOffline ?? this.isOffline,
       isFavorite: isFavorite ?? this.isFavorite,
       addedAt: addedAt ?? this.addedAt,
@@ -1033,6 +1085,9 @@ class VideosCompanion extends UpdateCompanion<Video> {
     if (metadataJson.present) {
       map['metadata_json'] = Variable<String>(metadataJson.value);
     }
+    if (thumbnailPath.present) {
+      map['thumbnail_path'] = Variable<String>(thumbnailPath.value);
+    }
     if (isOffline.present) {
       map['is_offline'] = Variable<bool>(isOffline.value);
     }
@@ -1062,6 +1117,7 @@ class VideosCompanion extends UpdateCompanion<Video> {
           ..write('size: $size, ')
           ..write('thumbnailBlob: $thumbnailBlob, ')
           ..write('metadataJson: $metadataJson, ')
+          ..write('thumbnailPath: $thumbnailPath, ')
           ..write('isOffline: $isOffline, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('addedAt: $addedAt, ')
@@ -1369,12 +1425,523 @@ class TagsCompanion extends UpdateCompanion<Tag> {
   }
 }
 
+class $TagDefinitionsTable extends TagDefinitions
+    with TableInfo<$TagDefinitionsTable, TagDefinition> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagDefinitionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('user'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, source, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tag_definitions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TagDefinition> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TagDefinition map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TagDefinition(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TagDefinitionsTable createAlias(String alias) {
+    return $TagDefinitionsTable(attachedDatabase, alias);
+  }
+}
+
+class TagDefinition extends DataClass implements Insertable<TagDefinition> {
+  final int id;
+  final String name;
+  final String source;
+  final DateTime createdAt;
+  const TagDefinition({
+    required this.id,
+    required this.name,
+    required this.source,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['source'] = Variable<String>(source);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TagDefinitionsCompanion toCompanion(bool nullToAbsent) {
+    return TagDefinitionsCompanion(
+      id: Value(id),
+      name: Value(name),
+      source: Value(source),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TagDefinition.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TagDefinition(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      source: serializer.fromJson<String>(json['source']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'source': serializer.toJson<String>(source),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TagDefinition copyWith({
+    int? id,
+    String? name,
+    String? source,
+    DateTime? createdAt,
+  }) => TagDefinition(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    source: source ?? this.source,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  TagDefinition copyWithCompanion(TagDefinitionsCompanion data) {
+    return TagDefinition(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      source: data.source.present ? data.source.value : this.source,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagDefinition(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('source: $source, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, source, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TagDefinition &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.source == this.source &&
+          other.createdAt == this.createdAt);
+}
+
+class TagDefinitionsCompanion extends UpdateCompanion<TagDefinition> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String> source;
+  final Value<DateTime> createdAt;
+  const TagDefinitionsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.source = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  TagDefinitionsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.source = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<TagDefinition> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? source,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (source != null) 'source': source,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  TagDefinitionsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? source,
+    Value<DateTime>? createdAt,
+  }) {
+    return TagDefinitionsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      source: source ?? this.source,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagDefinitionsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('source: $source, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $VideoTagsTable extends VideoTags
+    with TableInfo<$VideoTagsTable, VideoTag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VideoTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _videoIdMeta = const VerificationMeta(
+    'videoId',
+  );
+  @override
+  late final GeneratedColumn<int> videoId = GeneratedColumn<int>(
+    'video_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES videos (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<int> tagId = GeneratedColumn<int>(
+    'tag_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tag_definitions (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [videoId, tagId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'video_tags';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VideoTag> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('video_id')) {
+      context.handle(
+        _videoIdMeta,
+        videoId.isAcceptableOrUnknown(data['video_id']!, _videoIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_videoIdMeta);
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+        _tagIdMeta,
+        tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {videoId, tagId};
+  @override
+  VideoTag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VideoTag(
+      videoId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}video_id'],
+      )!,
+      tagId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tag_id'],
+      )!,
+    );
+  }
+
+  @override
+  $VideoTagsTable createAlias(String alias) {
+    return $VideoTagsTable(attachedDatabase, alias);
+  }
+}
+
+class VideoTag extends DataClass implements Insertable<VideoTag> {
+  final int videoId;
+  final int tagId;
+  const VideoTag({required this.videoId, required this.tagId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['video_id'] = Variable<int>(videoId);
+    map['tag_id'] = Variable<int>(tagId);
+    return map;
+  }
+
+  VideoTagsCompanion toCompanion(bool nullToAbsent) {
+    return VideoTagsCompanion(videoId: Value(videoId), tagId: Value(tagId));
+  }
+
+  factory VideoTag.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VideoTag(
+      videoId: serializer.fromJson<int>(json['videoId']),
+      tagId: serializer.fromJson<int>(json['tagId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'videoId': serializer.toJson<int>(videoId),
+      'tagId': serializer.toJson<int>(tagId),
+    };
+  }
+
+  VideoTag copyWith({int? videoId, int? tagId}) =>
+      VideoTag(videoId: videoId ?? this.videoId, tagId: tagId ?? this.tagId);
+  VideoTag copyWithCompanion(VideoTagsCompanion data) {
+    return VideoTag(
+      videoId: data.videoId.present ? data.videoId.value : this.videoId,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VideoTag(')
+          ..write('videoId: $videoId, ')
+          ..write('tagId: $tagId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(videoId, tagId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VideoTag &&
+          other.videoId == this.videoId &&
+          other.tagId == this.tagId);
+}
+
+class VideoTagsCompanion extends UpdateCompanion<VideoTag> {
+  final Value<int> videoId;
+  final Value<int> tagId;
+  final Value<int> rowid;
+  const VideoTagsCompanion({
+    this.videoId = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VideoTagsCompanion.insert({
+    required int videoId,
+    required int tagId,
+    this.rowid = const Value.absent(),
+  }) : videoId = Value(videoId),
+       tagId = Value(tagId);
+  static Insertable<VideoTag> custom({
+    Expression<int>? videoId,
+    Expression<int>? tagId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (videoId != null) 'video_id': videoId,
+      if (tagId != null) 'tag_id': tagId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VideoTagsCompanion copyWith({
+    Value<int>? videoId,
+    Value<int>? tagId,
+    Value<int>? rowid,
+  }) {
+    return VideoTagsCompanion(
+      videoId: videoId ?? this.videoId,
+      tagId: tagId ?? this.tagId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (videoId.present) {
+      map['video_id'] = Variable<int>(videoId.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<int>(tagId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VideoTagsCompanion(')
+          ..write('videoId: $videoId, ')
+          ..write('tagId: $tagId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $FoldersTable folders = $FoldersTable(this);
   late final $VideosTable videos = $VideosTable(this);
   late final $TagsTable tags = $TagsTable(this);
+  late final $TagDefinitionsTable tagDefinitions = $TagDefinitionsTable(this);
+  late final $VideoTagsTable videoTags = $VideoTagsTable(this);
   late final VideosDao videosDao = VideosDao(this as AppDatabase);
   late final FoldersDao foldersDao = FoldersDao(this as AppDatabase);
   late final TagsDao tagsDao = TagsDao(this as AppDatabase);
@@ -1382,7 +1949,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [folders, videos, tags];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    folders,
+    videos,
+    tags,
+    tagDefinitions,
+    videoTags,
+  ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
     WritePropagation(
@@ -1398,6 +1971,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'videos',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('video_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tag_definitions',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('video_tags', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -1681,6 +2268,7 @@ typedef $$VideosTableCreateCompanionBuilder =
       Value<int> size,
       Value<Uint8List?> thumbnailBlob,
       Value<String> metadataJson,
+      Value<String?> thumbnailPath,
       Value<bool> isOffline,
       Value<bool> isFavorite,
       Value<DateTime> addedAt,
@@ -1697,6 +2285,7 @@ typedef $$VideosTableUpdateCompanionBuilder =
       Value<int> size,
       Value<Uint8List?> thumbnailBlob,
       Value<String> metadataJson,
+      Value<String?> thumbnailPath,
       Value<bool> isOffline,
       Value<bool> isFavorite,
       Value<DateTime> addedAt,
@@ -1739,6 +2328,24 @@ final class $$VideosTableReferences
     ).filter((f) => f.videoId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_tagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VideoTagsTable, List<VideoTag>>
+  _videoTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.videoTags,
+    aliasName: $_aliasNameGenerator(db.videos.id, db.videoTags.videoId),
+  );
+
+  $$VideoTagsTableProcessedTableManager get videoTagsRefs {
+    final manager = $$VideoTagsTableTableManager(
+      $_db,
+      $_db.videoTags,
+    ).filter((f) => f.videoId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_videoTagsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -1786,6 +2393,11 @@ class $$VideosTableFilterComposer
 
   ColumnFilters<String> get metadataJson => $composableBuilder(
     column: $table.metadataJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get thumbnailPath => $composableBuilder(
+    column: $table.thumbnailPath,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1861,6 +2473,31 @@ class $$VideosTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> videoTagsRefs(
+    Expression<bool> Function($$VideoTagsTableFilterComposer f) f,
+  ) {
+    final $$VideoTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoTags,
+      getReferencedColumn: (t) => t.videoId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.videoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$VideosTableOrderingComposer
@@ -1904,6 +2541,11 @@ class $$VideosTableOrderingComposer
 
   ColumnOrderings<String> get metadataJson => $composableBuilder(
     column: $table.metadataJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get thumbnailPath => $composableBuilder(
+    column: $table.thumbnailPath,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1992,6 +2634,11 @@ class $$VideosTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get thumbnailPath => $composableBuilder(
+    column: $table.thumbnailPath,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isOffline =>
       $composableBuilder(column: $table.isOffline, builder: (column) => column);
 
@@ -2060,6 +2707,31 @@ class $$VideosTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> videoTagsRefs<T extends Object>(
+    Expression<T> Function($$VideoTagsTableAnnotationComposer a) f,
+  ) {
+    final $$VideoTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoTags,
+      getReferencedColumn: (t) => t.videoId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.videoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$VideosTableTableManager
@@ -2075,7 +2747,11 @@ class $$VideosTableTableManager
           $$VideosTableUpdateCompanionBuilder,
           (Video, $$VideosTableReferences),
           Video,
-          PrefetchHooks Function({bool folderId, bool tagsRefs})
+          PrefetchHooks Function({
+            bool folderId,
+            bool tagsRefs,
+            bool videoTagsRefs,
+          })
         > {
   $$VideosTableTableManager(_$AppDatabase db, $VideosTable table)
     : super(
@@ -2098,6 +2774,7 @@ class $$VideosTableTableManager
                 Value<int> size = const Value.absent(),
                 Value<Uint8List?> thumbnailBlob = const Value.absent(),
                 Value<String> metadataJson = const Value.absent(),
+                Value<String?> thumbnailPath = const Value.absent(),
                 Value<bool> isOffline = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
@@ -2112,6 +2789,7 @@ class $$VideosTableTableManager
                 size: size,
                 thumbnailBlob: thumbnailBlob,
                 metadataJson: metadataJson,
+                thumbnailPath: thumbnailPath,
                 isOffline: isOffline,
                 isFavorite: isFavorite,
                 addedAt: addedAt,
@@ -2128,6 +2806,7 @@ class $$VideosTableTableManager
                 Value<int> size = const Value.absent(),
                 Value<Uint8List?> thumbnailBlob = const Value.absent(),
                 Value<String> metadataJson = const Value.absent(),
+                Value<String?> thumbnailPath = const Value.absent(),
                 Value<bool> isOffline = const Value.absent(),
                 Value<bool> isFavorite = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
@@ -2142,6 +2821,7 @@ class $$VideosTableTableManager
                 size: size,
                 thumbnailBlob: thumbnailBlob,
                 metadataJson: metadataJson,
+                thumbnailPath: thumbnailPath,
                 isOffline: isOffline,
                 isFavorite: isFavorite,
                 addedAt: addedAt,
@@ -2154,60 +2834,86 @@ class $$VideosTableTableManager
                     (e.readTable(table), $$VideosTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({folderId = false, tagsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (tagsRefs) db.tags],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (folderId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.folderId,
-                                referencedTable: $$VideosTableReferences
-                                    ._folderIdTable(db),
-                                referencedColumn: $$VideosTableReferences
-                                    ._folderIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({folderId = false, tagsRefs = false, videoTagsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (tagsRefs) db.tags,
+                    if (videoTagsRefs) db.videoTags,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (folderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.folderId,
+                                    referencedTable: $$VideosTableReferences
+                                        ._folderIdTable(db),
+                                    referencedColumn: $$VideosTableReferences
+                                        ._folderIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (tagsRefs)
+                        await $_getPrefetchedData<Video, $VideosTable, Tag>(
+                          currentTable: table,
+                          referencedTable: $$VideosTableReferences
+                              ._tagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VideosTableReferences(db, table, p0).tagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.videoId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (videoTagsRefs)
+                        await $_getPrefetchedData<
+                          Video,
+                          $VideosTable,
+                          VideoTag
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VideosTableReferences
+                              ._videoTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VideosTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).videoTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.videoId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (tagsRefs)
-                    await $_getPrefetchedData<Video, $VideosTable, Tag>(
-                      currentTable: table,
-                      referencedTable: $$VideosTableReferences._tagsRefsTable(
-                        db,
-                      ),
-                      managerFromTypedResult: (p0) =>
-                          $$VideosTableReferences(db, table, p0).tagsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.videoId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -2224,7 +2930,7 @@ typedef $$VideosTableProcessedTableManager =
       $$VideosTableUpdateCompanionBuilder,
       (Video, $$VideosTableReferences),
       Video,
-      PrefetchHooks Function({bool folderId, bool tagsRefs})
+      PrefetchHooks Function({bool folderId, bool tagsRefs, bool videoTagsRefs})
     >;
 typedef $$TagsTableCreateCompanionBuilder =
     TagsCompanion Function({
@@ -2515,6 +3221,637 @@ typedef $$TagsTableProcessedTableManager =
       Tag,
       PrefetchHooks Function({bool videoId})
     >;
+typedef $$TagDefinitionsTableCreateCompanionBuilder =
+    TagDefinitionsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String> source,
+      Value<DateTime> createdAt,
+    });
+typedef $$TagDefinitionsTableUpdateCompanionBuilder =
+    TagDefinitionsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> source,
+      Value<DateTime> createdAt,
+    });
+
+final class $$TagDefinitionsTableReferences
+    extends BaseReferences<_$AppDatabase, $TagDefinitionsTable, TagDefinition> {
+  $$TagDefinitionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$VideoTagsTable, List<VideoTag>>
+  _videoTagsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.videoTags,
+    aliasName: $_aliasNameGenerator(db.tagDefinitions.id, db.videoTags.tagId),
+  );
+
+  $$VideoTagsTableProcessedTableManager get videoTagsRefs {
+    final manager = $$VideoTagsTableTableManager(
+      $_db,
+      $_db.videoTags,
+    ).filter((f) => f.tagId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_videoTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$TagDefinitionsTableFilterComposer
+    extends Composer<_$AppDatabase, $TagDefinitionsTable> {
+  $$TagDefinitionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> videoTagsRefs(
+    Expression<bool> Function($$VideoTagsTableFilterComposer f) f,
+  ) {
+    final $$VideoTagsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoTagsTableFilterComposer(
+            $db: $db,
+            $table: $db.videoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagDefinitionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TagDefinitionsTable> {
+  $$TagDefinitionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TagDefinitionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagDefinitionsTable> {
+  $$TagDefinitionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> videoTagsRefs<T extends Object>(
+    Expression<T> Function($$VideoTagsTableAnnotationComposer a) f,
+  ) {
+    final $$VideoTagsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoTags,
+      getReferencedColumn: (t) => t.tagId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoTagsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.videoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$TagDefinitionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TagDefinitionsTable,
+          TagDefinition,
+          $$TagDefinitionsTableFilterComposer,
+          $$TagDefinitionsTableOrderingComposer,
+          $$TagDefinitionsTableAnnotationComposer,
+          $$TagDefinitionsTableCreateCompanionBuilder,
+          $$TagDefinitionsTableUpdateCompanionBuilder,
+          (TagDefinition, $$TagDefinitionsTableReferences),
+          TagDefinition,
+          PrefetchHooks Function({bool videoTagsRefs})
+        > {
+  $$TagDefinitionsTableTableManager(
+    _$AppDatabase db,
+    $TagDefinitionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagDefinitionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagDefinitionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagDefinitionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => TagDefinitionsCompanion(
+                id: id,
+                name: name,
+                source: source,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String> source = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => TagDefinitionsCompanion.insert(
+                id: id,
+                name: name,
+                source: source,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$TagDefinitionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({videoTagsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (videoTagsRefs) db.videoTags],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (videoTagsRefs)
+                    await $_getPrefetchedData<
+                      TagDefinition,
+                      $TagDefinitionsTable,
+                      VideoTag
+                    >(
+                      currentTable: table,
+                      referencedTable: $$TagDefinitionsTableReferences
+                          ._videoTagsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$TagDefinitionsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).videoTagsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.tagId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TagDefinitionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TagDefinitionsTable,
+      TagDefinition,
+      $$TagDefinitionsTableFilterComposer,
+      $$TagDefinitionsTableOrderingComposer,
+      $$TagDefinitionsTableAnnotationComposer,
+      $$TagDefinitionsTableCreateCompanionBuilder,
+      $$TagDefinitionsTableUpdateCompanionBuilder,
+      (TagDefinition, $$TagDefinitionsTableReferences),
+      TagDefinition,
+      PrefetchHooks Function({bool videoTagsRefs})
+    >;
+typedef $$VideoTagsTableCreateCompanionBuilder =
+    VideoTagsCompanion Function({
+      required int videoId,
+      required int tagId,
+      Value<int> rowid,
+    });
+typedef $$VideoTagsTableUpdateCompanionBuilder =
+    VideoTagsCompanion Function({
+      Value<int> videoId,
+      Value<int> tagId,
+      Value<int> rowid,
+    });
+
+final class $$VideoTagsTableReferences
+    extends BaseReferences<_$AppDatabase, $VideoTagsTable, VideoTag> {
+  $$VideoTagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $VideosTable _videoIdTable(_$AppDatabase db) => db.videos.createAlias(
+    $_aliasNameGenerator(db.videoTags.videoId, db.videos.id),
+  );
+
+  $$VideosTableProcessedTableManager get videoId {
+    final $_column = $_itemColumn<int>('video_id')!;
+
+    final manager = $$VideosTableTableManager(
+      $_db,
+      $_db.videos,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_videoIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TagDefinitionsTable _tagIdTable(_$AppDatabase db) =>
+      db.tagDefinitions.createAlias(
+        $_aliasNameGenerator(db.videoTags.tagId, db.tagDefinitions.id),
+      );
+
+  $$TagDefinitionsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<int>('tag_id')!;
+
+    final manager = $$TagDefinitionsTableTableManager(
+      $_db,
+      $_db.tagDefinitions,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VideoTagsTableFilterComposer
+    extends Composer<_$AppDatabase, $VideoTagsTable> {
+  $$VideoTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$VideosTableFilterComposer get videoId {
+    final $$VideosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableFilterComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagDefinitionsTableFilterComposer get tagId {
+    final $$TagDefinitionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagDefinitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagDefinitionsTableFilterComposer(
+            $db: $db,
+            $table: $db.tagDefinitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoTagsTableOrderingComposer
+    extends Composer<_$AppDatabase, $VideoTagsTable> {
+  $$VideoTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$VideosTableOrderingComposer get videoId {
+    final $$VideosTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableOrderingComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagDefinitionsTableOrderingComposer get tagId {
+    final $$TagDefinitionsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagDefinitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagDefinitionsTableOrderingComposer(
+            $db: $db,
+            $table: $db.tagDefinitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoTagsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VideoTagsTable> {
+  $$VideoTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$VideosTableAnnotationComposer get videoId {
+    final $$VideosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TagDefinitionsTableAnnotationComposer get tagId {
+    final $$TagDefinitionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tagId,
+      referencedTable: $db.tagDefinitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TagDefinitionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tagDefinitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoTagsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VideoTagsTable,
+          VideoTag,
+          $$VideoTagsTableFilterComposer,
+          $$VideoTagsTableOrderingComposer,
+          $$VideoTagsTableAnnotationComposer,
+          $$VideoTagsTableCreateCompanionBuilder,
+          $$VideoTagsTableUpdateCompanionBuilder,
+          (VideoTag, $$VideoTagsTableReferences),
+          VideoTag,
+          PrefetchHooks Function({bool videoId, bool tagId})
+        > {
+  $$VideoTagsTableTableManager(_$AppDatabase db, $VideoTagsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VideoTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VideoTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VideoTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> videoId = const Value.absent(),
+                Value<int> tagId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VideoTagsCompanion(
+                videoId: videoId,
+                tagId: tagId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int videoId,
+                required int tagId,
+                Value<int> rowid = const Value.absent(),
+              }) => VideoTagsCompanion.insert(
+                videoId: videoId,
+                tagId: tagId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VideoTagsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({videoId = false, tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (videoId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.videoId,
+                                referencedTable: $$VideoTagsTableReferences
+                                    ._videoIdTable(db),
+                                referencedColumn: $$VideoTagsTableReferences
+                                    ._videoIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (tagId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.tagId,
+                                referencedTable: $$VideoTagsTableReferences
+                                    ._tagIdTable(db),
+                                referencedColumn: $$VideoTagsTableReferences
+                                    ._tagIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$VideoTagsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VideoTagsTable,
+      VideoTag,
+      $$VideoTagsTableFilterComposer,
+      $$VideoTagsTableOrderingComposer,
+      $$VideoTagsTableAnnotationComposer,
+      $$VideoTagsTableCreateCompanionBuilder,
+      $$VideoTagsTableUpdateCompanionBuilder,
+      (VideoTag, $$VideoTagsTableReferences),
+      VideoTag,
+      PrefetchHooks Function({bool videoId, bool tagId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2524,18 +3861,24 @@ class $AppDatabaseManager {
   $$VideosTableTableManager get videos =>
       $$VideosTableTableManager(_db, _db.videos);
   $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
+  $$TagDefinitionsTableTableManager get tagDefinitions =>
+      $$TagDefinitionsTableTableManager(_db, _db.tagDefinitions);
+  $$VideoTagsTableTableManager get videoTags =>
+      $$VideoTagsTableTableManager(_db, _db.videoTags);
 }
 
 mixin _$VideosDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
-  $TagsTable get tags => attachedDatabase.tags;
+  $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
+  $VideoTagsTable get videoTags => attachedDatabase.videoTags;
 }
 mixin _$FoldersDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
 }
 mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
-  $TagsTable get tags => attachedDatabase.tags;
+  $VideoTagsTable get videoTags => attachedDatabase.videoTags;
 }

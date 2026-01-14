@@ -118,6 +118,15 @@ class MainFlutterWindow: NSWindow {
         }
         NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
         result(nil)
+      } else if call.method == "openFolder" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path argument missing", details: nil))
+          return
+        }
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.open(url)
+        result(nil)
       } else if call.method == "playVideo" {
         guard let args = call.arguments as? [String: Any],
               let path = args["path"] as? String else {

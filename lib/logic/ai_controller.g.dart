@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'library_controller.dart';
+part of 'ai_controller.dart';
 
 // **************************************************************************
 // RiverpodGenerator
@@ -9,27 +9,27 @@ part of 'library_controller.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 
-@ProviderFor(ScanStatus)
-final scanStatusProvider = ScanStatusProvider._();
+@ProviderFor(AIStatus)
+final aIStatusProvider = AIStatusProvider._();
 
-final class ScanStatusProvider extends $NotifierProvider<ScanStatus, String> {
-  ScanStatusProvider._()
+final class AIStatusProvider extends $NotifierProvider<AIStatus, String> {
+  AIStatusProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'scanStatusProvider',
+        name: r'aIStatusProvider',
         isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$scanStatusHash();
+  String debugGetCreateSourceHash() => _$aIStatusHash();
 
   @$internal
   @override
-  ScanStatus create() => ScanStatus();
+  AIStatus create() => AIStatus();
 
   /// {@macro riverpod.override_with_value}
   Override overrideWithValue(String value) {
@@ -40,9 +40,9 @@ final class ScanStatusProvider extends $NotifierProvider<ScanStatus, String> {
   }
 }
 
-String _$scanStatusHash() => r'0bf66352aed9e150d53e3010c1a7623c8cf3caa2';
+String _$aIStatusHash() => r'c5846ef1c01686f185934f447a466e55a9a48cb8';
 
-abstract class _$ScanStatus extends $Notifier<String> {
+abstract class _$AIStatus extends $Notifier<String> {
   String build();
   @$mustCallSuper
   @override
@@ -60,33 +60,33 @@ abstract class _$ScanStatus extends $Notifier<String> {
   }
 }
 
-@ProviderFor(LibraryController)
-final libraryControllerProvider = LibraryControllerProvider._();
+@ProviderFor(AIController)
+final aIControllerProvider = AIControllerProvider._();
 
-final class LibraryControllerProvider
-    extends $AsyncNotifierProvider<LibraryController, void> {
-  LibraryControllerProvider._()
+final class AIControllerProvider
+    extends $AsyncNotifierProvider<AIController, void> {
+  AIControllerProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'libraryControllerProvider',
+        name: r'aIControllerProvider',
         isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$libraryControllerHash();
+  String debugGetCreateSourceHash() => _$aIControllerHash();
 
   @$internal
   @override
-  LibraryController create() => LibraryController();
+  AIController create() => AIController();
 }
 
-String _$libraryControllerHash() => r'05dffdf9779beaf14080b6081176fd98c4d6ab49';
+String _$aIControllerHash() => r'f88dce0d607a09cb3e2e748694e39a6295d17f52';
 
-abstract class _$LibraryController extends $AsyncNotifier<void> {
+abstract class _$AIController extends $AsyncNotifier<void> {
   FutureOr<void> build();
   @$mustCallSuper
   @override

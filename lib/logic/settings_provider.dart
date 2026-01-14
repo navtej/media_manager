@@ -8,37 +8,32 @@ class Settings extends _$Settings {
   @override
   FutureOr<Map<String, dynamic>> build() async {
     final prefs = await SharedPreferences.getInstance();
-    final interval = prefs.getInt('scan_interval') ?? 5;
-    final batchSize = prefs.getInt('batch_size') ?? 4;
-    final themeMode = prefs.getString('theme_mode') ?? 'system';
     
     return {
-      'scanInterval': interval,
-      'batchSize': batchSize,
-      'themeMode': themeMode,
+      'scanInterval': prefs.getInt('scanInterval') ?? 5,
+      'batchSize': prefs.getInt('batchSize') ?? 4,
+      'themeMode': prefs.getString('themeMode') ?? 'system',
+      'paginationSize': prefs.getInt('paginationSize') ?? 50,
     };
   }
 
-  Future<void> updateSettings(int interval, int batchSize) async {
-    if (interval < 1) interval = 1;
-    if (batchSize < 1) batchSize = 1;
-    
+  Future<void> updateSettings(int scanInterval, int batchSize, int paginationSize) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('scan_interval', interval);
-    await prefs.setInt('batch_size', batchSize);
+    await prefs.setInt('scanInterval', scanInterval);
+    await prefs.setInt('batchSize', batchSize);
+    await prefs.setInt('paginationSize', paginationSize);
     
-    final currentTheme = state.value?['themeMode'] ?? 'system';
-    
-    state = AsyncValue.data({
-      'scanInterval': interval,
+    state = AsyncData({
+      ...state.value ?? {},
+      'scanInterval': scanInterval,
       'batchSize': batchSize,
-      'themeMode': currentTheme,
+      'paginationSize': paginationSize,
     });
   }
 
   Future<void> updateTheme(String mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_mode', mode);
+    await prefs.setString('themeMode', mode);
     
     final currentData = state.value ?? {};
     state = AsyncValue.data({

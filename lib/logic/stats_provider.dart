@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/providers.dart';
-import '../data/database.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 part 'stats_provider.g.dart';
 
@@ -21,11 +22,13 @@ class LibraryStats {
     return '${hours}h ${minutes}m';
   }
 
-  String get formattedSize {
-    if (totalSizeBytes < 1024) return '$totalSizeBytes B';
-    if (totalSizeBytes < 1024 * 1024) return '${(totalSizeBytes / 1024).toStringAsFixed(1)} KB';
-    if (totalSizeBytes < 1024 * 1024 * 1024) return '${(totalSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(totalSizeBytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  String get formattedSize => formatSize(totalSizeBytes);
+
+  static String formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
 
@@ -45,4 +48,22 @@ Stream<LibraryStats> libraryStats(Ref ref) {
       totalSizeBytes: size,
     );
   });
+}
+
+@riverpod
+Future<int> dataFolderSize(Ref ref) async {
+  final dir = await getApplicationSupportDirectory();
+  int totalSize = 0;
+  try {
+    if (await dir.exists()) {
+      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          totalSize += await entity.length();
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return totalSize;
 }

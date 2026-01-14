@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/providers.dart';
+import 'settings_provider.dart';
 
 part 'filter_controller.g.dart';
 
@@ -40,6 +41,14 @@ class SearchQuery extends _$SearchQuery {
 }
 
 @riverpod
+class TagFilterQuery extends _$TagFilterQuery {
+  @override
+  String build() => '';
+
+  void set(String query) => state = query;
+}
+
+@riverpod
 class PrimarySelectedTags extends _$PrimarySelectedTags {
   @override
   List<String> build() => [];
@@ -61,6 +70,12 @@ class PrimarySelectedTags extends _$PrimarySelectedTags {
   
   void clear() {
     state = [];
+    ref.read(secondarySelectedTagsProvider.notifier).clear();
+  }
+
+  /// Sets the state to a single tag (clears all existing and adds the specified tag)
+  void set(String tag) {
+    state = [tag];
     ref.read(secondarySelectedTagsProvider.notifier).clear();
   }
 
@@ -111,20 +126,66 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
     favoritesOnly: category == LibraryCategory.favorites,
     sortBy: sort,
     direction: direction,
+    limit: ref.watch(videoLimitProvider), // Use pagination
   );
 });
 
+final selectedVideoCountProvider = StreamProvider.autoDispose<int>((ref) {
+  final primaryTags = ref.watch(primarySelectedTagsProvider);
+  final secondaryTags = ref.watch(secondarySelectedTagsProvider);
+  final category = ref.watch(selectedCategoryProvider);
+  final searchQuery = ref.watch(searchQueryProvider);
+  final dao = ref.watch(videosDaoProvider);
+  
+  return dao.countVideos(
+    tagsAny: primaryTags,
+    tagsAll: secondaryTags,
+    searchQuery: searchQuery,
+    favoritesOnly: category == LibraryCategory.favorites,
+  );
+});
+
+@riverpod
+class VideoLimit extends _$VideoLimit {
+  @override
+  int build() {
+    // Watch all filter providers to auto-reset limit when they change
+    ref.watch(primarySelectedTagsProvider);
+    ref.watch(secondarySelectedTagsProvider);
+    ref.watch(selectedCategoryProvider);
+    ref.watch(selectedSortProvider);
+    ref.watch(selectedSortDirectionProvider);
+    ref.watch(searchQueryProvider);
+    
+    // Get page size from settings
+    final settings = ref.watch(settingsProvider).value;
+    return settings?['paginationSize'] ?? 50;
+  }
+  
+  void loadMore() {
+    final settings = ref.read(settingsProvider).value;
+    final pageSize = settings?['paginationSize'] ?? 50;
+    state += pageSize as int;
+  }
+}
+
 final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>((ref) {
   final selected = ref.watch(primarySelectedTagsProvider);
+  final filterQuery = ref.watch(tagFilterQueryProvider).toLowerCase();
   final stream = ref.watch(tagsDaoProvider).watchTagsWithCounts();
   
   return stream.map((tagCounts) {
-    final tags = tagCounts.keys.toList();
+    var tags = tagCounts.keys.toList();
     
     // Prune selected tags that no longer exist
     Future.microtask(() {
       ref.read(primarySelectedTagsProvider.notifier).deselectIfMissing(tags);
     });
+
+    // Filter by query if present
+    if (filterQuery.isNotEmpty) {
+      tags = tags.where((t) => t.toLowerCase().contains(filterQuery)).toList();
+    }
 
     final sortedTags = List<String>.from(tags);
     sortedTags.sort((a, b) {

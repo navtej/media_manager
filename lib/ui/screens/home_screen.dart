@@ -22,23 +22,32 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final TextEditingController _searchController;
+  late final TextEditingController _tagFilterController;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
+    _tagFilterController = TextEditingController();
+    _tagFilterController.addListener(_onTagFilterChanged);
   }
 
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _tagFilterController.removeListener(_onTagFilterChanged);
+    _tagFilterController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged() {
     ref.read(searchQueryProvider.notifier).set(_searchController.text);
+  }
+
+  void _onTagFilterChanged() {
+    ref.read(tagFilterQueryProvider.notifier).set(_tagFilterController.text);
   }
 
   @override
@@ -153,7 +162,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Row(
                   children: [
                     Expanded(child: _SidebarHeader(text: 'TAGS (${ref.watch(allTagsProvider).asData?.value.length ?? 0})')),
-                    if (hasActiveFilters)
+                    if (hasActiveFilters || ref.watch(tagFilterQueryProvider).isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
                         child: MacosIconButton(
@@ -161,10 +170,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           onPressed: () {
                             ref.read(searchQueryProvider.notifier).set('');
                             ref.read(primarySelectedTagsProvider.notifier).clear();
+                            _tagFilterController.clear();
                           },
                         ),
                       ),
                   ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: MacosSearchField(
+                    controller: _tagFilterController,
+                    placeholder: 'Filter tags...',
+                    style: const TextStyle(fontSize: 11),
+                  ),
                 ),
                 const SizedBox(height: 4),
 
@@ -353,16 +371,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     placeholder: 'Search videos...',
                   ),
                 ),
-               // Grid
-               Expanded(
-                 child: CustomScrollView(
-                   controller: scrollController,
-                   slivers: const [
-                     SliverVideoGrid(),
-                     SliverPadding(padding: EdgeInsets.only(bottom: 20)),
-                   ],
-                 ),
-               ),
+                // Grid
+                Expanded(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification notification) {
+                      // Only respond to the main scroll view (depth 0), not nested scrollables like tag lists
+                      if (notification.depth != 0) return false;
+                      
+                      // Only trigger on downward scroll, not upward
+                      if (notification is! ScrollUpdateNotification) return false;
+                      final delta = notification.scrollDelta ?? 0;
+                      if (delta <= 0) return false;
+                      
+                      // Check if near the end of the scroll view
+                      if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 500) {
+                        // Only load more if there are more videos to load
+                        final currentCount = ref.read(filteredVideosProvider).asData?.value.length ?? 0;
+                        final totalCount = ref.read(selectedVideoCountProvider).asData?.value ?? 0;
+                        if (currentCount < totalCount) {
+                          ref.read(videoLimitProvider.notifier).loadMore();
+                        }
+                      }
+                      return false;
+                    },
+                    child: CustomScrollView(
+                      controller: scrollController,
+                      slivers: const [
+                        SliverVideoGrid(),
+                        SliverPadding(padding: EdgeInsets.only(bottom: 20)),
+                      ],
+                    ),
+                  ),
+                ),
                // Footer (pinned)
                const StatusFooter(),
             ],

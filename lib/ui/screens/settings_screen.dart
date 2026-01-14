@@ -2,13 +2,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import '../../logic/library_controller.dart';
+import '../../logic/maintenance_controller.dart';
 import 'package:flutter/services.dart';
 import '../../data/providers.dart';
-import '../widgets/about_dialog.dart';
 
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../services/natural_language_service.dart';
+import '../../logic/stats_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -20,18 +22,21 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _intervalController;
   late TextEditingController _batchSizeController;
+  late TextEditingController _paginationSizeController;
   
   @override
   void initState() {
     super.initState();
     _intervalController = TextEditingController();
     _batchSizeController = TextEditingController();
+    _paginationSizeController = TextEditingController();
   }
   
   @override
   void dispose() {
     _intervalController.dispose();
     _batchSizeController.dispose();
+    _paginationSizeController.dispose();
     super.dispose();
   }
 
@@ -46,6 +51,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
       if (_batchSizeController.text.isEmpty) {
         _batchSizeController.text = data['batchSize'].toString();
+      }
+      if (_paginationSizeController.text.isEmpty) {
+        _paginationSizeController.text = data['paginationSize'].toString();
       }
     });
 
@@ -82,6 +90,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Text('Library Folders', style: MacosTheme.of(context).typography.headline),
                     const SizedBox(height: 10),
                     Expanded(child: _FolderList()),
+                    const SizedBox(height: 12),
+                    const _OpenDataFolderWidget(),
                     
                     const SizedBox(height: 20),
                     const Divider(),
@@ -121,7 +131,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           onPressed: () {
                             final interval = int.tryParse(_intervalController.text) ?? 5;
                             final batch = int.tryParse(_batchSizeController.text) ?? 4;
-                            ref.read(settingsProvider.notifier).updateSettings(interval, batch);
+                            final pagination = int.tryParse(_paginationSizeController.text) ?? 50;
+                            
+                            ref.read(settingsProvider.notifier).updateSettings(interval, batch, pagination);
                             
                             // Show status message and return
                             ref.read(statusMessageProvider.notifier).set('Preferences saved');
@@ -131,9 +143,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _buildPreferenceRow(context, 'Scan Interval (min)', _intervalController),
-                    const SizedBox(height: 10),
-                    _buildPreferenceRow(context, 'Batch Size', _batchSizeController),
+                    Row(
+                      children: [
+                        Expanded(child: _buildPreferenceRow(context, 'Scan Interval (min)', _intervalController)),
+                        const SizedBox(width: 20),
+                        Expanded(child: _buildPreferenceRow(context, 'DB Batch Size', _batchSizeController)),
+                        const SizedBox(width: 20),
+                        Expanded(child: _buildPreferenceRow(context, 'Pagination Size', _paginationSizeController)),
+                      ],
+                    ),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -146,17 +164,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildPreferenceRow(BuildContext context, String label, TextEditingController controller) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 200, child: Text(label)),
-        SizedBox(
-          width: 100,
-          child: MacosTextField(
-            controller: controller,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
+        Text(label, style: MacosTheme.of(context).typography.subheadline),
+        const SizedBox(height: 4),
+        MacosTextField(
+          controller: controller,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
       ],
+    );
+  }
+}
+
+
+class _OpenDataFolderWidget extends ConsumerWidget {
+  const _OpenDataFolderWidget();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sizeAsync = ref.watch(dataFolderSizeProvider);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4.0),
+      child: Row(
+        children: [
+          Text(
+            'Open Data Folder in Finder',
+            style: MacosTheme.of(context).typography.body.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(width: 8),
+          MacosIconButton(
+            icon: const MacosIcon(
+              CupertinoIcons.folder,
+              size: 18,
+            ),
+            onPressed: () async {
+              final directory = await getApplicationSupportDirectory();
+              await NaturalLanguageService().openFolder(directory.path);
+            },
+          ),
+          const SizedBox(width: 8),
+          sizeAsync.when(
+            data: (size) => Text(
+              LibraryStats.formatSize(size),
+              style: MacosTheme.of(context).typography.body.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            loading: () => const SizedBox(
+              width: 12,
+              height: 12,
+              child: ProgressCircle(),
+            ),
+            error: (_, __) => const SizedBox(),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -183,16 +249,16 @@ class _FolderList extends ConsumerWidget {
             itemBuilder: (context, index) {
               final folder = folders[index];
               return Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Row(
                   children: [
-                    const Icon(CupertinoIcons.folder),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(folder.path)),
+                    const Icon(CupertinoIcons.folder, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(folder.path, style: const TextStyle(fontSize: 13))),
                     MacosIconButton(
-                      icon: const Icon(CupertinoIcons.trash, color: MacosColors.appleRed),
+                      icon: const Icon(CupertinoIcons.trash, color: MacosColors.appleRed, size: 16),
                       onPressed: () {
-                         ref.read(libraryControllerProvider.notifier).removeFolder(folder.id);
+                         ref.read(maintenanceControllerProvider.notifier).removeFolder(folder.id);
                       },
                     ),
                   ],

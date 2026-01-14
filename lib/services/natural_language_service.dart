@@ -25,6 +25,14 @@ class NaturalLanguageService {
     }
   }
 
+  Future<void> openFolder(String path) async {
+    try {
+      await _channel.invokeMethod('openFolder', {'path': path});
+    } on PlatformException catch (e) {
+      print("Failed to open folder: '${e.message}'.");
+    }
+  }
+
   Future<void> playVideo(String path) async {
     try {
       await _channel.invokeMethod('playVideo', {'path': path});
