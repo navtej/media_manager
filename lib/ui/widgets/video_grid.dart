@@ -255,11 +255,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
               alignment: Alignment(1.2, -1.1),
               secondaryIconSizeFactor: 0.5,
 
-              decoration: const IconDecoration(
-                border: IconBorder(
-                  width: 4.0,
-                ),
-              ),
+              // decoration: const IconDecoration(
+              //   border: IconBorder(
+              //     width: 10.0,
+              //   ),
+              // ),
             ),
             onPressed: () => ref.read(tagsDaoProvider).deleteAllTagsForVideo(widget.video.id),
           ),
