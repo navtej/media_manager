@@ -76,10 +76,25 @@ actor AILanguageModelManager {
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    super.awakeFromNib()
+    print("DEBUG SWIFT: awakeFromNib started")
+
+    // Force window onto current space and disable state restoration
+    self.isRestorable = false
+    self.collectionBehavior = [.managed, .participatesInCycle]
+    self.level = .normal
+    
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    self.center()
+
+    // Ensure window is visible and active
+    self.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    
+    print("DEBUG SWIFT: Window level: \(self.level), transparency: \(self.isOpaque), isVisible: \(self.isVisible)")
 
     let channel = FlutterMethodChannel(
       name: "com.example.moviemanager/natural_language",
@@ -142,7 +157,5 @@ class MainFlutterWindow: NSWindow {
     }
 
     RegisterGeneratedPlugins(registry: flutterViewController)
-
-    super.awakeFromNib()
   }
 }
