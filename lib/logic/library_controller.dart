@@ -54,6 +54,11 @@ class LibraryController extends _$LibraryController {
       }
     });
 
+    ref.onDispose(() {
+      print('DEBUG: Disposing LibraryController');
+      _periodicTimer?.cancel();
+    });
+
     // Trigger startup scan in the background
     Future.microtask(() async {
       print('DEBUG: LibraryController microtask triggering syncAll');

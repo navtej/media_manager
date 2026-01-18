@@ -21,10 +21,14 @@ class AIStatus extends _$AIStatus {
 @Riverpod(keepAlive: true)
 class AIController extends _$AIController {
   bool _isAIWorkerRunning = false;
+  bool _isDisposed = false;
 
   @override
   Future<void> build() async {
-    // No initialization needed yet
+    ref.onDispose(() {
+      _isDisposed = true;
+      print('DEBUG: AIController disposed');
+    });
   }
 
   Future<void> startWorker() async {
@@ -43,7 +47,7 @@ class AIController extends _$AIController {
       final tagDao = ref.read(tagsDaoProvider);
       final db = ref.read(databaseProvider);
 
-      while (true) {
+      while (!_isDisposed) {
         // Fetch fresh list of pending videos every loop
         final allVideos = await videoDao.getAllVideos();
         final pending = allVideos.where((v) => !v.aiProcessed).toList();

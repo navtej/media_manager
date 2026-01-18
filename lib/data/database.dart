@@ -104,6 +104,12 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('DELETE FROM videos');
     });
   }
+
+  @override
+  Future<void> close() {
+    print('DEBUG: AppDatabase.close() called');
+    return super.close();
+  }
 }
 
 LazyDatabase _openConnection() {
