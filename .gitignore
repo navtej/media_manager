@@ -142,3 +142,8 @@ local.properties
 
 # Coverage
 coverage/
+*.txt
+*.dmg
+*.bak
+.vscode/settings.json
+*.md
