@@ -117,6 +117,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const SizedBox(width: 200, child: Text('Show Offline Media')),
+                        _buildCustomCheckbox(
+                          context,
+                          settingsAsync.value?['showOfflineMedia'] ?? true,
+                          (bool value) {
+                            ref.read(settingsProvider.notifier).updateShowOfflineMedia(value);
+                          },
+                        ),
+                      ],
+                    ),
 
                     const SizedBox(height: 20),
                     const Divider(),
@@ -174,6 +187,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
       ],
+    );
+  }
+
+  Widget _buildCustomCheckbox(BuildContext context, bool isChecked, ValueChanged<bool> onChanged) {
+    final theme = MacosTheme.of(context);
+    return GestureDetector(
+      onTap: () => onChanged(!isChecked),
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          color: isChecked ? theme.primaryColor : Colors.transparent,
+          border: Border.all(
+            color: isChecked ? theme.primaryColor : MacosColors.systemGrayColor.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+        ),
+        child: isChecked 
+          ? const Icon(CupertinoIcons.checkmark, size: 12, color: MacosColors.white)
+          : null,
+      ),
     );
   }
 }

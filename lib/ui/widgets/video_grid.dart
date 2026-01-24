@@ -1,7 +1,8 @@
 import 'dart:convert';
+import '../../logic/stats_provider.dart';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
-// import 'package:flutter/material.dart'; // Unnecessary
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 // import 'package:url_launcher/url_launcher.dart'; // Unused
@@ -11,7 +12,6 @@ import 'package:path/path.dart' as p;
 import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
-import '../../logic/library_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../services/natural_language_service.dart';
 import 'package:icon_craft/icon_craft.dart';
@@ -94,9 +94,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
       return MouseRegion(
         onEnter: (_) => setState(() => _isHovering = true),
         onExit: (_) => setState(() => _isHovering = false),
-        child: Container(
-          decoration: BoxDecoration(
-            color: theme.canvasColor,
+        child: Opacity(
+          opacity: video.isOffline ? 0.5 : 1.0,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.canvasColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _isHovering ? theme.primaryColor : theme.dividerColor,
@@ -202,14 +204,21 @@ class _VideoGridItemState extends State<VideoGridItem> {
             ],
           ),
         ),
-      );
-    });
-  }
+      ),
+    );
+  });
+}
 
   Widget _buildActions(WidgetRef ref) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Info
+        MacosIconButton(
+          padding: EdgeInsets.zero,
+          icon: const Icon(CupertinoIcons.info, size: 16),
+          onPressed: () => _showInfo(context, widget.video),
+        ),
         // Favorite
         MacosIconButton(
           padding: EdgeInsets.zero,
@@ -316,6 +325,33 @@ class _VideoGridItemState extends State<VideoGridItem> {
       }
     } catch (_) {}
     return "No description available.";
+  }
+
+  void _showInfo(BuildContext context, Video video) {
+    final drive = _getDriveName(video.absolutePath);
+    final sizeStr = LibraryStats.formatSize(video.size);
+    
+    showMacosAlertDialog(
+      context: context,
+      builder: (_) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.info),
+        title: const Text('Video Information'),
+        message: SelectableText('Drive: $drive\nSize: $sizeStr\n\nFull Path: ${video.absolutePath}'),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('OK'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  String _getDriveName(String path) {
+    if (path.startsWith('/Volumes/')) {
+      final parts = path.split('/');
+      if (parts.length > 2) return parts[2];
+    }
+    return 'System Drive';
   }
 
   String _formatDuration(int seconds) {

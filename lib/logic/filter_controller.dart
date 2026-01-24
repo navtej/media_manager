@@ -117,6 +117,8 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
   final sort = ref.watch(selectedSortProvider);
   final direction = ref.watch(selectedSortDirectionProvider);
   final searchQuery = ref.watch(searchQueryProvider);
+  final settings = ref.watch(settingsProvider).value;
+  final showOffline = settings?['showOfflineMedia'] ?? true;
   final dao = ref.watch(videosDaoProvider);
   
   return dao.searchVideos(
@@ -127,6 +129,7 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
     sortBy: sort,
     direction: direction,
     limit: ref.watch(videoLimitProvider), // Use pagination
+    includeOffline: showOffline,
   );
 });
 
@@ -135,6 +138,8 @@ final selectedVideoCountProvider = StreamProvider.autoDispose<int>((ref) {
   final secondaryTags = ref.watch(secondarySelectedTagsProvider);
   final category = ref.watch(selectedCategoryProvider);
   final searchQuery = ref.watch(searchQueryProvider);
+  final settings = ref.watch(settingsProvider).value;
+  final showOffline = settings?['showOfflineMedia'] ?? true;
   final dao = ref.watch(videosDaoProvider);
   
   return dao.countVideos(
@@ -142,6 +147,7 @@ final selectedVideoCountProvider = StreamProvider.autoDispose<int>((ref) {
     tagsAll: secondaryTags,
     searchQuery: searchQuery,
     favoritesOnly: category == LibraryCategory.favorites,
+    includeOffline: showOffline,
   );
 });
 

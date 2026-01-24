@@ -14,6 +14,7 @@ class Settings extends _$Settings {
       'batchSize': prefs.getInt('batchSize') ?? 4,
       'themeMode': prefs.getString('themeMode') ?? 'system',
       'paginationSize': prefs.getInt('paginationSize') ?? 50,
+      'showOfflineMedia': prefs.getBool('showOfflineMedia') ?? true,
     };
   }
 
@@ -28,6 +29,17 @@ class Settings extends _$Settings {
       'scanInterval': scanInterval,
       'batchSize': batchSize,
       'paginationSize': paginationSize,
+    });
+  }
+
+  Future<void> updateShowOfflineMedia(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('showOfflineMedia', value);
+    
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({
+      ...currentData,
+      'showOfflineMedia': value,
     });
   }
 

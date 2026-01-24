@@ -84,7 +84,7 @@ final class AIControllerProvider
   AIController create() => AIController();
 }
 
-String _$aIControllerHash() => r'f88dce0d607a09cb3e2e748694e39a6295d17f52';
+String _$aIControllerHash() => r'6157410cc70bebbcd1e547fd7ddcae0cb47b674b';
 
 abstract class _$AIController extends $AsyncNotifier<void> {
   FutureOr<void> build();

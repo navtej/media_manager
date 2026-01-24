@@ -92,42 +92,68 @@ class LibraryController extends _$LibraryController {
       
       final folders = await folderDao.getAllFolders();
       print('DEBUG: syncAll found ${folders.length} folders');
-      for (final f in folders) {
-        await scanFolder(f.path, f.id);
-      }
-
-      // Collect all maintenance tasks
-      final videos = await videoDao.getAllVideos();
+      
       final toDelete = <int>[];
+      final toMarkOffline = <int>[];
+      final toMarkOnline = <int>[];
       final toUpdateSize = <int, int>{};
       final toUpdateDate = <int, DateTime>{};
 
-      for (final v in videos) {
-        final file = File(v.absolutePath);
-        final exists = await file.exists();
+      for (final f in folders) {
+        final folderDir = Directory(f.path);
+        final folderExists = await folderDir.exists();
         
-        if (!exists) {
-          toDelete.add(v.id);
-          continue;
+        final folderVideos = await videoDao.getVideosByFolder(f.id);
+
+        if (!folderExists) {
+          print('DEBUG: Folder ${f.path} is offline');
+          for (final v in folderVideos) {
+            if (!v.isOffline) toMarkOffline.add(v.id);
+          }
+          continue; // Skip scanning and individual file checks for offline folders
         }
 
-        if (v.size == 0) {
-          final size = await file.length();
-          toUpdateSize[v.id] = size;
+        // Folder exists - mark all as online (if they were offline)
+        print('DEBUG: Folder ${f.path} is online');
+        for (final v in folderVideos) {
+          if (v.isOffline) toMarkOnline.add(v.id);
+          
+          final file = File(v.absolutePath);
+          final fileExists = await file.exists();
+          
+          if (!fileExists) {
+            toDelete.add(v.id);
+            continue;
+          }
+
+          if (v.size == 0) {
+            final size = await file.length();
+            toUpdateSize[v.id] = size;
+          }
+
+          if (v.fileCreatedAt == null) {
+            final stat = await file.stat();
+            toUpdateDate[v.id] = stat.modified;
+          }
         }
 
-        if (v.fileCreatedAt == null) {
-          final stat = await file.stat();
-          toUpdateDate[v.id] = stat.modified;
-        }
+        // Scan for new files only if folder is online
+        await scanFolder(f.path, f.id);
       }
 
-      if (toDelete.isNotEmpty || toUpdateSize.isNotEmpty || toUpdateDate.isNotEmpty) {
-        print('DEBUG: Starting transactional maintenance (Delete: ${toDelete.length}, Size: ${toUpdateSize.length}, Date: ${toUpdateDate.length})');
+      if (toDelete.isNotEmpty || toMarkOffline.isNotEmpty || toMarkOnline.isNotEmpty || 
+          toUpdateSize.isNotEmpty || toUpdateDate.isNotEmpty) {
+        print('DEBUG: Starting transactional maintenance (Delete: ${toDelete.length}, Offline: ${toMarkOffline.length}, Online: ${toMarkOnline.length}, Size: ${toUpdateSize.length}, Date: ${toUpdateDate.length})');
         
         await db.transaction(() async {
           if (toDelete.isNotEmpty) {
             await videoDao.deleteVideosByIds(toDelete);
+          }
+          if (toMarkOffline.isNotEmpty) {
+            await videoDao.updateVideosOfflineStatusBatch(toMarkOffline, true);
+          }
+          if (toMarkOnline.isNotEmpty) {
+            await videoDao.updateVideosOfflineStatusBatch(toMarkOnline, false);
           }
           for (final entry in toUpdateSize.entries) {
             await videoDao.updateVideoSize(entry.key, entry.value);

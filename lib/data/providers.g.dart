@@ -48,7 +48,7 @@ final class DatabaseProvider
   }
 }
 
-String _$databaseHash() => r'e5a1fa0e8ff9aa131f847f28519ec2098e6d0f76';
+String _$databaseHash() => r'7a4761867a2456e635b79bf242c57e14abd4d7e2';
 
 @ProviderFor(foldersDao)
 final foldersDaoProvider = FoldersDaoProvider._();

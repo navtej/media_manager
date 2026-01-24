@@ -206,6 +206,10 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return (delete(videos)..where((t) => t.id.isIn(ids))).go();
   }
 
+  Future<void> updateVideosOfflineStatusBatch(List<int> ids, bool isOffline) {
+    return (update(videos)..where((t) => t.id.isIn(ids))).write(VideosCompanion(isOffline: Value(isOffline)));
+  }
+
   Future<void> updateVideoSize(int id, int size) {
     return (update(videos)..where((t) => t.id.equals(id))).write(VideosCompanion(size: Value(size)));
   }
@@ -247,10 +251,14 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     SortOption sortBy = SortOption.title,
     SortDirection direction = SortDirection.asc,
     int limit = 0,
+    bool includeOffline = true,
   }) {
     final query = select(videos);
     if (favoritesOnly) {
       query.where((t) => t.isFavorite.equals(true));
+    }
+    if (!includeOffline) {
+      query.where((t) => t.isOffline.equals(false));
     }
     
     final mode = direction == SortDirection.asc ? OrderingMode.asc : OrderingMode.desc;
@@ -284,10 +292,11 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     SortOption sortBy = SortOption.title,
     SortDirection direction = SortDirection.asc,
     int limit = 0,
+    bool includeOffline = true,
   }) {
-    // If no tags and no search, use watchAllVideos
-    if (tagsAny.isEmpty && tagsAll.isEmpty && (searchQuery == null || searchQuery.isEmpty)) {
-      return watchAllVideos(favoritesOnly: favoritesOnly, sortBy: sortBy, direction: direction, limit: limit);
+    // If no tags and no search and including offline, use watchAllVideos
+    if (tagsAny.isEmpty && tagsAll.isEmpty && (searchQuery == null || searchQuery.isEmpty) && includeOffline) {
+      return watchAllVideos(favoritesOnly: favoritesOnly, sortBy: sortBy, direction: direction, limit: limit, includeOffline: includeOffline);
     }
     
     // Build WHERE clause components
@@ -327,6 +336,10 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
 
     if (favoritesOnly) {
       conditions.add('is_favorite = 1');
+    }
+
+    if (!includeOffline) {
+      conditions.add('is_offline = 0');
     }
 
     if (searchQuery != null && searchQuery.isNotEmpty) {
@@ -373,6 +386,7 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     List<String> tagsAll = const [],
     String? searchQuery,
     bool favoritesOnly = false,
+    bool includeOffline = true,
   }) {
     // Replicates WHERE clause logic from searchVideos but returns count only
     final List<Variable> variables = [];
@@ -411,6 +425,10 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
 
     if (favoritesOnly) {
       conditions.add('is_favorite = 1');
+    }
+
+    if (!includeOffline) {
+      conditions.add('is_offline = 0');
     }
 
     if (searchQuery != null && searchQuery.isNotEmpty) {
