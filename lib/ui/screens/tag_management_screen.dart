@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Material, Icons, Divider;
+import 'package:flutter/material.dart' show Colors, Material, Divider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 
@@ -8,20 +8,22 @@ import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
 
 enum TagSortOption { name, count }
+
 enum TagSortDirection { asc, desc }
 
 class TagManagementScreen extends ConsumerStatefulWidget {
   const TagManagementScreen({super.key});
 
   @override
-  ConsumerState<TagManagementScreen> createState() => _TagManagementScreenState();
+  ConsumerState<TagManagementScreen> createState() =>
+      _TagManagementScreenState();
 }
 
 class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   final Set<String> _selectedTags = {};
   String _searchQuery = '';
   TagStatistics? _stats;
-  
+
   // Sort State
   TagSortOption _sortOption = TagSortOption.name;
   TagSortDirection _sortDirection = TagSortDirection.asc;
@@ -47,13 +49,15 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     // 1. Filter by Search
     var filtered = tags;
     if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((t) => t.tagText.contains(_searchQuery)).toList();
+      filtered = filtered
+          .where((t) => t.tagText.contains(_searchQuery))
+          .toList();
     }
 
     // 2. Filter by Type (User/Auto)
     // Assuming sourceType can be checked. If strict 'user'/'auto' strings are used:
     filtered = filtered.where((t) {
-      final isAuto = t.sourceType.toLowerCase() == 'auto'; 
+      final isAuto = t.sourceType.toLowerCase() == 'auto';
       if (isAuto && !_showAutoTags) return false;
       if (!isAuto && !_showUserTags) return false;
       return true;
@@ -80,13 +84,15 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     setState(() {
       if (_sortOption == option) {
         // Toggle direction if clicking same option
-        _sortDirection = _sortDirection == TagSortDirection.asc 
-            ? TagSortDirection.desc 
+        _sortDirection = _sortDirection == TagSortDirection.asc
+            ? TagSortDirection.desc
             : TagSortDirection.asc;
       } else {
         // Switch option, default to Ascending (or Descending for count if preferred, but Asc is standard reset)
         _sortOption = option;
-        _sortDirection = option == TagSortOption.count ? TagSortDirection.desc : TagSortDirection.asc;
+        _sortDirection = option == TagSortOption.count
+            ? TagSortDirection.desc
+            : TagSortDirection.asc;
       }
     });
   }
@@ -94,17 +100,13 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
-    
+
     return MacosScaffold(
       backgroundColor: theme.canvasColor,
       toolBar: ToolBar(
-        decoration: BoxDecoration(
-          color: theme.canvasColor,
-        ),
+        decoration: BoxDecoration(color: theme.canvasColor),
         title: const Text('Tag Management'),
-        leading: MacosBackButton(
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: MacosBackButton(onPressed: () => Navigator.of(context).pop()),
       ),
       children: [
         ContentArea(
@@ -115,7 +117,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                 children: [
                   // Control and Stats Bar
                   _buildControlAndStatsBar(theme),
-                  
+
                   const Divider(height: 1),
 
                   // Search Bar
@@ -124,14 +126,13 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                     child: MacosTextField(
                       placeholder: 'Search tags...',
                       prefix: const MacosIcon(CupertinoIcons.search),
-                      onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value.toLowerCase()),
                     ),
                   ),
-                  
+
                   // Tag Cloud
-                  Expanded(
-                    child: _buildTagCloud(theme),
-                  ),
+                  Expanded(child: _buildTagCloud(theme)),
                 ],
               ),
             );
@@ -144,9 +145,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   Widget _buildControlAndStatsBar(MacosThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.canvasColor,
-      ),
+      decoration: BoxDecoration(color: theme.canvasColor),
       child: Row(
         children: [
           // --- LEFT: CONTROLS (Flexible to allow Stats on right) ---
@@ -160,17 +159,25 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                     message: 'Merge selected tags',
                     child: MacosIconButton(
                       icon: const MacosIcon(CupertinoIcons.arrow_merge),
-                      onPressed: _selectedTags.length >= 2 ? _showMergeDialog : null,
-                      boxConstraints: const BoxConstraints(minHeight: 28, minWidth: 28),
+                      onPressed: _selectedTags.length >= 2
+                          ? _showMergeDialog
+                          : null,
+                      boxConstraints: const BoxConstraints(
+                        minHeight: 28,
+                        minWidth: 28,
+                      ),
                     ),
                   ),
-                  
+
                   const SizedBox(width: 16),
-                  
+
                   // Sort Buttons
-                  const Text('Sort:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Sort:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(width: 8),
-                  
+
                   _SortButton(
                     label: 'Name',
                     isActive: _sortOption == TagSortOption.name,
@@ -186,11 +193,14 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                   ),
 
                   const SizedBox(width: 16),
-                  
+
                   // Filters
-                  const Text('Show:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Show:',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(width: 8),
-                  
+
                   _FilterCheckbox(
                     label: 'User',
                     isChecked: _showUserTags,
@@ -207,78 +217,85 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
 
                   // Clear Selection/Search
                   if (_searchQuery.isNotEmpty || _selectedTags.isNotEmpty) ...[
-                     const SizedBox(width: 16),
-                     PushButton(
-                       controlSize: ControlSize.small,
-                       secondary: true,
-                       child: const Text('Reset'),
-                       onPressed: () {
-                         setState(() {
-                           _searchQuery = '';
-                           _selectedTags.clear();
-                         });
-                       },
-                     ),
+                    const SizedBox(width: 16),
+                    PushButton(
+                      controlSize: ControlSize.small,
+                      secondary: true,
+                      child: const Text('Reset'),
+                      onPressed: () {
+                        setState(() {
+                          _searchQuery = '';
+                          _selectedTags.clear();
+                        });
+                      },
+                    ),
                   ],
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(width: 16),
-          
+
           // --- RIGHT: STATS (On the same row, aligned right) ---
           if (_stats != null)
-             Row(
-               mainAxisSize: MainAxisSize.min,
-               children: [
-                 _MiniStat(label: 'Total', value: '${_stats!.uniqueTagCount}'),
-                 const SizedBox(width: 12),
-                 _MiniStat(label: 'User', value: '${_stats!.userTags}'),
-                 const SizedBox(width: 12),
-                 _MiniStat(label: 'Auto', value: '${_stats!.autoTags}'),
-                 const SizedBox(width: 12),
-                 _MiniStat(label: 'Avg/Vid', value: _stats!.avgTagsPerVideo.toStringAsFixed(1)),
-               ],
-             ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MiniStat(label: 'Total', value: '${_stats!.uniqueTagCount}'),
+                const SizedBox(width: 12),
+                _MiniStat(label: 'User', value: '${_stats!.userTags}'),
+                const SizedBox(width: 12),
+                _MiniStat(label: 'Auto', value: '${_stats!.autoTags}'),
+                const SizedBox(width: 12),
+                _MiniStat(
+                  label: 'Avg/Vid',
+                  value: _stats!.avgTagsPerVideo.toStringAsFixed(1),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
-// ... existing _buildTagCloud ...
+  // ... existing _buildTagCloud ...
 
-// ... existing dialogs ...
+  // ... existing dialogs ...
 
-// ... existing _TagChip and _ActionButton ...
-
+  // ... existing _TagChip and _ActionButton ...
 
   Widget _buildTagCloud(MacosThemeData theme) {
     final tagsStream = ref.watch(tagsDaoProvider).watchAllTagsWithInfo();
-    
+
     return StreamBuilder<List<TagInfo>>(
       stream: tagsStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Center(child: ProgressCircle());
         }
-        
+
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
-        
+
         final allTags = snapshot.data ?? [];
         final processedTags = _processTags(List.from(allTags));
-        
+
         if (processedTags.isEmpty) {
           return Center(
             child: Text(
-              allTags.isEmpty ? 'No tags found in library' : 'No tags match current filters',
-              style: TextStyle(color: theme.typography.body.color?.withValues(alpha: 0.6)),
+              allTags.isEmpty
+                  ? 'No tags found in library'
+                  : 'No tags match current filters',
+              style: TextStyle(
+                color: theme.typography.body.color?.withValues(alpha: 0.6),
+              ),
             ),
           );
         }
-        
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Wrap(
@@ -303,7 +320,9 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                 onDelete: () => _confirmDelete(tag),
                 onViewVideos: () {
                   // Set the tag in the filter and navigate to home screen
-                  ref.read(primarySelectedTagsProvider.notifier).set(tag.tagText);
+                  ref
+                      .read(primarySelectedTagsProvider.notifier)
+                      .set(tag.tagText);
                   Navigator.of(context).pop();
                 },
               );
@@ -317,7 +336,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   // Dialogs remain largely the same, just keeping them for completeness
   void _showRenameDialog(TagInfo tag) {
     final controller = TextEditingController(text: tag.tagText);
-    
+
     showMacosAlertDialog(
       context: context,
       builder: (context) => MacosAlertDialog(
@@ -327,7 +346,9 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Renaming "${tag.tagText}" (used in ${tag.videoCount} videos)'),
+            Text(
+              'Renaming "${tag.tagText}" (used in ${tag.videoCount} videos)',
+            ),
             const SizedBox(height: 12),
             MacosTextField(
               controller: controller,
@@ -345,11 +366,13 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               Navigator.pop(context);
               return;
             }
-            
+
             Navigator.pop(context);
-            
+
             try {
-              final result = await ref.read(tagsDaoProvider).renameTag(tag.tagText, newName);
+              final result = await ref
+                  .read(tagsDaoProvider)
+                  .renameTag(tag.tagText, newName);
               if (mounted) {
                 _showResultToast(
                   'Renamed "${tag.tagText}" to "$newName": ${result.updated} updated',
@@ -374,8 +397,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   }
 
   void _showMergeDialog() {
-    final controller = TextEditingController(text: _selectedTags.isNotEmpty ? _selectedTags.first : '');
-    
+    final controller = TextEditingController(
+      text: _selectedTags.isNotEmpty ? _selectedTags.first : '',
+    );
+
     showMacosAlertDialog(
       context: context,
       builder: (context) => MacosAlertDialog(
@@ -385,7 +410,9 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Merging ${_selectedTags.length} tags: ${_selectedTags.join(", ")}'),
+            Text(
+              'Merging ${_selectedTags.length} tags: ${_selectedTags.join(", ")}',
+            ),
             const SizedBox(height: 8),
             const Text('Enter the target tag name:'),
             const SizedBox(height: 12),
@@ -405,14 +432,13 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               Navigator.pop(context);
               return;
             }
-            
+
             Navigator.pop(context);
-            
+
             try {
-              final result = await ref.read(tagsDaoProvider).mergeTags(
-                _selectedTags.toList(),
-                targetName,
-              );
+              final result = await ref
+                  .read(tagsDaoProvider)
+                  .mergeTags(_selectedTags.toList(), targetName);
               if (mounted) {
                 _showResultToast(
                   'Merged ${result.tagsRemoved} tags into "$targetName"',
@@ -441,7 +467,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     showMacosAlertDialog(
       context: context,
       builder: (context) => MacosAlertDialog(
-        appIcon: MacosIcon(CupertinoIcons.trash, color: MacosColors.systemRedColor),
+        appIcon: MacosIcon(
+          CupertinoIcons.trash,
+          color: MacosColors.systemRedColor,
+        ),
         title: const Text('Delete Tag?'),
         message: Text(
           'Delete "${tag.tagText}" from all ${tag.videoCount} videos?\nCannot be undone.',
@@ -472,16 +501,20 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   void _showResultToast(String message, {bool isError = false}) {
     final overlay = OverlayEntry(
       builder: (context) => Positioned(
-        bottom: 50, left: 0, right: 0,
+        bottom: 50,
+        left: 0,
+        right: 0,
         child: Center(
           child: Material(
             color: Colors.transparent,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isError 
-                  ? MacosColors.systemRedColor.withValues(alpha: 0.9)
-                  : MacosColors.systemGrayColor.darkColor.withValues(alpha: 0.9),
+                color: isError
+                    ? MacosColors.systemRedColor.withValues(alpha: 0.9)
+                    : MacosColors.systemGrayColor.darkColor.withValues(
+                        alpha: 0.9,
+                      ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -493,12 +526,11 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
         ),
       ),
     );
-    
+
     Overlay.of(context).insert(overlay);
     Future.delayed(const Duration(seconds: 3), () => overlay.remove());
   }
 }
-
 
 class _TagChip extends StatefulWidget {
   final TagInfo tag;
@@ -529,7 +561,7 @@ class _TagChipState extends State<_TagChip> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    
+
     // Matches the visual style of Sidebar tags approx
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -539,14 +571,16 @@ class _TagChipState extends State<_TagChip> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: widget.isSelected 
-              ? theme.primaryColor 
-              : MacosColors.systemGrayColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(20), // More rounded for proper "Chip" look
+            color: widget.isSelected
+                ? theme.primaryColor
+                : MacosColors.systemGrayColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(
+              20,
+            ), // More rounded for proper "Chip" look
             border: Border.all(
-              color: widget.isSelected 
-                ? theme.primaryColor 
-                : MacosColors.systemGrayColor.withValues(alpha: 0.2),
+              color: widget.isSelected
+                  ? theme.primaryColor
+                  : MacosColors.systemGrayColor.withValues(alpha: 0.2),
             ),
           ),
           child: Row(
@@ -556,8 +590,8 @@ class _TagChipState extends State<_TagChip> {
                 '${widget.tag.tagText} (${widget.tag.videoCount})',
                 style: TextStyle(
                   fontSize: 13,
-                  color: widget.isSelected 
-                      ? MacosColors.white 
+                  color: widget.isSelected
+                      ? MacosColors.white
                       : theme.typography.body.color?.withValues(alpha: 0.9),
                 ),
               ),
@@ -616,24 +650,25 @@ class _ActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Icon(
           icon,
           size: 14,
-          color: isSelected 
-              ? MacosColors.white 
-              : (isDestructive ? MacosColors.systemRedColor : MacosColors.systemGrayColor),
+          color: isSelected
+              ? MacosColors.white
+              : (isDestructive
+                    ? MacosColors.systemRedColor
+                    : MacosColors.systemGrayColor),
         ),
       ),
     );
-    
+
     if (tooltip != null) {
-      return MacosTooltip(
-        message: tooltip!,
-        child: button,
-      );
+      return MacosTooltip(message: tooltip!, child: button);
     }
     return button;
   }
@@ -642,7 +677,7 @@ class _ActionButton extends StatelessWidget {
 class _MiniStat extends StatelessWidget {
   final String label;
   final String value;
-  
+
   const _MiniStat({required this.label, required this.value});
 
   @override
@@ -651,8 +686,21 @@ class _MiniStat extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('$label: ', style: TextStyle(fontSize: 12, color: theme.typography.body.color?.withValues(alpha: 0.6))),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.primaryColor)),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.typography.body.color?.withValues(alpha: 0.6),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: theme.primaryColor,
+          ),
+        ),
       ],
     );
   }
@@ -675,16 +723,20 @@ class _SortButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
     final color = isActive ? theme.primaryColor : theme.typography.body.color;
-    
+
     return GestureDetector(
       onTap: onPressed,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isActive ? theme.primaryColor.withValues(alpha: 0.1) : Colors.transparent,
+          color: isActive
+              ? theme.primaryColor.withValues(alpha: 0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color: isActive ? theme.primaryColor : MacosColors.systemGrayColor.withValues(alpha: 0.3),
+            color: isActive
+                ? theme.primaryColor
+                : MacosColors.systemGrayColor.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -701,11 +753,13 @@ class _SortButton extends StatelessWidget {
             if (isActive) ...[
               const SizedBox(width: 4),
               Icon(
-                isAscending ? CupertinoIcons.arrow_up : CupertinoIcons.arrow_down,
+                isAscending
+                    ? CupertinoIcons.arrow_up
+                    : CupertinoIcons.arrow_down,
                 size: 12,
                 color: color,
               ),
-            ]
+            ],
           ],
         ),
       ),
@@ -741,12 +795,18 @@ class _FilterCheckbox extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
               color: current ? theme.primaryColor : Colors.transparent,
               border: Border.all(
-                color: current ? theme.primaryColor : MacosColors.systemGrayColor.withValues(alpha: 0.5),
+                color: current
+                    ? theme.primaryColor
+                    : MacosColors.systemGrayColor.withValues(alpha: 0.5),
               ),
             ),
-            child: current 
-              ? const Icon(CupertinoIcons.checkmark, size: 10, color: MacosColors.white)
-              : null,
+            child: current
+                ? const Icon(
+                    CupertinoIcons.checkmark,
+                    size: 10,
+                    color: MacosColors.white,
+                  )
+                : null,
           ),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 12)),

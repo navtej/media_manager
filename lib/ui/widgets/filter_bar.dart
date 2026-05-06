@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import '../../logic/filter_controller.dart';
 import '../../data/providers.dart';
 
 class TagCloud extends ConsumerWidget {
@@ -39,16 +38,18 @@ class TagCloud extends ConsumerWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              constraints: const BoxConstraints(maxWidth: 160), // Prevent overflow
+              constraints: const BoxConstraints(
+                maxWidth: 160,
+              ), // Prevent overflow
               decoration: BoxDecoration(
-                color: isSelected 
-                  ? theme.primaryColor 
-                  : MacosColors.systemGrayColor.withOpacity(0.15),
+                color: isSelected
+                    ? theme.primaryColor
+                    : MacosColors.systemGrayColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected 
-                    ? theme.primaryColor 
-                    : MacosColors.systemGrayColor.withOpacity(0.3),
+                  color: isSelected
+                      ? theme.primaryColor
+                      : MacosColors.systemGrayColor.withOpacity(0.3),
                 ),
               ),
               child: Row(
@@ -60,7 +61,9 @@ class TagCloud extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                       style: TextStyle(
-                        color: isSelected ? MacosColors.white : theme.typography.body.color?.withOpacity(0.9),
+                        color: isSelected
+                            ? MacosColors.white
+                            : theme.typography.body.color?.withOpacity(0.9),
                         fontSize: 11,
                       ),
                     ),
@@ -75,13 +78,17 @@ class TagCloud extends ConsumerWidget {
                           builder: (context) => MacosAlertDialog(
                             appIcon: const MacosIcon(CupertinoIcons.tag),
                             title: const Text('Delete Tag?'),
-                            message: Text('Are you sure you want to delete the tag "$tag" from all $count associated videos?'),
+                            message: Text(
+                              'Are you sure you want to delete the tag "$tag" from all $count associated videos?',
+                            ),
                             primaryButton: PushButton(
                               controlSize: ControlSize.large,
                               child: const Text('Delete'),
                               onPressed: () {
                                 Navigator.pop(context);
-                                ref.read(tagsDaoProvider).deleteTagFromAllVideos(tag);
+                                ref
+                                    .read(tagsDaoProvider)
+                                    .deleteTagFromAllVideos(tag);
                               },
                             ),
                             secondaryButton: PushButton(
@@ -95,7 +102,9 @@ class TagCloud extends ConsumerWidget {
                       child: Icon(
                         CupertinoIcons.trash,
                         size: 9, // Slightly smaller
-                        color: isSelected ? MacosColors.white.withOpacity(0.8) : theme.typography.body.color?.withOpacity(0.5),
+                        color: isSelected
+                            ? MacosColors.white.withOpacity(0.8)
+                            : theme.typography.body.color?.withOpacity(0.5),
                       ),
                     ),
                   ],
