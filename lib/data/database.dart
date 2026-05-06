@@ -185,6 +185,12 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
 
   Future<List<Folder>> getAllFolders() => select(folders).get();
   Stream<List<Folder>> watchAllFolders() => select(folders).watch();
+  Future<Folder?> getFolderById(int id) {
+    return (select(
+      folders,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  }
+
   Future<int> insertFolder(FoldersCompanion folder) =>
       into(folders).insert(folder, mode: InsertMode.insertOrIgnore);
   Future<void> updateFolderBookmark(int id, String? bookmark) {

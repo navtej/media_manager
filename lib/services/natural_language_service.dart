@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../logic/video_summary_models.dart';
 
 class NaturalLanguageService {
@@ -82,3 +83,7 @@ class NaturalLanguageService {
     );
   }
 }
+
+final naturalLanguageServiceProvider = Provider(
+  (ref) => NaturalLanguageService(),
+);

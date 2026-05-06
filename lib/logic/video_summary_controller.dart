@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/providers.dart';
+import '../services/folder_access_service.dart';
 import '../services/media_service.dart';
 import '../services/natural_language_service.dart';
 import 'settings_provider.dart';
@@ -35,8 +36,17 @@ class VideoSummaryController extends Notifier<AsyncValue<void>> {
     state = const AsyncLoading();
 
     String? audioPath;
+    Folder? accessedFolder;
+    FolderAccessService? folderAccessService;
+    final keepAlive = ref.keepAlive();
 
     try {
+      final activeFolderAccessService = ref.read(folderAccessServiceProvider);
+      folderAccessService = activeFolderAccessService;
+      final mediaService = ref.read(mediaServiceProvider);
+      final naturalLanguageService = ref.read(naturalLanguageServiceProvider);
+      final foldersDao = ref.read(foldersDaoProvider);
+      final dao = ref.read(videoSummariesDaoProvider);
       final settings = await ref.read(settingsProvider.future);
       final validation = await ref.read(summaryModelValidationProvider.future);
       if (!validation.isValid) {
@@ -45,13 +55,29 @@ class VideoSummaryController extends Notifier<AsyncValue<void>> {
 
       final modelPath = (settings['summaryModelPath'] as String? ?? '').trim();
       final transcriptModel = transcriptModelNameFromPath(modelPath);
+      final folder = await foldersDao.getFolderById(video.folderId);
+      if (folder == null) {
+        throw StateError('Library folder is missing.');
+      }
+
+      final folderAccess = await activeFolderAccessService.startAccessing(
+        path: folder.path,
+        bookmark: folder.securityScopedBookmark,
+      );
+      if (!folderAccess.canAccess) {
+        throw StateError(
+          folderAccess.message ??
+              'Folder access needs repair. Reselect this folder in Settings.',
+        );
+      }
+      accessedFolder = folder;
+
       final file = File(video.absolutePath);
       if (!await file.exists()) {
         throw StateError('Video file is missing.');
       }
 
       final stat = await file.stat();
-      final dao = ref.read(videoSummariesDaoProvider);
       final existing = await dao.getSummaryForVideo(video.id);
 
       if (!forceRefresh && existing != null) {
@@ -78,14 +104,13 @@ class VideoSummaryController extends Notifier<AsyncValue<void>> {
         }
       }
 
-      audioPath = await ref
-          .read(mediaServiceProvider)
-          .extractTranscriptionAudio(video.absolutePath);
+      audioPath = await mediaService.extractTranscriptionAudio(
+        video.absolutePath,
+      );
       if (audioPath == null) {
         throw StateError('Audio extraction failed.');
       }
 
-      final naturalLanguageService = NaturalLanguageService();
       final transcript = await naturalLanguageService.transcribeAudio(
         audioPath: audioPath,
         modelPath: modelPath,
@@ -121,6 +146,13 @@ class VideoSummaryController extends Notifier<AsyncValue<void>> {
           await audioFile.delete();
         }
       }
+      if (accessedFolder != null && folderAccessService != null) {
+        await folderAccessService.stopAccessing(
+          path: accessedFolder.path,
+          bookmark: accessedFolder.securityScopedBookmark,
+        );
+      }
+      keepAlive.close();
     }
   }
 }
