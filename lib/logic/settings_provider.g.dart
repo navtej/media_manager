@@ -33,7 +33,7 @@ final class SettingsProvider
   Settings create() => Settings();
 }
 
-String _$settingsHash() => r'ec56a7e6d55dac27b265a9a471703f336371feea';
+String _$settingsHash() => r'269e64f7ba64b9a9b916c4b9fd623ee98e1f68fe';
 
 abstract class _$Settings extends $AsyncNotifier<Map<String, dynamic>> {
   FutureOr<Map<String, dynamic>> build();
@@ -57,3 +57,45 @@ abstract class _$Settings extends $AsyncNotifier<Map<String, dynamic>> {
     element.handleCreate(ref, build);
   }
 }
+
+@ProviderFor(summaryModelValidation)
+final summaryModelValidationProvider = SummaryModelValidationProvider._();
+
+final class SummaryModelValidationProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<SummaryModelValidationResult>,
+          SummaryModelValidationResult,
+          FutureOr<SummaryModelValidationResult>
+        >
+    with
+        $FutureModifier<SummaryModelValidationResult>,
+        $FutureProvider<SummaryModelValidationResult> {
+  SummaryModelValidationProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'summaryModelValidationProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$summaryModelValidationHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<SummaryModelValidationResult> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<SummaryModelValidationResult> create(Ref ref) {
+    return summaryModelValidation(ref);
+  }
+}
+
+String _$summaryModelValidationHash() =>
+    r'd102e2fa65ff55c70468a05314d6d520535e1026';

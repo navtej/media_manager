@@ -7,11 +7,8 @@ import 'package:path/path.dart' as p;
 import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/scanner_service.dart';
+import '../services/folder_access_service.dart';
 import '../services/media_service.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import '../services/natural_language_service.dart';
-import 'stats_provider.dart';
 import 'settings_provider.dart';
 import '../services/thumbnail_service.dart';
 import 'ai_controller.dart';
@@ -23,7 +20,7 @@ part 'library_controller.g.dart';
 class ScanStatus extends _$ScanStatus {
   @override
   String build() => ''; // Empty string = Idle
-  
+
   void setStatus(String status) => state = status;
 }
 
@@ -37,7 +34,7 @@ class LibraryController extends _$LibraryController {
   @override
   Future<void> build() async {
     print('DEBUG: LibraryController.build starting');
-    
+
     // Get initial settings and setup timer
     final settings = await ref.read(settingsProvider.future);
     final initialInterval = settings['scanInterval'] ?? 5;
@@ -47,9 +44,11 @@ class LibraryController extends _$LibraryController {
     ref.listen(settingsProvider, (previous, next) {
       final oldInterval = previous?.value?['scanInterval'];
       final newInterval = next.value?['scanInterval'];
-      
+
       if (newInterval != null && oldInterval != newInterval) {
-        print('DEBUG: Scan interval changed from $oldInterval to $newInterval. Updating timer.');
+        print(
+          'DEBUG: Scan interval changed from $oldInterval to $newInterval. Updating timer.',
+        );
         _setupTimer(newInterval);
       }
     });
@@ -62,18 +61,22 @@ class LibraryController extends _$LibraryController {
     // Trigger startup scan in the background
     Future.microtask(() async {
       print('DEBUG: LibraryController microtask triggering syncAll');
-      await ref.read(maintenanceControllerProvider.notifier).checkAndMigrateThumbnails();
+      await ref
+          .read(maintenanceControllerProvider.notifier)
+          .checkAndMigrateThumbnails();
       syncAll();
     });
   }
 
   // _checkAndMigrateThumbnails moved to maintenance_controller.dart
-  
+
   Future<void> syncAll() async {
     if (_isScanning) {
       print('DEBUG: syncAll ignored, scan already in progress');
       // Set status briefly to inform user why it was ignored if they clicked button
-      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus('Scan already in progress');
       Future.delayed(const Duration(seconds: 2), () {
         if (!_isScanning) ref.read(scanStatusProvider.notifier).setStatus('');
       });
@@ -82,8 +85,10 @@ class LibraryController extends _$LibraryController {
 
     try {
       _isScanning = true;
-      ref.read(scanStatusProvider.notifier).setStatus('Checking for updates...');
-      
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus('Checking for updates...');
+
       print('DEBUG: syncAll starting...');
       final folderDao = ref.read(foldersDaoProvider);
       final videoDao = ref.read(videosDaoProvider);
@@ -96,7 +101,7 @@ class LibraryController extends _$LibraryController {
 
       final folders = await folderDao.getAllFolders();
       print('DEBUG: syncAll found ${folders.length} folders');
-      
+
       final toDelete = <int>[];
       final toMarkOffline = <int>[];
       final toMarkOnline = <int>[];
@@ -104,51 +109,68 @@ class LibraryController extends _$LibraryController {
       final toUpdateDate = <int, DateTime>{};
 
       for (final f in folders) {
-        final folderDir = Directory(f.path);
-        final folderExists = await folderDir.exists();
-        
-        final folderVideos = await videoDao.getVideosByFolder(f.id);
+        final access = await _startFolderAccess(f);
+        if (!access.canAccess) {
+          final message = access.message ?? 'Cannot access ${f.path}';
+          print('DEBUG: $message');
+          ref.read(scanStatusProvider.notifier).setStatus(message);
+          continue;
+        }
 
-        if (!folderExists) {
-          print('DEBUG: Folder ${f.path} is offline');
+        try {
+          final folderDir = Directory(f.path);
+          final folderExists = await folderDir.exists();
+
+          final folderVideos = await videoDao.getVideosByFolder(f.id);
+
+          if (!folderExists) {
+            print('DEBUG: Folder ${f.path} is offline');
+            for (final v in folderVideos) {
+              if (!v.isOffline) toMarkOffline.add(v.id);
+            }
+            continue; // Skip scanning and individual file checks for offline folders
+          }
+
+          // Folder exists - mark all as online (if they were offline)
+          print('DEBUG: Folder ${f.path} is online');
           for (final v in folderVideos) {
-            if (!v.isOffline) toMarkOffline.add(v.id);
+            if (v.isOffline) toMarkOnline.add(v.id);
+
+            final file = File(v.absolutePath);
+            final fileExists = await file.exists();
+
+            if (!fileExists) {
+              toDelete.add(v.id);
+              continue;
+            }
+
+            if (v.size == 0) {
+              final size = await file.length();
+              toUpdateSize[v.id] = size;
+            }
+
+            if (v.fileCreatedAt == null) {
+              final stat = await file.stat();
+              toUpdateDate[v.id] = stat.modified;
+            }
           }
-          continue; // Skip scanning and individual file checks for offline folders
+
+          // Scan for new files only if folder is online
+          await scanFolder(f.path, f.id);
+        } finally {
+          await _stopFolderAccess(f);
         }
-
-        // Folder exists - mark all as online (if they were offline)
-        print('DEBUG: Folder ${f.path} is online');
-        for (final v in folderVideos) {
-          if (v.isOffline) toMarkOnline.add(v.id);
-          
-          final file = File(v.absolutePath);
-          final fileExists = await file.exists();
-          
-          if (!fileExists) {
-            toDelete.add(v.id);
-            continue;
-          }
-
-          if (v.size == 0) {
-            final size = await file.length();
-            toUpdateSize[v.id] = size;
-          }
-
-          if (v.fileCreatedAt == null) {
-            final stat = await file.stat();
-            toUpdateDate[v.id] = stat.modified;
-          }
-        }
-
-        // Scan for new files only if folder is online
-        await scanFolder(f.path, f.id);
       }
 
-      if (toDelete.isNotEmpty || toMarkOffline.isNotEmpty || toMarkOnline.isNotEmpty || 
-          toUpdateSize.isNotEmpty || toUpdateDate.isNotEmpty) {
-        print('DEBUG: Starting transactional maintenance (Delete: ${toDelete.length}, Offline: ${toMarkOffline.length}, Online: ${toMarkOnline.length}, Size: ${toUpdateSize.length}, Date: ${toUpdateDate.length})');
-        
+      if (toDelete.isNotEmpty ||
+          toMarkOffline.isNotEmpty ||
+          toMarkOnline.isNotEmpty ||
+          toUpdateSize.isNotEmpty ||
+          toUpdateDate.isNotEmpty) {
+        print(
+          'DEBUG: Starting transactional maintenance (Delete: ${toDelete.length}, Offline: ${toMarkOffline.length}, Online: ${toMarkOnline.length}, Size: ${toUpdateSize.length}, Date: ${toUpdateDate.length})',
+        );
+
         await db.transaction(() async {
           if (toDelete.isNotEmpty) {
             await videoDao.deleteVideosByIds(toDelete);
@@ -166,13 +188,13 @@ class LibraryController extends _$LibraryController {
             await videoDao.updateVideoCreationDate(entry.key, entry.value);
           }
         });
-        
+
         print('DEBUG: Transactional maintenance completed');
       }
 
       await tagDao.pruneEmptyTags();
       print('DEBUG: syncAll completed successfully');
-      
+
       // Ensure AI worker is running if there are pending videos
       ref.read(aIControllerProvider.notifier).startWorker();
     } catch (e, stack) {
@@ -189,8 +211,10 @@ class LibraryController extends _$LibraryController {
       print('DEBUG: Cancelling existing refresh timer');
       _periodicTimer?.cancel();
     }
-    
-    print('DEBUG: Creating new periodic scan timer with interval: $interval minutes');
+
+    print(
+      'DEBUG: Creating new periodic scan timer with interval: $interval minutes',
+    );
     _periodicTimer = Timer.periodic(Duration(minutes: interval), (_) {
       print('DEBUG: Periodic scan timer triggered');
       syncAll();
@@ -200,35 +224,58 @@ class LibraryController extends _$LibraryController {
   Future<void> addFolder(String path) async {
     if (_isScanning) {
       print('DEBUG: addFolder ignored, scan already in progress');
-      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus('Scan already in progress');
       return;
     }
     print('DEBUG: addFolder called with $path');
     final dao = ref.read(foldersDaoProvider);
-    
+    final bookmark = await ref
+        .read(folderAccessServiceProvider)
+        .createBookmark(path);
+
     // Check if exists first to get ID
     final folders = await dao.getAllFolders();
     final existing = folders.where((f) => f.path == path).toList();
-    
+
     int id;
     if (existing.isNotEmpty) {
       id = existing.first.id;
+      if (bookmark != null) {
+        await dao.updateFolderBookmark(id, bookmark);
+      }
       print('DEBUG: Folder already exists with ID: $id');
     } else {
-      id = await dao.insertFolder(FoldersCompanion(
-        path: drift.Value(path),
-        alias: drift.Value(p.basename(path)),
-      ));
+      id = await dao.insertFolder(
+        FoldersCompanion(
+          path: drift.Value(path),
+          alias: drift.Value(p.basename(path)),
+          securityScopedBookmark: drift.Value(bookmark),
+        ),
+      );
       if (id == 0) {
-         // Should not happen with the check above, but for safety:
-         final refetched = await dao.getAllFolders();
-         id = refetched.firstWhere((f) => f.path == path).id;
+        // Should not happen with the check above, but for safety:
+        final refetched = await dao.getAllFolders();
+        id = refetched.firstWhere((f) => f.path == path).id;
       }
       print('DEBUG: Folder inserted with ID: $id');
     }
-    
+
     // Start scan
-    scanFolder(path, id);
+    final refetched = (await dao.getAllFolders()).firstWhere((f) => f.id == id);
+    final access = await _startFolderAccess(refetched);
+    if (!access.canAccess) {
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(access.message ?? 'Cannot access $path');
+      return;
+    }
+    try {
+      await scanFolder(path, id);
+    } finally {
+      await _stopFolderAccess(refetched);
+    }
   }
 
   // removeFolder moved to maintenance_controller.dart
@@ -237,26 +284,39 @@ class LibraryController extends _$LibraryController {
   Future<void> rebuildLibrary() async {
     if (_isScanning) {
       print('DEBUG: rebuildLibrary ignored, scan in progress');
-      ref.read(scanStatusProvider.notifier).setStatus('Scan already in progress');
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus('Scan already in progress');
       return;
     }
-    
+
     try {
       _isScanning = true;
       ref.read(scanStatusProvider.notifier).setStatus('Rebuilding library...');
-      
+
       final db = ref.read(databaseProvider);
       await db.clearAllData();
-      
+
       print('DEBUG: Library cleared, starting full sync...');
-      
+
       // Perform sync logic directly here to keep _isScanning = true
       final folderDao = ref.read(foldersDaoProvider);
       final folders = await folderDao.getAllFolders();
       for (final f in folders) {
-        await scanFolder(f.path, f.id);
+        final access = await _startFolderAccess(f);
+        if (!access.canAccess) {
+          ref
+              .read(scanStatusProvider.notifier)
+              .setStatus(access.message ?? 'Cannot access ${f.path}');
+          continue;
+        }
+        try {
+          await scanFolder(f.path, f.id);
+        } finally {
+          await _stopFolderAccess(f);
+        }
       }
-      
+
       print('DEBUG: Rebuild completed successfully');
     } catch (e) {
       print('ERROR rebuilding library: $e');
@@ -266,18 +326,18 @@ class LibraryController extends _$LibraryController {
       ref.read(scanStatusProvider.notifier).setStatus('');
     }
   }
-  
+
   Future<void> scanFolder(String rootPath, int folderId) async {
     print('DEBUG: scanFolder called for $rootPath');
     ref.read(scanStatusProvider.notifier).setStatus('Scanning $rootPath...');
-    
+
     final scanner = ref.read(scannerServiceProvider);
     final videoDao = ref.read(videosDaoProvider);
-    
+
     // 1. Get existing videos for this folder to skip them (Set for O(1) lookup)
     final existingVideos = await videoDao.getVideosByFolder(folderId);
     final existingPaths = existingVideos.map((v) => v.absolutePath).toSet();
-    
+
     int processedCount = 0;
     final List<VideosCompanion> batchCompanions = [];
     final settings = await ref.read(settingsProvider.future);
@@ -287,17 +347,21 @@ class LibraryController extends _$LibraryController {
       // 2. Consume Stream
       await for (final pathBatch in scanner.scanPaths([rootPath])) {
         // Filter new files immediately
-        final newPaths = pathBatch.where((p) => !existingPaths.contains(p)).toList();
-        
+        final newPaths = pathBatch
+            .where((p) => !existingPaths.contains(p))
+            .toList();
+
         if (newPaths.isEmpty) continue;
-        
-        ref.read(scanStatusProvider.notifier).setStatus('Processing ${newPaths.length} new files...');
-        
+
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus('Processing ${newPaths.length} new files...');
+
         for (final filePath in newPaths) {
           final fileName = p.basename(filePath);
           processedCount++;
           ref.read(scanStatusProvider.notifier).setStatus('Adding: $fileName');
-          
+
           final companion = await _prepareVideoCompanion(filePath, folderId);
           if (companion != null) {
             batchCompanions.add(companion);
@@ -305,23 +369,24 @@ class LibraryController extends _$LibraryController {
 
           // Commit to DB when batch is full
           if (batchCompanions.length >= dbBatchSize) {
-             await videoDao.insertVideosBatch(batchCompanions);
-             batchCompanions.clear();
-             // Trigger AI worker to run in background while we continue scanning
-             ref.read(aIControllerProvider.notifier).startWorker();
+            await videoDao.insertVideosBatch(batchCompanions);
+            batchCompanions.clear();
+            // Trigger AI worker to run in background while we continue scanning
+            ref.read(aIControllerProvider.notifier).startWorker();
           }
         }
       }
-      
+
       // 3. Commit remaining
       if (batchCompanions.isNotEmpty) {
         await videoDao.insertVideosBatch(batchCompanions);
         batchCompanions.clear();
         ref.read(aIControllerProvider.notifier).startWorker();
       }
-      
-      print('DEBUG: Scan complete for $rootPath. Processed $processedCount new videos.');
-      
+
+      print(
+        'DEBUG: Scan complete for $rootPath. Processed $processedCount new videos.',
+      );
     } catch (e) {
       print('ERROR during scan of $rootPath: $e');
     } finally {
@@ -329,28 +394,52 @@ class LibraryController extends _$LibraryController {
     }
   }
 
-  Future<VideosCompanion?> _prepareVideoCompanion(String filePath, int folderId) async {
+  Future<FolderAccessSession> _startFolderAccess(Folder folder) {
+    return ref
+        .read(folderAccessServiceProvider)
+        .startAccessing(
+          path: folder.path,
+          bookmark: folder.securityScopedBookmark,
+        );
+  }
+
+  Future<void> _stopFolderAccess(Folder folder) {
+    return ref
+        .read(folderAccessServiceProvider)
+        .stopAccessing(
+          path: folder.path,
+          bookmark: folder.securityScopedBookmark,
+        );
+  }
+
+  Future<VideosCompanion?> _prepareVideoCompanion(
+    String filePath,
+    int folderId,
+  ) async {
     final mediaService = ref.read(mediaServiceProvider);
     final thumbnailService = ref.read(thumbnailServiceProvider);
-    
+
     try {
       final file = File(filePath);
       final size = file.lengthSync();
       final stat = file.statSync();
-      
+
       // 1. Metadata
       final meta = await mediaService.getMetadata(filePath);
       final duration = (meta['duration'] as num?)?.toInt() ?? 0;
-      
+
       // 2. Thumbnail
       String? thumbPath;
-      final thumbBytes = await mediaService.generateThumbnail(filePath, duration.toDouble());
-      
+      final thumbBytes = await mediaService.generateThumbnail(
+        filePath,
+        duration.toDouble(),
+      );
+
       if (thumbBytes != null) {
         final fileName = thumbnailService.generateFileName();
         thumbPath = await thumbnailService.saveThumbnail(fileName, thumbBytes);
       }
-      
+
       // 3. Prepare Companion
       return VideosCompanion(
         folderId: drift.Value(folderId),
@@ -364,7 +453,6 @@ class LibraryController extends _$LibraryController {
         metadataJson: drift.Value(jsonEncode(meta)),
         aiProcessed: const drift.Value(false),
       );
-      
     } catch (e) {
       print('Error preparing $filePath: $e');
       return null;
@@ -373,4 +461,3 @@ class LibraryController extends _$LibraryController {
 
   // AI Logic moved to ai_controller.dart
 }
-

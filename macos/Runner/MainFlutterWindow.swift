@@ -16,6 +16,9 @@ actor AILanguageModelManager {
     enum AIError: Error {
         case modelNotAvailable
         case sessionCreationFailed
+        case invalidSummaryPayload
+        case whisperRuntimeMissing
+        case transcriptionFailed(String)
     }
     
     private func ensureModelLoaded() async throws {
@@ -31,7 +34,7 @@ actor AILanguageModelManager {
         defer { isInitializing = false }
         
         let newModel = SystemLanguageModel(useCase: .contentTagging)
-        let availability = await newModel.availability
+        let availability = newModel.availability
         print("DEBUG SWIFT: Model availability: \(availability)")
         
         guard case .available = availability else {
@@ -50,14 +53,8 @@ actor AILanguageModelManager {
         let instructions = "Provide two to five tags based on this text. Format as a comma separated list of single words. If the text conatins tags starting with #, prioritize those relevant tags."
         
         // Create FRESH session for each task
-        let session: LanguageModelSession
-        do {
-            session = try LanguageModelSession(model: model, instructions: instructions)
-            print("DEBUG SWIFT: Fresh session created.")
-        } catch {
-            print("DEBUG SWIFT: Failed to create session: \(error.localizedDescription)")
-            throw AIError.sessionCreationFailed
-        }
+        let session = LanguageModelSession(model: model, instructions: instructions)
+        print("DEBUG SWIFT: Fresh session created.")
         
         let truncatedText = String(text.prefix(3800))
         let response = try await session.respond(to: truncatedText)
@@ -72,6 +69,218 @@ actor AILanguageModelManager {
         
         return Array(Set(tags))
     }
+
+    func summarizeTranscript(
+        title: String,
+        metadataJson: String,
+        transcript: String
+    ) async throws -> [String: Any] {
+        try await ensureModelLoaded()
+
+        guard let model = self.model else {
+            throw AIError.modelNotAvailable
+        }
+
+        let instructions = """
+        You summarize video transcripts. Return strict JSON only with:
+        {
+          "synopsis": string,
+          "highlights": [string, string, ...],
+          "keywords": [string, string, ...]
+        }
+        Requirements:
+        - synopsis must be a concise paragraph
+        - highlights must contain 2 to 4 non-empty strings
+        - keywords must contain 3 to 6 non-empty strings
+        - no markdown
+        - no code fences
+        """
+
+        let session = LanguageModelSession(model: model, instructions: instructions)
+
+        let truncatedTranscript = String(transcript.prefix(12_000))
+        let truncatedMetadata = String(metadataJson.prefix(2_000))
+        let prompt = """
+        Title:
+        \(title)
+
+        Metadata JSON:
+        \(truncatedMetadata)
+
+        Transcript:
+        \(truncatedTranscript)
+        """
+
+        let response = try await session.respond(to: prompt)
+        return try Self.parseStructuredSummaryPayload(response.content)
+    }
+
+    private static func parseStructuredSummaryPayload(_ rawResponse: String) throws -> [String: Any] {
+        let cleanedResponse = rawResponse
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let data = cleanedResponse.data(using: .utf8),
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw AIError.invalidSummaryPayload
+        }
+
+        guard let synopsis = (json["synopsis"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !synopsis.isEmpty else {
+            throw AIError.invalidSummaryPayload
+        }
+
+        let highlights = (json["highlights"] as? [String] ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let keywords = (json["keywords"] as? [String] ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !highlights.isEmpty, !keywords.isEmpty else {
+            throw AIError.invalidSummaryPayload
+        }
+
+        return [
+            "synopsis": synopsis,
+            "highlights": highlights,
+            "keywords": keywords,
+        ]
+    }
+
+    nonisolated static func transcribeAudio(audioPath: String, modelPath: String) throws -> String {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: audioPath) else {
+            throw AIError.transcriptionFailed("Audio file is missing.")
+        }
+        guard fileManager.fileExists(atPath: modelPath) else {
+            throw AIError.transcriptionFailed("Model file is missing.")
+        }
+
+        guard let cliPath = resolveWhisperCLIPath() else {
+            throw AIError.whisperRuntimeMissing
+        }
+
+        let outputBase = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("summary_\(UUID().uuidString)")
+        let process = Process()
+        let outputPipe = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: cliPath)
+        process.arguments = [
+            "-m", modelPath,
+            "-f", audioPath,
+            "-of", outputBase,
+            "-otxt",
+        ]
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let outputText = String(data: outputData, encoding: .utf8) ?? ""
+
+        guard process.terminationStatus == 0 else {
+          throw AIError.transcriptionFailed(outputText)
+        }
+
+        let transcriptURL = URL(fileURLWithPath: "\(outputBase).txt")
+        guard let transcript = try? String(contentsOf: transcriptURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !transcript.isEmpty else {
+            throw AIError.transcriptionFailed("Whisper produced an empty transcript.")
+        }
+
+        try? fileManager.removeItem(at: transcriptURL)
+        return transcript
+    }
+}
+
+private func resolveWhisperCLIPath() -> String? {
+    let fileManager = FileManager.default
+    let explicitCandidates = [
+        "/opt/homebrew/bin/whisper-cli",
+        "/usr/local/bin/whisper-cli",
+    ]
+
+    for candidate in explicitCandidates where fileManager.isExecutableFile(atPath: candidate) {
+        return candidate
+    }
+
+    let pathValue = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    for directory in pathValue.split(separator: ":") {
+        let candidate = "\(directory)/whisper-cli"
+        if fileManager.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+    }
+
+    return nil
+}
+
+private var activeFolderAccess: [String: URL] = [:]
+
+private func createFolderBookmark(path: String) throws -> String {
+    let url = URL(fileURLWithPath: path)
+    let didStartAccessing = url.startAccessingSecurityScopedResource()
+    defer {
+        if didStartAccessing {
+            url.stopAccessingSecurityScopedResource()
+        }
+    }
+
+    let data = try url.bookmarkData(
+        options: [.withSecurityScope],
+        includingResourceValuesForKeys: nil,
+        relativeTo: nil
+    )
+    return data.base64EncodedString()
+}
+
+private func startAccessingFolder(path: String, bookmark: String) throws -> Bool {
+    if activeFolderAccess[path] != nil {
+        return true
+    }
+
+    guard let data = Data(base64Encoded: bookmark) else {
+        return false
+    }
+
+    var isStale = false
+    let url = try URL(
+        resolvingBookmarkData: data,
+        options: [.withSecurityScope],
+        relativeTo: nil,
+        bookmarkDataIsStale: &isStale
+    )
+
+    if isStale {
+        return false
+    }
+
+    guard url.startAccessingSecurityScopedResource() else {
+        return false
+    }
+
+    guard FileManager.default.fileExists(atPath: url.path) else {
+        url.stopAccessingSecurityScopedResource()
+        return false
+    }
+
+    activeFolderAccess[path] = url
+    return true
+}
+
+private func stopAccessingFolder(path: String) {
+    guard let url = activeFolderAccess.removeValue(forKey: path) else {
+        return
+    }
+    url.stopAccessingSecurityScopedResource()
 }
 
 class MainFlutterWindow: NSWindow {
@@ -125,6 +334,58 @@ class MainFlutterWindow: NSWindow {
                 result(FlutterError(code: "UNSUPPORTED", message: "MacOS 15+ required", details: nil))
             }
         }
+      } else if call.method == "transcribeAudio" {
+        guard let args = call.arguments as? [String: Any],
+              let audioPath = args["audioPath"] as? String,
+              let modelPath = args["modelPath"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Audio or model path missing", details: nil))
+          return
+        }
+
+        Task {
+          do {
+            let transcript = try AILanguageModelManager.transcribeAudio(
+              audioPath: audioPath,
+              modelPath: modelPath
+            )
+            DispatchQueue.main.async {
+              result(transcript)
+            }
+          } catch {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "TRANSCRIPTION_ERROR", message: error.localizedDescription, details: nil))
+            }
+          }
+        }
+      } else if call.method == "summarizeTranscript" {
+        guard let args = call.arguments as? [String: Any],
+              let title = args["title"] as? String,
+              let metadataJson = args["metadataJson"] as? String,
+              let transcript = args["transcript"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Summary arguments missing", details: nil))
+          return
+        }
+
+        Task {
+          if #available(macOS 15.0, *) {
+            do {
+              let payload = try await AILanguageModelManager.shared.summarizeTranscript(
+                title: title,
+                metadataJson: metadataJson,
+                transcript: transcript
+              )
+              DispatchQueue.main.async {
+                result(payload)
+              }
+            } catch {
+              DispatchQueue.main.async {
+                result(FlutterError(code: "SUMMARY_ERROR", message: error.localizedDescription, details: nil))
+              }
+            }
+          } else {
+            result(FlutterError(code: "UNSUPPORTED", message: "MacOS 15+ required", details: nil))
+          }
+        }
       } else if call.method == "openInFinder" {
         guard let args = call.arguments as? [String: Any],
               let path = args["path"] as? String else {
@@ -141,6 +402,37 @@ class MainFlutterWindow: NSWindow {
         }
         let url = URL(fileURLWithPath: path)
         NSWorkspace.shared.open(url)
+        result(nil)
+      } else if call.method == "createFolderBookmark" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path argument missing", details: nil))
+          return
+        }
+        do {
+          result(try createFolderBookmark(path: path))
+        } catch {
+          result(FlutterError(code: "BOOKMARK_ERROR", message: error.localizedDescription, details: nil))
+        }
+      } else if call.method == "startAccessingFolder" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String,
+              let bookmark = args["bookmark"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path or bookmark argument missing", details: nil))
+          return
+        }
+        do {
+          result(try startAccessingFolder(path: path, bookmark: bookmark))
+        } catch {
+          result(FlutterError(code: "BOOKMARK_ERROR", message: error.localizedDescription, details: nil))
+        }
+      } else if call.method == "stopAccessingFolder" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path argument missing", details: nil))
+          return
+        }
+        stopAccessingFolder(path: path)
         result(nil)
       } else if call.method == "playVideo" {
         guard let args = call.arguments as? [String: Any],

@@ -1,16 +1,25 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import '../../logic/maintenance_controller.dart';
 import 'package:flutter/services.dart';
 import '../../data/providers.dart';
 
+import '../../logic/model_download_controller.dart';
+import '../../logic/maintenance_controller.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
+import '../../logic/video_summary_models.dart';
+import '../../logic/whisper_model_catalog.dart';
+import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
+import '../../services/folder_access_service.dart';
 import '../../logic/stats_provider.dart';
+import '../widgets/summary_model_settings_panel.dart';
+
+enum _SettingsTab { general, summary }
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -23,7 +32,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _intervalController;
   late TextEditingController _batchSizeController;
   late TextEditingController _paginationSizeController;
-  
+  _SettingsTab _selectedTab = _SettingsTab.general;
+  String? _summaryActionMessage;
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +42,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _batchSizeController = TextEditingController();
     _paginationSizeController = TextEditingController();
   }
-  
+
   @override
   void dispose() {
     _intervalController.dispose();
@@ -40,10 +51,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _pickSummaryModel() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+    final path = result?.files.single.path;
+    if (path == null || path.isEmpty) {
+      return;
+    }
+
+    await ref
+        .read(settingsProvider.notifier)
+        .updateSummaryModelSource(SummaryModelSourceMode.localFile);
+    await ref.read(settingsProvider.notifier).updateSummaryModelPath(path);
+    ref.invalidate(summaryModelValidationProvider);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _summaryActionMessage = 'Using local model file.';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
-    
+
     // Update controllers when data is loaded
     settingsAsync.whenData((data) {
       if (_intervalController.text.isEmpty) {
@@ -60,9 +93,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return MacosScaffold(
       backgroundColor: MacosTheme.of(context).canvasColor,
       toolBar: ToolBar(
-        decoration: BoxDecoration(
-          color: MacosTheme.of(context).canvasColor,
-        ),
+        decoration: BoxDecoration(color: MacosTheme.of(context).canvasColor),
         centerTitle: false,
         title: const Text('Back'),
         leading: Transform.translate(
@@ -77,9 +108,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ContentArea(
           builder: (context, controller) {
             if (settingsAsync.isLoading) {
-               return const Center(child: ProgressCircle());
+              return const Center(child: ProgressCircle());
             }
-            
+
             return Container(
               color: MacosTheme.of(context).canvasColor,
               child: Padding(
@@ -87,85 +118,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Library Folders', style: MacosTheme.of(context).typography.headline),
-                    const SizedBox(height: 10),
-                    Expanded(child: _FolderList()),
-                    const SizedBox(height: 12),
-                    const _OpenDataFolderWidget(),
-                    
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 20),
-                    
-                    Text('Appearance', style: MacosTheme.of(context).typography.headline),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const SizedBox(width: 200, child: Text('Theme')),
-                        MacosPopupButton<String>(
-                          value: settingsAsync.value?['themeMode']?.toString() ?? 'system',
-                          onChanged: (String? mode) {
-                            if (mode != null) {
-                              ref.read(settingsProvider.notifier).updateTheme(mode);
-                            }
-                          },
-                          items: const [
-                            MacosPopupMenuItem(value: 'system', child: Text('System')),
-                            MacosPopupMenuItem(value: 'light', child: Text('Light')),
-                            MacosPopupMenuItem(value: 'dark', child: Text('Dark')),
-                          ],
+                    CupertinoSlidingSegmentedControl<_SettingsTab>(
+                      groupValue: _selectedTab,
+                      children: const {
+                        _SettingsTab.general: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Text('General'),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const SizedBox(width: 200, child: Text('Show Offline Media')),
-                        _buildCustomCheckbox(
-                          context,
-                          settingsAsync.value?['showOfflineMedia'] ?? true,
-                          (bool value) {
-                            ref.read(settingsProvider.notifier).updateShowOfflineMedia(value);
-                          },
+                        _SettingsTab.summary: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Text('Summarization'),
                         ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 20),
-                    
-                    Row(
-                      children: [
-                        Text('Advanced Preferences', style: MacosTheme.of(context).typography.headline),
-                        const SizedBox(width: 12),
-                        MacosIconButton(
-                          icon: const MacosIcon(CupertinoIcons.floppy_disk),
-                          onPressed: () {
-                            final interval = int.tryParse(_intervalController.text) ?? 5;
-                            final batch = int.tryParse(_batchSizeController.text) ?? 4;
-                            final pagination = int.tryParse(_paginationSizeController.text) ?? 50;
-                            
-                            ref.read(settingsProvider.notifier).updateSettings(interval, batch, pagination);
-                            
-                            // Show status message and return
-                            ref.read(statusMessageProvider.notifier).set('Preferences saved');
-                            Navigator.pop(context);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: _buildPreferenceRow(context, 'Scan Interval (min)', _intervalController)),
-                        const SizedBox(width: 20),
-                        Expanded(child: _buildPreferenceRow(context, 'DB Batch Size', _batchSizeController)),
-                        const SizedBox(width: 20),
-                        Expanded(child: _buildPreferenceRow(context, 'Pagination Size', _paginationSizeController)),
-                      ],
+                      },
+                      onValueChanged: (_SettingsTab? value) {
+                        if (value != null) {
+                          setState(() {
+                            _selectedTab = value;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 20),
+                    Expanded(
+                      child: _selectedTab == _SettingsTab.general
+                          ? _buildGeneralSettings(context, settingsAsync)
+                          : _buildSummarySettings(context, settingsAsync),
+                    ),
                   ],
                 ),
               ),
@@ -176,7 +160,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildPreferenceRow(BuildContext context, String label, TextEditingController controller) {
+  Widget _buildPreferenceRow(
+    BuildContext context,
+    String label,
+    TextEditingController controller,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -190,7 +178,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildCustomCheckbox(BuildContext context, bool isChecked, ValueChanged<bool> onChanged) {
+  Widget _buildCustomCheckbox(
+    BuildContext context,
+    bool isChecked,
+    ValueChanged<bool> onChanged,
+  ) {
     final theme = MacosTheme.of(context);
     return GestureDetector(
       onTap: () => onChanged(!isChecked),
@@ -201,18 +193,262 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           borderRadius: BorderRadius.circular(4),
           color: isChecked ? theme.primaryColor : Colors.transparent,
           border: Border.all(
-            color: isChecked ? theme.primaryColor : MacosColors.systemGrayColor.withValues(alpha: 0.5),
+            color: isChecked
+                ? theme.primaryColor
+                : MacosColors.systemGrayColor.withValues(alpha: 0.5),
             width: 1.5,
           ),
         ),
-        child: isChecked 
-          ? const Icon(CupertinoIcons.checkmark, size: 12, color: MacosColors.white)
-          : null,
+        child: isChecked
+            ? const Icon(
+                CupertinoIcons.checkmark,
+                size: 12,
+                color: MacosColors.white,
+              )
+            : null,
       ),
     );
   }
-}
 
+  Widget _buildGeneralSettings(
+    BuildContext context,
+    AsyncValue<Map<String, dynamic>> settingsAsync,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Library Folders',
+          style: MacosTheme.of(context).typography.headline,
+        ),
+        const SizedBox(height: 10),
+        Expanded(child: _FolderList()),
+        const SizedBox(height: 12),
+        const _OpenDataFolderWidget(),
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 20),
+        Text('Appearance', style: MacosTheme.of(context).typography.headline),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            const SizedBox(width: 200, child: Text('Theme')),
+            MacosPopupButton<String>(
+              value: settingsAsync.value?['themeMode']?.toString() ?? 'system',
+              onChanged: (String? mode) {
+                if (mode != null) {
+                  ref.read(settingsProvider.notifier).updateTheme(mode);
+                }
+              },
+              items: const [
+                MacosPopupMenuItem(value: 'system', child: Text('System')),
+                MacosPopupMenuItem(value: 'light', child: Text('Light')),
+                MacosPopupMenuItem(value: 'dark', child: Text('Dark')),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            const SizedBox(width: 200, child: Text('Show Offline Media')),
+            _buildCustomCheckbox(
+              context,
+              settingsAsync.value?['showOfflineMedia'] ?? true,
+              (bool value) {
+                ref
+                    .read(settingsProvider.notifier)
+                    .updateShowOfflineMedia(value);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Text(
+              'Advanced Preferences',
+              style: MacosTheme.of(context).typography.headline,
+            ),
+            const SizedBox(width: 12),
+            MacosIconButton(
+              icon: const MacosIcon(CupertinoIcons.floppy_disk),
+              onPressed: () {
+                final interval = int.tryParse(_intervalController.text) ?? 5;
+                final batch = int.tryParse(_batchSizeController.text) ?? 4;
+                final pagination =
+                    int.tryParse(_paginationSizeController.text) ?? 50;
+
+                ref
+                    .read(settingsProvider.notifier)
+                    .updateSettings(interval, batch, pagination);
+
+                ref
+                    .read(statusMessageProvider.notifier)
+                    .set('Preferences saved');
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildPreferenceRow(
+                context,
+                'Scan Interval (min)',
+                _intervalController,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _buildPreferenceRow(
+                context,
+                'DB Batch Size',
+                _batchSizeController,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _buildPreferenceRow(
+                context,
+                'Pagination Size',
+                _paginationSizeController,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildSummarySettings(
+    BuildContext context,
+    AsyncValue<Map<String, dynamic>> settingsAsync,
+  ) {
+    final sourceMode = SummaryModelSourceMode.fromValue(
+      settingsAsync.value?['summaryModelSource']?.toString() ??
+          SummaryModelSourceMode.managedDownload.value,
+    );
+    final modelPath =
+        settingsAsync.value?['summaryModelPath']?.toString() ?? '';
+    final selectedModelId = settingsAsync.value?['summarySelectedModelId']
+        ?.toString();
+    final managedDirectoryPath =
+        settingsAsync.value?['summaryManagedModelDirectoryPath']?.toString() ??
+        '';
+    final downloadedManagedModels =
+        (settingsAsync.value?['summaryDownloadedManagedModels'] as Map?)
+            ?.map<String, String>(
+              (key, value) => MapEntry(key.toString(), value.toString()),
+            ) ??
+        <String, String>{};
+    final validationAsync = ref.watch(summaryModelValidationProvider);
+    final catalogState = ref.watch(whisperModelCatalogControllerProvider);
+    final downloadState = ref.watch(modelDownloadControllerProvider);
+
+    return validationAsync.when(
+      data: (validation) => SummaryModelSettingsPanel(
+        sourceMode: sourceMode,
+        modelPath: modelPath,
+        selectedModelId: selectedModelId,
+        downloadedManagedModels: downloadedManagedModels,
+        validation: validation,
+        catalogState: catalogState,
+        downloadState: downloadState,
+        canDeleteManagedModel:
+            sourceMode == SummaryModelSourceMode.managedDownload &&
+            isManagedModelPath(
+              modelPath: modelPath,
+              managedDirectoryPath: managedDirectoryPath,
+            ),
+        statusMessage: _summaryActionMessage,
+        onSourceModeChanged: (mode) async {
+          await ref
+              .read(settingsProvider.notifier)
+              .updateSummaryModelSource(mode);
+          setState(() {
+            _summaryActionMessage = null;
+          });
+        },
+        onSelectedModelChanged: (modelId) async {
+          await ref
+              .read(settingsProvider.notifier)
+              .selectManagedSummaryModel(modelId);
+          ref.invalidate(summaryModelValidationProvider);
+          setState(() {
+            _summaryActionMessage =
+                modelId != null && downloadedManagedModels.containsKey(modelId)
+                ? 'Switched summarization model.'
+                : null;
+          });
+        },
+        onDownloadPressed: () async {
+          final effectiveSelectedModelId =
+              selectedModelId ?? catalogState.entries.firstOrNull?.id;
+          if (effectiveSelectedModelId == null) {
+            setState(() {
+              _summaryActionMessage = 'No model is available to download.';
+            });
+            return;
+          }
+
+          final entry = catalogState.entries.firstWhere(
+            (item) => item.id == effectiveSelectedModelId,
+            orElse: () => catalogState.entries.first,
+          );
+          setState(() {
+            _summaryActionMessage = null;
+          });
+          await ref
+              .read(modelDownloadControllerProvider.notifier)
+              .downloadManagedModel(entry);
+        },
+        onStopDownloadPressed: () async {
+          await ref
+              .read(modelDownloadControllerProvider.notifier)
+              .cancelDownload();
+          setState(() {
+            _summaryActionMessage = 'Download stopped.';
+          });
+        },
+        onDeletePressed: () async {
+          await ref
+              .read(modelDownloadControllerProvider.notifier)
+              .deleteManagedModel(
+                modelId: selectedModelId,
+                modelPath: modelPath,
+                managedDirectoryPath: managedDirectoryPath,
+              );
+          setState(() {
+            _summaryActionMessage = 'Managed model removed.';
+          });
+        },
+        onBrowsePressed: _pickSummaryModel,
+        onRevealPressed: () => NaturalLanguageService().openInFinder(modelPath),
+        onRefreshCatalogPressed: () async {
+          await ref
+              .read(whisperModelCatalogControllerProvider.notifier)
+              .refresh();
+        },
+        onClearSelectionPressed: () async {
+          await ref
+              .read(modelDownloadControllerProvider.notifier)
+              .clearLocalSelection();
+          setState(() {
+            _summaryActionMessage = 'Local model selection cleared.';
+          });
+        },
+      ),
+      loading: () => const Center(child: ProgressCircle()),
+      error: (error, _) => Center(child: Text(error.toString())),
+    );
+  }
+}
 
 class _OpenDataFolderWidget extends ConsumerWidget {
   const _OpenDataFolderWidget();
@@ -226,16 +462,13 @@ class _OpenDataFolderWidget extends ConsumerWidget {
         children: [
           Text(
             'Open Data Folder in Finder',
-            style: MacosTheme.of(context).typography.body.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: MacosTheme.of(
+              context,
+            ).typography.body.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 8),
           MacosIconButton(
-            icon: const MacosIcon(
-              CupertinoIcons.folder,
-              size: 18,
-            ),
+            icon: const MacosIcon(CupertinoIcons.folder, size: 18),
             onPressed: () async {
               final directory = await getApplicationSupportDirectory();
               await NaturalLanguageService().openFolder(directory.path);
@@ -245,15 +478,12 @@ class _OpenDataFolderWidget extends ConsumerWidget {
           sizeAsync.when(
             data: (size) => Text(
               LibraryStats.formatSize(size),
-              style: MacosTheme.of(context).typography.body.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: MacosTheme.of(
+                context,
+              ).typography.body.copyWith(fontWeight: FontWeight.bold),
             ),
-            loading: () => const SizedBox(
-              width: 12,
-              height: 12,
-              child: ProgressCircle(),
-            ),
+            loading: () =>
+                const SizedBox(width: 12, height: 12, child: ProgressCircle()),
             error: (_, __) => const SizedBox(),
           ),
         ],
@@ -271,7 +501,7 @@ class _FolderList extends ConsumerWidget {
       stream: foldersAsync,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: ProgressCircle());
-        
+
         final folders = snapshot.data ?? [];
         return Container(
           decoration: BoxDecoration(
@@ -283,17 +513,86 @@ class _FolderList extends ConsumerWidget {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final folder = folders[index];
+              final needsRepair =
+                  folder.securityScopedBookmark == null ||
+                  folder.securityScopedBookmark!.isEmpty;
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 child: Row(
                   children: [
                     const Icon(CupertinoIcons.folder, size: 16),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(folder.path, style: const TextStyle(fontSize: 13))),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            folder.path,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          if (needsRepair)
+                            Text(
+                              'Access repair required',
+                              style: TextStyle(
+                                color: MacosColors.systemOrangeColor,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                     MacosIconButton(
-                      icon: const Icon(CupertinoIcons.trash, color: MacosColors.appleRed, size: 16),
+                      icon: Icon(
+                        CupertinoIcons.exclamationmark_shield,
+                        color: needsRepair
+                            ? MacosColors.systemOrangeColor
+                            : MacosColors.systemGrayColor,
+                        size: 16,
+                      ),
+                      onPressed: () async {
+                        final selectedDirectory = await FilePicker.platform
+                            .getDirectoryPath();
+                        if (selectedDirectory == null) {
+                          return;
+                        }
+                        if (selectedDirectory != folder.path) {
+                          ref
+                              .read(statusMessageProvider.notifier)
+                              .set('Select the same folder to repair access.');
+                          return;
+                        }
+
+                        final bookmark = await ref
+                            .read(folderAccessServiceProvider)
+                            .createBookmark(selectedDirectory);
+                        if (bookmark == null || bookmark.isEmpty) {
+                          ref
+                              .read(statusMessageProvider.notifier)
+                              .set('Could not repair folder access.');
+                          return;
+                        }
+
+                        await ref
+                            .read(foldersDaoProvider)
+                            .updateFolderBookmark(folder.id, bookmark);
+                        ref
+                            .read(statusMessageProvider.notifier)
+                            .set('Folder access repaired.');
+                      },
+                    ),
+                    MacosIconButton(
+                      icon: const Icon(
+                        CupertinoIcons.trash,
+                        color: MacosColors.appleRed,
+                        size: 16,
+                      ),
                       onPressed: () {
-                         ref.read(maintenanceControllerProvider.notifier).removeFolder(folder.id);
+                        ref
+                            .read(maintenanceControllerProvider.notifier)
+                            .removeFolder(folder.id);
                       },
                     ),
                   ],

@@ -4,15 +4,18 @@ class Folders extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get path => text().unique()();
   TextColumn get alias => text().nullable()();
+  TextColumn get securityScopedBookmark => text().nullable()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
 class Videos extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get folderId => integer().references(Folders, #id, onDelete: KeyAction.cascade)();
+  IntColumn get folderId =>
+      integer().references(Folders, #id, onDelete: KeyAction.cascade)();
   TextColumn get absolutePath => text()();
   TextColumn get title => text()();
-  IntColumn get duration => integer().withDefault(const Constant(0))(); // in seconds
+  IntColumn get duration =>
+      integer().withDefault(const Constant(0))(); // in seconds
   IntColumn get size => integer().withDefault(const Constant(0))(); // in bytes
   BlobColumn get thumbnailBlob => blob().nullable()();
   TextColumn get metadataJson => text().withDefault(const Constant('{}'))();
@@ -22,33 +25,59 @@ class Videos extends Table {
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get fileCreatedAt => dateTime().nullable()();
   BoolColumn get aiProcessed => boolean().withDefault(const Constant(false))();
-  
+
   @override
-  List<Set<Column>> get uniqueKeys => [{absolutePath}];
+  List<Set<Column>> get uniqueKeys => [
+    {absolutePath},
+  ];
 }
 
 class Tags extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get videoId => integer().references(Videos, #id, onDelete: KeyAction.cascade)();
+  IntColumn get videoId =>
+      integer().references(Videos, #id, onDelete: KeyAction.cascade)();
   TextColumn get tagText => text()();
-  TextColumn get source => text().withDefault(const Constant('user'))(); // 'user' or 'auto'
+  TextColumn get source =>
+      text().withDefault(const Constant('user'))(); // 'user' or 'auto'
 
   @override
-  List<Set<Column>> get uniqueKeys => [{videoId, tagText}];
+  List<Set<Column>> get uniqueKeys => [
+    {videoId, tagText},
+  ];
 }
 
 // Normalized Schema Tables
 class TagDefinitions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().unique()();
-  TextColumn get source => text().withDefault(const Constant('user'))(); // 'user', 'auto', 'mixed'
+  TextColumn get source =>
+      text().withDefault(const Constant('user'))(); // 'user', 'auto', 'mixed'
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
 class VideoTags extends Table {
-  IntColumn get videoId => integer().references(Videos, #id, onDelete: KeyAction.cascade)();
-  IntColumn get tagId => integer().references(TagDefinitions, #id, onDelete: KeyAction.cascade)();
+  IntColumn get videoId =>
+      integer().references(Videos, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId =>
+      integer().references(TagDefinitions, #id, onDelete: KeyAction.cascade)();
 
   @override
   Set<Column> get primaryKey => {videoId, tagId};
+}
+
+class VideoSummaries extends Table {
+  IntColumn get videoId =>
+      integer().references(Videos, #id, onDelete: KeyAction.cascade)();
+  TextColumn get transcriptText => text()();
+  TextColumn get summaryJson => text()();
+  TextColumn get transcriptModel => text()();
+  TextColumn get summaryModel => text()();
+  IntColumn get sourceVideoSize => integer()();
+  DateTimeColumn get sourceVideoModifiedAt => dateTime()();
+  DateTimeColumn get generatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {videoId};
 }

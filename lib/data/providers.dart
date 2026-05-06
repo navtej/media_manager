@@ -28,6 +28,12 @@ VideosDao videosDao(Ref ref) {
 TagsDao tagsDao(Ref ref) {
   return ref.watch(databaseProvider).tagsDao;
 }
+
+@riverpod
+VideoSummariesDao videoSummariesDao(Ref ref) {
+  return ref.watch(databaseProvider).videoSummariesDao;
+}
+
 @riverpod
 Stream<List<String>> allUniqueTags(Ref ref) {
   return ref.watch(tagsDaoProvider).watchAllUniqueTags();

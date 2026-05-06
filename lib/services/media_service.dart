@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,7 +12,7 @@ class MediaService {
   Future<Map<String, dynamic>> getMetadata(String path) async {
     final session = await FFprobeKit.getMediaInformation(path);
     final info = session.getMediaInformation();
-    
+
     if (info == null) return {};
 
     final props = info.getAllProperties();
@@ -21,25 +20,28 @@ class MediaService {
     // Flattening some useful bits
     final durationStr = info.getDuration() ?? "0";
     final duration = double.tryParse(durationStr) ?? 0.0;
-    
-    return {
-      'duration': duration,
-      'bitrate': info.getBitrate(),
-      'raw': props,
-    };
+
+    return {'duration': duration, 'bitrate': info.getBitrate(), 'raw': props};
   }
 
-  Future<Uint8List?> generateThumbnail(String path, double durationSeconds) async {
+  Future<Uint8List?> generateThumbnail(
+    String path,
+    double durationSeconds,
+  ) async {
     final tempDir = await getTemporaryDirectory();
-    final tempPath = p.join(tempDir.path, 'thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
-    
+    final tempPath = p.join(
+      tempDir.path,
+      'thumb_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+
     // 10% mark
     final timestamp = durationSeconds * 0.10;
-    // Format timestamp HH:MM:SS or just seconds might work for -ss depending on version, 
+    // Format timestamp HH:MM:SS or just seconds might work for -ss depending on version,
     // but typically seconds works.
-    
-    final command = '-ss $timestamp -i "$path" -vframes 1 -vf scale=480:-1 -q:v 2 "$tempPath"';
-    
+
+    final command =
+        '-ss $timestamp -i "$path" -vframes 1 -vf scale=480:-1 -q:v 2 "$tempPath"';
+
     final session = await FFmpegKit.execute(command);
     final returnCode = await session.getReturnCode();
 
@@ -51,8 +53,37 @@ class MediaService {
         return bytes;
       }
     } else {
-      print('Failed to generate thumbnail for $path: ${await session.getOutput()}');
+      print(
+        'Failed to generate thumbnail for $path: ${await session.getOutput()}',
+      );
     }
+    return null;
+  }
+
+  Future<String?> extractTranscriptionAudio(String path) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempPath = p.join(
+      tempDir.path,
+      'summary_audio_${DateTime.now().millisecondsSinceEpoch}.wav',
+    );
+
+    final command =
+        '-y -i "$path" -vn -acodec pcm_s16le -ac 1 -ar 16000 "$tempPath"';
+
+    final session = await FFmpegKit.execute(command);
+    final returnCode = await session.getReturnCode();
+
+    if (ReturnCode.isSuccess(returnCode)) {
+      final file = File(tempPath);
+      if (await file.exists() && await file.length() > 0) {
+        return tempPath;
+      }
+    } else {
+      print(
+        'Failed to extract transcription audio for $path: ${await session.getOutput()}',
+      );
+    }
+
     return null;
   }
 }

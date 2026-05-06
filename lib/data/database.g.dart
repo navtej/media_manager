@@ -40,6 +40,17 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _securityScopedBookmarkMeta =
+      const VerificationMeta('securityScopedBookmark');
+  @override
+  late final GeneratedColumn<String> securityScopedBookmark =
+      GeneratedColumn<String>(
+        'security_scoped_bookmark',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
   );
@@ -53,7 +64,13 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     defaultValue: currentDateAndTime,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, path, alias, addedAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    path,
+    alias,
+    securityScopedBookmark,
+    addedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -83,6 +100,15 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
       );
     }
+    if (data.containsKey('security_scoped_bookmark')) {
+      context.handle(
+        _securityScopedBookmarkMeta,
+        securityScopedBookmark.isAcceptableOrUnknown(
+          data['security_scoped_bookmark']!,
+          _securityScopedBookmarkMeta,
+        ),
+      );
+    }
     if (data.containsKey('added_at')) {
       context.handle(
         _addedAtMeta,
@@ -110,6 +136,10 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.string,
         data['${effectivePrefix}alias'],
       ),
+      securityScopedBookmark: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}security_scoped_bookmark'],
+      ),
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
@@ -127,11 +157,13 @@ class Folder extends DataClass implements Insertable<Folder> {
   final int id;
   final String path;
   final String? alias;
+  final String? securityScopedBookmark;
   final DateTime addedAt;
   const Folder({
     required this.id,
     required this.path,
     this.alias,
+    this.securityScopedBookmark,
     required this.addedAt,
   });
   @override
@@ -141,6 +173,11 @@ class Folder extends DataClass implements Insertable<Folder> {
     map['path'] = Variable<String>(path);
     if (!nullToAbsent || alias != null) {
       map['alias'] = Variable<String>(alias);
+    }
+    if (!nullToAbsent || securityScopedBookmark != null) {
+      map['security_scoped_bookmark'] = Variable<String>(
+        securityScopedBookmark,
+      );
     }
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
@@ -153,6 +190,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       alias: alias == null && nullToAbsent
           ? const Value.absent()
           : Value(alias),
+      securityScopedBookmark: securityScopedBookmark == null && nullToAbsent
+          ? const Value.absent()
+          : Value(securityScopedBookmark),
       addedAt: Value(addedAt),
     );
   }
@@ -166,6 +206,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       id: serializer.fromJson<int>(json['id']),
       path: serializer.fromJson<String>(json['path']),
       alias: serializer.fromJson<String?>(json['alias']),
+      securityScopedBookmark: serializer.fromJson<String?>(
+        json['securityScopedBookmark'],
+      ),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -176,6 +219,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       'id': serializer.toJson<int>(id),
       'path': serializer.toJson<String>(path),
       'alias': serializer.toJson<String?>(alias),
+      'securityScopedBookmark': serializer.toJson<String?>(
+        securityScopedBookmark,
+      ),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -184,11 +230,15 @@ class Folder extends DataClass implements Insertable<Folder> {
     int? id,
     String? path,
     Value<String?> alias = const Value.absent(),
+    Value<String?> securityScopedBookmark = const Value.absent(),
     DateTime? addedAt,
   }) => Folder(
     id: id ?? this.id,
     path: path ?? this.path,
     alias: alias.present ? alias.value : this.alias,
+    securityScopedBookmark: securityScopedBookmark.present
+        ? securityScopedBookmark.value
+        : this.securityScopedBookmark,
     addedAt: addedAt ?? this.addedAt,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
@@ -196,6 +246,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       id: data.id.present ? data.id.value : this.id,
       path: data.path.present ? data.path.value : this.path,
       alias: data.alias.present ? data.alias.value : this.alias,
+      securityScopedBookmark: data.securityScopedBookmark.present
+          ? data.securityScopedBookmark.value
+          : this.securityScopedBookmark,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -206,13 +259,15 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('alias: $alias, ')
+          ..write('securityScopedBookmark: $securityScopedBookmark, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, path, alias, addedAt);
+  int get hashCode =>
+      Object.hash(id, path, alias, securityScopedBookmark, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -220,6 +275,7 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.id == this.id &&
           other.path == this.path &&
           other.alias == this.alias &&
+          other.securityScopedBookmark == this.securityScopedBookmark &&
           other.addedAt == this.addedAt);
 }
 
@@ -227,29 +283,35 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<int> id;
   final Value<String> path;
   final Value<String?> alias;
+  final Value<String?> securityScopedBookmark;
   final Value<DateTime> addedAt;
   const FoldersCompanion({
     this.id = const Value.absent(),
     this.path = const Value.absent(),
     this.alias = const Value.absent(),
+    this.securityScopedBookmark = const Value.absent(),
     this.addedAt = const Value.absent(),
   });
   FoldersCompanion.insert({
     this.id = const Value.absent(),
     required String path,
     this.alias = const Value.absent(),
+    this.securityScopedBookmark = const Value.absent(),
     this.addedAt = const Value.absent(),
   }) : path = Value(path);
   static Insertable<Folder> custom({
     Expression<int>? id,
     Expression<String>? path,
     Expression<String>? alias,
+    Expression<String>? securityScopedBookmark,
     Expression<DateTime>? addedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (path != null) 'path': path,
       if (alias != null) 'alias': alias,
+      if (securityScopedBookmark != null)
+        'security_scoped_bookmark': securityScopedBookmark,
       if (addedAt != null) 'added_at': addedAt,
     });
   }
@@ -258,12 +320,15 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<int>? id,
     Value<String>? path,
     Value<String?>? alias,
+    Value<String?>? securityScopedBookmark,
     Value<DateTime>? addedAt,
   }) {
     return FoldersCompanion(
       id: id ?? this.id,
       path: path ?? this.path,
       alias: alias ?? this.alias,
+      securityScopedBookmark:
+          securityScopedBookmark ?? this.securityScopedBookmark,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -280,6 +345,11 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     if (alias.present) {
       map['alias'] = Variable<String>(alias.value);
     }
+    if (securityScopedBookmark.present) {
+      map['security_scoped_bookmark'] = Variable<String>(
+        securityScopedBookmark.value,
+      );
+    }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
@@ -292,6 +362,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('alias: $alias, ')
+          ..write('securityScopedBookmark: $securityScopedBookmark, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -1934,6 +2005,599 @@ class VideoTagsCompanion extends UpdateCompanion<VideoTag> {
   }
 }
 
+class $VideoSummariesTable extends VideoSummaries
+    with TableInfo<$VideoSummariesTable, VideoSummary> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VideoSummariesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _videoIdMeta = const VerificationMeta(
+    'videoId',
+  );
+  @override
+  late final GeneratedColumn<int> videoId = GeneratedColumn<int>(
+    'video_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES videos (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _transcriptTextMeta = const VerificationMeta(
+    'transcriptText',
+  );
+  @override
+  late final GeneratedColumn<String> transcriptText = GeneratedColumn<String>(
+    'transcript_text',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summaryJsonMeta = const VerificationMeta(
+    'summaryJson',
+  );
+  @override
+  late final GeneratedColumn<String> summaryJson = GeneratedColumn<String>(
+    'summary_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _transcriptModelMeta = const VerificationMeta(
+    'transcriptModel',
+  );
+  @override
+  late final GeneratedColumn<String> transcriptModel = GeneratedColumn<String>(
+    'transcript_model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summaryModelMeta = const VerificationMeta(
+    'summaryModel',
+  );
+  @override
+  late final GeneratedColumn<String> summaryModel = GeneratedColumn<String>(
+    'summary_model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceVideoSizeMeta = const VerificationMeta(
+    'sourceVideoSize',
+  );
+  @override
+  late final GeneratedColumn<int> sourceVideoSize = GeneratedColumn<int>(
+    'source_video_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceVideoModifiedAtMeta =
+      const VerificationMeta('sourceVideoModifiedAt');
+  @override
+  late final GeneratedColumn<DateTime> sourceVideoModifiedAt =
+      GeneratedColumn<DateTime>(
+        'source_video_modified_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _generatedAtMeta = const VerificationMeta(
+    'generatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> generatedAt = GeneratedColumn<DateTime>(
+    'generated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    videoId,
+    transcriptText,
+    summaryJson,
+    transcriptModel,
+    summaryModel,
+    sourceVideoSize,
+    sourceVideoModifiedAt,
+    generatedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'video_summaries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VideoSummary> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('video_id')) {
+      context.handle(
+        _videoIdMeta,
+        videoId.isAcceptableOrUnknown(data['video_id']!, _videoIdMeta),
+      );
+    }
+    if (data.containsKey('transcript_text')) {
+      context.handle(
+        _transcriptTextMeta,
+        transcriptText.isAcceptableOrUnknown(
+          data['transcript_text']!,
+          _transcriptTextMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transcriptTextMeta);
+    }
+    if (data.containsKey('summary_json')) {
+      context.handle(
+        _summaryJsonMeta,
+        summaryJson.isAcceptableOrUnknown(
+          data['summary_json']!,
+          _summaryJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryJsonMeta);
+    }
+    if (data.containsKey('transcript_model')) {
+      context.handle(
+        _transcriptModelMeta,
+        transcriptModel.isAcceptableOrUnknown(
+          data['transcript_model']!,
+          _transcriptModelMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transcriptModelMeta);
+    }
+    if (data.containsKey('summary_model')) {
+      context.handle(
+        _summaryModelMeta,
+        summaryModel.isAcceptableOrUnknown(
+          data['summary_model']!,
+          _summaryModelMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryModelMeta);
+    }
+    if (data.containsKey('source_video_size')) {
+      context.handle(
+        _sourceVideoSizeMeta,
+        sourceVideoSize.isAcceptableOrUnknown(
+          data['source_video_size']!,
+          _sourceVideoSizeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceVideoSizeMeta);
+    }
+    if (data.containsKey('source_video_modified_at')) {
+      context.handle(
+        _sourceVideoModifiedAtMeta,
+        sourceVideoModifiedAt.isAcceptableOrUnknown(
+          data['source_video_modified_at']!,
+          _sourceVideoModifiedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceVideoModifiedAtMeta);
+    }
+    if (data.containsKey('generated_at')) {
+      context.handle(
+        _generatedAtMeta,
+        generatedAt.isAcceptableOrUnknown(
+          data['generated_at']!,
+          _generatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {videoId};
+  @override
+  VideoSummary map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VideoSummary(
+      videoId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}video_id'],
+      )!,
+      transcriptText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transcript_text'],
+      )!,
+      summaryJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary_json'],
+      )!,
+      transcriptModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transcript_model'],
+      )!,
+      summaryModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary_model'],
+      )!,
+      sourceVideoSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_video_size'],
+      )!,
+      sourceVideoModifiedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}source_video_modified_at'],
+      )!,
+      generatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}generated_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VideoSummariesTable createAlias(String alias) {
+    return $VideoSummariesTable(attachedDatabase, alias);
+  }
+}
+
+class VideoSummary extends DataClass implements Insertable<VideoSummary> {
+  final int videoId;
+  final String transcriptText;
+  final String summaryJson;
+  final String transcriptModel;
+  final String summaryModel;
+  final int sourceVideoSize;
+  final DateTime sourceVideoModifiedAt;
+  final DateTime generatedAt;
+  final DateTime updatedAt;
+  const VideoSummary({
+    required this.videoId,
+    required this.transcriptText,
+    required this.summaryJson,
+    required this.transcriptModel,
+    required this.summaryModel,
+    required this.sourceVideoSize,
+    required this.sourceVideoModifiedAt,
+    required this.generatedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['video_id'] = Variable<int>(videoId);
+    map['transcript_text'] = Variable<String>(transcriptText);
+    map['summary_json'] = Variable<String>(summaryJson);
+    map['transcript_model'] = Variable<String>(transcriptModel);
+    map['summary_model'] = Variable<String>(summaryModel);
+    map['source_video_size'] = Variable<int>(sourceVideoSize);
+    map['source_video_modified_at'] = Variable<DateTime>(sourceVideoModifiedAt);
+    map['generated_at'] = Variable<DateTime>(generatedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  VideoSummariesCompanion toCompanion(bool nullToAbsent) {
+    return VideoSummariesCompanion(
+      videoId: Value(videoId),
+      transcriptText: Value(transcriptText),
+      summaryJson: Value(summaryJson),
+      transcriptModel: Value(transcriptModel),
+      summaryModel: Value(summaryModel),
+      sourceVideoSize: Value(sourceVideoSize),
+      sourceVideoModifiedAt: Value(sourceVideoModifiedAt),
+      generatedAt: Value(generatedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory VideoSummary.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VideoSummary(
+      videoId: serializer.fromJson<int>(json['videoId']),
+      transcriptText: serializer.fromJson<String>(json['transcriptText']),
+      summaryJson: serializer.fromJson<String>(json['summaryJson']),
+      transcriptModel: serializer.fromJson<String>(json['transcriptModel']),
+      summaryModel: serializer.fromJson<String>(json['summaryModel']),
+      sourceVideoSize: serializer.fromJson<int>(json['sourceVideoSize']),
+      sourceVideoModifiedAt: serializer.fromJson<DateTime>(
+        json['sourceVideoModifiedAt'],
+      ),
+      generatedAt: serializer.fromJson<DateTime>(json['generatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'videoId': serializer.toJson<int>(videoId),
+      'transcriptText': serializer.toJson<String>(transcriptText),
+      'summaryJson': serializer.toJson<String>(summaryJson),
+      'transcriptModel': serializer.toJson<String>(transcriptModel),
+      'summaryModel': serializer.toJson<String>(summaryModel),
+      'sourceVideoSize': serializer.toJson<int>(sourceVideoSize),
+      'sourceVideoModifiedAt': serializer.toJson<DateTime>(
+        sourceVideoModifiedAt,
+      ),
+      'generatedAt': serializer.toJson<DateTime>(generatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  VideoSummary copyWith({
+    int? videoId,
+    String? transcriptText,
+    String? summaryJson,
+    String? transcriptModel,
+    String? summaryModel,
+    int? sourceVideoSize,
+    DateTime? sourceVideoModifiedAt,
+    DateTime? generatedAt,
+    DateTime? updatedAt,
+  }) => VideoSummary(
+    videoId: videoId ?? this.videoId,
+    transcriptText: transcriptText ?? this.transcriptText,
+    summaryJson: summaryJson ?? this.summaryJson,
+    transcriptModel: transcriptModel ?? this.transcriptModel,
+    summaryModel: summaryModel ?? this.summaryModel,
+    sourceVideoSize: sourceVideoSize ?? this.sourceVideoSize,
+    sourceVideoModifiedAt: sourceVideoModifiedAt ?? this.sourceVideoModifiedAt,
+    generatedAt: generatedAt ?? this.generatedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  VideoSummary copyWithCompanion(VideoSummariesCompanion data) {
+    return VideoSummary(
+      videoId: data.videoId.present ? data.videoId.value : this.videoId,
+      transcriptText: data.transcriptText.present
+          ? data.transcriptText.value
+          : this.transcriptText,
+      summaryJson: data.summaryJson.present
+          ? data.summaryJson.value
+          : this.summaryJson,
+      transcriptModel: data.transcriptModel.present
+          ? data.transcriptModel.value
+          : this.transcriptModel,
+      summaryModel: data.summaryModel.present
+          ? data.summaryModel.value
+          : this.summaryModel,
+      sourceVideoSize: data.sourceVideoSize.present
+          ? data.sourceVideoSize.value
+          : this.sourceVideoSize,
+      sourceVideoModifiedAt: data.sourceVideoModifiedAt.present
+          ? data.sourceVideoModifiedAt.value
+          : this.sourceVideoModifiedAt,
+      generatedAt: data.generatedAt.present
+          ? data.generatedAt.value
+          : this.generatedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VideoSummary(')
+          ..write('videoId: $videoId, ')
+          ..write('transcriptText: $transcriptText, ')
+          ..write('summaryJson: $summaryJson, ')
+          ..write('transcriptModel: $transcriptModel, ')
+          ..write('summaryModel: $summaryModel, ')
+          ..write('sourceVideoSize: $sourceVideoSize, ')
+          ..write('sourceVideoModifiedAt: $sourceVideoModifiedAt, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    videoId,
+    transcriptText,
+    summaryJson,
+    transcriptModel,
+    summaryModel,
+    sourceVideoSize,
+    sourceVideoModifiedAt,
+    generatedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VideoSummary &&
+          other.videoId == this.videoId &&
+          other.transcriptText == this.transcriptText &&
+          other.summaryJson == this.summaryJson &&
+          other.transcriptModel == this.transcriptModel &&
+          other.summaryModel == this.summaryModel &&
+          other.sourceVideoSize == this.sourceVideoSize &&
+          other.sourceVideoModifiedAt == this.sourceVideoModifiedAt &&
+          other.generatedAt == this.generatedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class VideoSummariesCompanion extends UpdateCompanion<VideoSummary> {
+  final Value<int> videoId;
+  final Value<String> transcriptText;
+  final Value<String> summaryJson;
+  final Value<String> transcriptModel;
+  final Value<String> summaryModel;
+  final Value<int> sourceVideoSize;
+  final Value<DateTime> sourceVideoModifiedAt;
+  final Value<DateTime> generatedAt;
+  final Value<DateTime> updatedAt;
+  const VideoSummariesCompanion({
+    this.videoId = const Value.absent(),
+    this.transcriptText = const Value.absent(),
+    this.summaryJson = const Value.absent(),
+    this.transcriptModel = const Value.absent(),
+    this.summaryModel = const Value.absent(),
+    this.sourceVideoSize = const Value.absent(),
+    this.sourceVideoModifiedAt = const Value.absent(),
+    this.generatedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  VideoSummariesCompanion.insert({
+    this.videoId = const Value.absent(),
+    required String transcriptText,
+    required String summaryJson,
+    required String transcriptModel,
+    required String summaryModel,
+    required int sourceVideoSize,
+    required DateTime sourceVideoModifiedAt,
+    this.generatedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : transcriptText = Value(transcriptText),
+       summaryJson = Value(summaryJson),
+       transcriptModel = Value(transcriptModel),
+       summaryModel = Value(summaryModel),
+       sourceVideoSize = Value(sourceVideoSize),
+       sourceVideoModifiedAt = Value(sourceVideoModifiedAt);
+  static Insertable<VideoSummary> custom({
+    Expression<int>? videoId,
+    Expression<String>? transcriptText,
+    Expression<String>? summaryJson,
+    Expression<String>? transcriptModel,
+    Expression<String>? summaryModel,
+    Expression<int>? sourceVideoSize,
+    Expression<DateTime>? sourceVideoModifiedAt,
+    Expression<DateTime>? generatedAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (videoId != null) 'video_id': videoId,
+      if (transcriptText != null) 'transcript_text': transcriptText,
+      if (summaryJson != null) 'summary_json': summaryJson,
+      if (transcriptModel != null) 'transcript_model': transcriptModel,
+      if (summaryModel != null) 'summary_model': summaryModel,
+      if (sourceVideoSize != null) 'source_video_size': sourceVideoSize,
+      if (sourceVideoModifiedAt != null)
+        'source_video_modified_at': sourceVideoModifiedAt,
+      if (generatedAt != null) 'generated_at': generatedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  VideoSummariesCompanion copyWith({
+    Value<int>? videoId,
+    Value<String>? transcriptText,
+    Value<String>? summaryJson,
+    Value<String>? transcriptModel,
+    Value<String>? summaryModel,
+    Value<int>? sourceVideoSize,
+    Value<DateTime>? sourceVideoModifiedAt,
+    Value<DateTime>? generatedAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return VideoSummariesCompanion(
+      videoId: videoId ?? this.videoId,
+      transcriptText: transcriptText ?? this.transcriptText,
+      summaryJson: summaryJson ?? this.summaryJson,
+      transcriptModel: transcriptModel ?? this.transcriptModel,
+      summaryModel: summaryModel ?? this.summaryModel,
+      sourceVideoSize: sourceVideoSize ?? this.sourceVideoSize,
+      sourceVideoModifiedAt:
+          sourceVideoModifiedAt ?? this.sourceVideoModifiedAt,
+      generatedAt: generatedAt ?? this.generatedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (videoId.present) {
+      map['video_id'] = Variable<int>(videoId.value);
+    }
+    if (transcriptText.present) {
+      map['transcript_text'] = Variable<String>(transcriptText.value);
+    }
+    if (summaryJson.present) {
+      map['summary_json'] = Variable<String>(summaryJson.value);
+    }
+    if (transcriptModel.present) {
+      map['transcript_model'] = Variable<String>(transcriptModel.value);
+    }
+    if (summaryModel.present) {
+      map['summary_model'] = Variable<String>(summaryModel.value);
+    }
+    if (sourceVideoSize.present) {
+      map['source_video_size'] = Variable<int>(sourceVideoSize.value);
+    }
+    if (sourceVideoModifiedAt.present) {
+      map['source_video_modified_at'] = Variable<DateTime>(
+        sourceVideoModifiedAt.value,
+      );
+    }
+    if (generatedAt.present) {
+      map['generated_at'] = Variable<DateTime>(generatedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VideoSummariesCompanion(')
+          ..write('videoId: $videoId, ')
+          ..write('transcriptText: $transcriptText, ')
+          ..write('summaryJson: $summaryJson, ')
+          ..write('transcriptModel: $transcriptModel, ')
+          ..write('summaryModel: $summaryModel, ')
+          ..write('sourceVideoSize: $sourceVideoSize, ')
+          ..write('sourceVideoModifiedAt: $sourceVideoModifiedAt, ')
+          ..write('generatedAt: $generatedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1942,9 +2606,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TagsTable tags = $TagsTable(this);
   late final $TagDefinitionsTable tagDefinitions = $TagDefinitionsTable(this);
   late final $VideoTagsTable videoTags = $VideoTagsTable(this);
+  late final $VideoSummariesTable videoSummaries = $VideoSummariesTable(this);
   late final VideosDao videosDao = VideosDao(this as AppDatabase);
   late final FoldersDao foldersDao = FoldersDao(this as AppDatabase);
   late final TagsDao tagsDao = TagsDao(this as AppDatabase);
+  late final VideoSummariesDao videoSummariesDao = VideoSummariesDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1955,6 +2623,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tags,
     tagDefinitions,
     videoTags,
+    videoSummaries,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1986,6 +2655,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ),
       result: [TableUpdate('video_tags', kind: UpdateKind.delete)],
     ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'videos',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('video_summaries', kind: UpdateKind.delete)],
+    ),
   ]);
 }
 
@@ -1994,6 +2670,7 @@ typedef $$FoldersTableCreateCompanionBuilder =
       Value<int> id,
       required String path,
       Value<String?> alias,
+      Value<String?> securityScopedBookmark,
       Value<DateTime> addedAt,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -2001,6 +2678,7 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<int> id,
       Value<String> path,
       Value<String?> alias,
+      Value<String?> securityScopedBookmark,
       Value<DateTime> addedAt,
     });
 
@@ -2049,6 +2727,11 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<String> get alias => $composableBuilder(
     column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get securityScopedBookmark => $composableBuilder(
+    column: $table.securityScopedBookmark,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2107,6 +2790,11 @@ class $$FoldersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get securityScopedBookmark => $composableBuilder(
+    column: $table.securityScopedBookmark,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2130,6 +2818,11 @@ class $$FoldersTableAnnotationComposer
 
   GeneratedColumn<String> get alias =>
       $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get securityScopedBookmark => $composableBuilder(
+    column: $table.securityScopedBookmark,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
@@ -2191,11 +2884,13 @@ class $$FoldersTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> path = const Value.absent(),
                 Value<String?> alias = const Value.absent(),
+                Value<String?> securityScopedBookmark = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
                 path: path,
                 alias: alias,
+                securityScopedBookmark: securityScopedBookmark,
                 addedAt: addedAt,
               ),
           createCompanionCallback:
@@ -2203,11 +2898,13 @@ class $$FoldersTableTableManager
                 Value<int> id = const Value.absent(),
                 required String path,
                 Value<String?> alias = const Value.absent(),
+                Value<String?> securityScopedBookmark = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
                 path: path,
                 alias: alias,
+                securityScopedBookmark: securityScopedBookmark,
                 addedAt: addedAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -2346,6 +3043,24 @@ final class $$VideosTableReferences
     ).filter((f) => f.videoId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_videoTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VideoSummariesTable, List<VideoSummary>>
+  _videoSummariesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.videoSummaries,
+    aliasName: $_aliasNameGenerator(db.videos.id, db.videoSummaries.videoId),
+  );
+
+  $$VideoSummariesTableProcessedTableManager get videoSummariesRefs {
+    final manager = $$VideoSummariesTableTableManager(
+      $_db,
+      $_db.videoSummaries,
+    ).filter((f) => f.videoId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_videoSummariesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -2490,6 +3205,31 @@ class $$VideosTableFilterComposer
           }) => $$VideoTagsTableFilterComposer(
             $db: $db,
             $table: $db.videoTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> videoSummariesRefs(
+    Expression<bool> Function($$VideoSummariesTableFilterComposer f) f,
+  ) {
+    final $$VideoSummariesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoSummaries,
+      getReferencedColumn: (t) => t.videoId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoSummariesTableFilterComposer(
+            $db: $db,
+            $table: $db.videoSummaries,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2732,6 +3472,31 @@ class $$VideosTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> videoSummariesRefs<T extends Object>(
+    Expression<T> Function($$VideoSummariesTableAnnotationComposer a) f,
+  ) {
+    final $$VideoSummariesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.videoSummaries,
+      getReferencedColumn: (t) => t.videoId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideoSummariesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.videoSummaries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$VideosTableTableManager
@@ -2751,6 +3516,7 @@ class $$VideosTableTableManager
             bool folderId,
             bool tagsRefs,
             bool videoTagsRefs,
+            bool videoSummariesRefs,
           })
         > {
   $$VideosTableTableManager(_$AppDatabase db, $VideosTable table)
@@ -2835,12 +3601,18 @@ class $$VideosTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({folderId = false, tagsRefs = false, videoTagsRefs = false}) {
+              ({
+                folderId = false,
+                tagsRefs = false,
+                videoTagsRefs = false,
+                videoSummariesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (tagsRefs) db.tags,
                     if (videoTagsRefs) db.videoTags,
+                    if (videoSummariesRefs) db.videoSummaries,
                   ],
                   addJoins:
                       <
@@ -2910,6 +3682,27 @@ class $$VideosTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (videoSummariesRefs)
+                        await $_getPrefetchedData<
+                          Video,
+                          $VideosTable,
+                          VideoSummary
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VideosTableReferences
+                              ._videoSummariesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VideosTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).videoSummariesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.videoId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -2930,7 +3723,12 @@ typedef $$VideosTableProcessedTableManager =
       $$VideosTableUpdateCompanionBuilder,
       (Video, $$VideosTableReferences),
       Video,
-      PrefetchHooks Function({bool folderId, bool tagsRefs, bool videoTagsRefs})
+      PrefetchHooks Function({
+        bool folderId,
+        bool tagsRefs,
+        bool videoTagsRefs,
+        bool videoSummariesRefs,
+      })
     >;
 typedef $$TagsTableCreateCompanionBuilder =
     TagsCompanion Function({
@@ -3852,6 +4650,415 @@ typedef $$VideoTagsTableProcessedTableManager =
       VideoTag,
       PrefetchHooks Function({bool videoId, bool tagId})
     >;
+typedef $$VideoSummariesTableCreateCompanionBuilder =
+    VideoSummariesCompanion Function({
+      Value<int> videoId,
+      required String transcriptText,
+      required String summaryJson,
+      required String transcriptModel,
+      required String summaryModel,
+      required int sourceVideoSize,
+      required DateTime sourceVideoModifiedAt,
+      Value<DateTime> generatedAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$VideoSummariesTableUpdateCompanionBuilder =
+    VideoSummariesCompanion Function({
+      Value<int> videoId,
+      Value<String> transcriptText,
+      Value<String> summaryJson,
+      Value<String> transcriptModel,
+      Value<String> summaryModel,
+      Value<int> sourceVideoSize,
+      Value<DateTime> sourceVideoModifiedAt,
+      Value<DateTime> generatedAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$VideoSummariesTableReferences
+    extends BaseReferences<_$AppDatabase, $VideoSummariesTable, VideoSummary> {
+  $$VideoSummariesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $VideosTable _videoIdTable(_$AppDatabase db) => db.videos.createAlias(
+    $_aliasNameGenerator(db.videoSummaries.videoId, db.videos.id),
+  );
+
+  $$VideosTableProcessedTableManager get videoId {
+    final $_column = $_itemColumn<int>('video_id')!;
+
+    final manager = $$VideosTableTableManager(
+      $_db,
+      $_db.videos,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_videoIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$VideoSummariesTableFilterComposer
+    extends Composer<_$AppDatabase, $VideoSummariesTable> {
+  $$VideoSummariesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get transcriptText => $composableBuilder(
+    column: $table.transcriptText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summaryJson => $composableBuilder(
+    column: $table.summaryJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transcriptModel => $composableBuilder(
+    column: $table.transcriptModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summaryModel => $composableBuilder(
+    column: $table.summaryModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceVideoSize => $composableBuilder(
+    column: $table.sourceVideoSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sourceVideoModifiedAt => $composableBuilder(
+    column: $table.sourceVideoModifiedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$VideosTableFilterComposer get videoId {
+    final $$VideosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableFilterComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoSummariesTableOrderingComposer
+    extends Composer<_$AppDatabase, $VideoSummariesTable> {
+  $$VideoSummariesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get transcriptText => $composableBuilder(
+    column: $table.transcriptText,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summaryJson => $composableBuilder(
+    column: $table.summaryJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transcriptModel => $composableBuilder(
+    column: $table.transcriptModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summaryModel => $composableBuilder(
+    column: $table.summaryModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceVideoSize => $composableBuilder(
+    column: $table.sourceVideoSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sourceVideoModifiedAt => $composableBuilder(
+    column: $table.sourceVideoModifiedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$VideosTableOrderingComposer get videoId {
+    final $$VideosTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableOrderingComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoSummariesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VideoSummariesTable> {
+  $$VideoSummariesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get transcriptText => $composableBuilder(
+    column: $table.transcriptText,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summaryJson => $composableBuilder(
+    column: $table.summaryJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get transcriptModel => $composableBuilder(
+    column: $table.transcriptModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summaryModel => $composableBuilder(
+    column: $table.summaryModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sourceVideoSize => $composableBuilder(
+    column: $table.sourceVideoSize,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get sourceVideoModifiedAt => $composableBuilder(
+    column: $table.sourceVideoModifiedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get generatedAt => $composableBuilder(
+    column: $table.generatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$VideosTableAnnotationComposer get videoId {
+    final $$VideosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.videoId,
+      referencedTable: $db.videos,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VideosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.videos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VideoSummariesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VideoSummariesTable,
+          VideoSummary,
+          $$VideoSummariesTableFilterComposer,
+          $$VideoSummariesTableOrderingComposer,
+          $$VideoSummariesTableAnnotationComposer,
+          $$VideoSummariesTableCreateCompanionBuilder,
+          $$VideoSummariesTableUpdateCompanionBuilder,
+          (VideoSummary, $$VideoSummariesTableReferences),
+          VideoSummary,
+          PrefetchHooks Function({bool videoId})
+        > {
+  $$VideoSummariesTableTableManager(
+    _$AppDatabase db,
+    $VideoSummariesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VideoSummariesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VideoSummariesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VideoSummariesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> videoId = const Value.absent(),
+                Value<String> transcriptText = const Value.absent(),
+                Value<String> summaryJson = const Value.absent(),
+                Value<String> transcriptModel = const Value.absent(),
+                Value<String> summaryModel = const Value.absent(),
+                Value<int> sourceVideoSize = const Value.absent(),
+                Value<DateTime> sourceVideoModifiedAt = const Value.absent(),
+                Value<DateTime> generatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => VideoSummariesCompanion(
+                videoId: videoId,
+                transcriptText: transcriptText,
+                summaryJson: summaryJson,
+                transcriptModel: transcriptModel,
+                summaryModel: summaryModel,
+                sourceVideoSize: sourceVideoSize,
+                sourceVideoModifiedAt: sourceVideoModifiedAt,
+                generatedAt: generatedAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> videoId = const Value.absent(),
+                required String transcriptText,
+                required String summaryJson,
+                required String transcriptModel,
+                required String summaryModel,
+                required int sourceVideoSize,
+                required DateTime sourceVideoModifiedAt,
+                Value<DateTime> generatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => VideoSummariesCompanion.insert(
+                videoId: videoId,
+                transcriptText: transcriptText,
+                summaryJson: summaryJson,
+                transcriptModel: transcriptModel,
+                summaryModel: summaryModel,
+                sourceVideoSize: sourceVideoSize,
+                sourceVideoModifiedAt: sourceVideoModifiedAt,
+                generatedAt: generatedAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VideoSummariesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({videoId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (videoId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.videoId,
+                                referencedTable: $$VideoSummariesTableReferences
+                                    ._videoIdTable(db),
+                                referencedColumn:
+                                    $$VideoSummariesTableReferences
+                                        ._videoIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$VideoSummariesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VideoSummariesTable,
+      VideoSummary,
+      $$VideoSummariesTableFilterComposer,
+      $$VideoSummariesTableOrderingComposer,
+      $$VideoSummariesTableAnnotationComposer,
+      $$VideoSummariesTableCreateCompanionBuilder,
+      $$VideoSummariesTableUpdateCompanionBuilder,
+      (VideoSummary, $$VideoSummariesTableReferences),
+      VideoSummary,
+      PrefetchHooks Function({bool videoId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3865,6 +5072,8 @@ class $AppDatabaseManager {
       $$TagDefinitionsTableTableManager(_db, _db.tagDefinitions);
   $$VideoTagsTableTableManager get videoTags =>
       $$VideoTagsTableTableManager(_db, _db.videoTags);
+  $$VideoSummariesTableTableManager get videoSummaries =>
+      $$VideoSummariesTableTableManager(_db, _db.videoSummaries);
 }
 
 mixin _$VideosDaoMixin on DatabaseAccessor<AppDatabase> {
@@ -3881,4 +5090,9 @@ mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
   $VideoTagsTable get videoTags => attachedDatabase.videoTags;
+}
+mixin _$VideoSummariesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $FoldersTable get folders => attachedDatabase.folders;
+  $VideosTable get videos => attachedDatabase.videos;
+  $VideoSummariesTable get videoSummaries => attachedDatabase.videoSummaries;
 }
