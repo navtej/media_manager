@@ -14,6 +14,7 @@ enum SortDirection { asc, desc }
 @DriftDatabase(tables: [Folders, Videos, Tags, TagDefinitions, VideoTags], daos: [VideosDao, FoldersDao, TagsDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
+  AppDatabase.forTesting(super.executor);
 
   @override
   int get schemaVersion => 6;
@@ -204,6 +205,18 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
 
   Future<void> deleteVideosByIds(List<int> ids) {
     return (delete(videos)..where((t) => t.id.isIn(ids))).go();
+  }
+
+  Future<int> deleteAppleDoubleSidecarVideos() async {
+    final sidecars = await customSelect(
+      "SELECT id FROM videos WHERE absolute_path LIKE '%/._%'",
+      readsFrom: {videos},
+    ).map((row) => row.read<int>('id')).get();
+    if (sidecars.isEmpty) {
+      return 0;
+    }
+    await deleteVideosByIds(sidecars);
+    return sidecars.length;
   }
 
   Future<void> updateVideosOfflineStatusBatch(List<int> ids, bool isOffline) {

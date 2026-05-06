@@ -89,7 +89,11 @@ class LibraryController extends _$LibraryController {
       final videoDao = ref.read(videosDaoProvider);
       final tagDao = ref.read(tagsDaoProvider);
       final db = ref.read(databaseProvider);
-      
+      final deletedSidecars = await videoDao.deleteAppleDoubleSidecarVideos();
+      if (deletedSidecars > 0) {
+        print('DEBUG: Removed $deletedSidecars AppleDouble sidecar rows');
+      }
+
       final folders = await folderDao.getAllFolders();
       print('DEBUG: syncAll found ${folders.length} folders');
       

@@ -6,7 +6,29 @@ import 'package:path/path.dart' as p;
 
 class ScannerService {
   // Common video extensions
-  static const Set<String> _videoExtensions = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v'};
+  static const Set<String> _videoExtensions = {
+    '.mp4',
+    '.mkv',
+    '.mov',
+    '.avi',
+    '.webm',
+    '.m4v',
+  };
+  static const Set<String> _ignoredExtensions = {'.part', '.ytdl'};
+
+  static bool isCandidateVideoPath(String path) {
+    final basename = p.basename(path);
+    if (basename.startsWith('._')) {
+      return false;
+    }
+
+    final extension = p.extension(path).toLowerCase();
+    if (_ignoredExtensions.contains(extension)) {
+      return false;
+    }
+
+    return _videoExtensions.contains(extension);
+  }
 
   /// Scans folders and returns a stream of file path batches.
   /// Using batches reduces Isolate communication overhead.
@@ -15,22 +37,22 @@ class ScannerService {
     final controller = StreamController<List<String>>();
 
     // Spawn the isolate
-    Isolate.spawn< _ScannerMessage>(
+    Isolate.spawn<_ScannerMessage>(
       _scannerEntryPoint,
       _ScannerMessage(rootPaths, receivePort.sendPort),
     ).then((isolate) {
-        // Handle stream from isolate
-        receivePort.listen((message) {
-          if (message == 'DONE') {
-            controller.close();
-            receivePort.close();
-            isolate.kill();
-          } else if (message is List<String>) {
-            controller.add(message);
-          } else if (message is String && message.startsWith('ERROR')) {
-            controller.addError(message);
-          }
-        });
+      // Handle stream from isolate
+      receivePort.listen((message) {
+        if (message == 'DONE') {
+          controller.close();
+          receivePort.close();
+          isolate.kill();
+        } else if (message is List<String>) {
+          controller.add(message);
+        } else if (message is String && message.startsWith('ERROR')) {
+          controller.addError(message);
+        }
+      });
     });
 
     return controller.stream;
@@ -40,7 +62,6 @@ class ScannerService {
     // Forward to async scanner
     _asyncScanner(message);
   }
-
 
   static Future<void> _asyncScanner(_ScannerMessage message) async {
     final sendPort = message.sendPort;
@@ -60,17 +81,19 @@ class ScannerService {
         if (!await dir.exists()) continue;
 
         try {
-          // Use non-recursive stream if we want to control recursion, but recursive list() is fine 
+          // Use non-recursive stream if we want to control recursion, but recursive list() is fine
           // as long as we process the stream.
-          await for (final entity in dir.list(recursive: true, followLinks: false)) {
+          await for (final entity in dir.list(
+            recursive: true,
+            followLinks: false,
+          )) {
             if (entity is File) {
-               final ext = p.extension(entity.path).toLowerCase();
-               if (_videoExtensions.contains(ext)) {
-                 buffer.add(entity.path);
-                 if (buffer.length >= batchSize) {
-                   flush();
-                 }
-               }
+              if (isCandidateVideoPath(entity.path)) {
+                buffer.add(entity.path);
+                if (buffer.length >= batchSize) {
+                  flush();
+                }
+              }
             }
           }
         } catch (e) {
