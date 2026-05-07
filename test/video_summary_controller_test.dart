@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
@@ -27,11 +28,11 @@ void main() {
       await fixture.generate();
 
       final state = fixture.container.read(
-        videoSummaryControllerProvider(fixture.video.id),
+        videoSummaryTaskProvider(fixture.video.id),
       );
-      expect(state.hasError, isTrue);
+      expect(state?.phase, VideoSummaryTaskPhase.failed);
       expect(
-        state.error.toString(),
+        state?.error.toString(),
         contains(
           'Folder access needs repair. Reselect this folder in Settings.',
         ),
@@ -50,12 +51,14 @@ void main() {
       await fixture.generate();
 
       final state = fixture.container.read(
-        videoSummaryControllerProvider(fixture.video.id),
+        videoSummaryTaskProvider(fixture.video.id),
       );
-      expect(state.hasError, isFalse);
+      expect(state?.phase, VideoSummaryTaskPhase.completed);
       expect(fixture.events, [
         'start:${fixture.root.path}',
         'extract:${fixture.video.absolutePath}',
+        'transcribe',
+        'summarize',
         'stop:${fixture.root.path}',
       ]);
 
@@ -66,6 +69,221 @@ void main() {
       expect(summary!.transcriptText, 'transcript');
     },
   );
+
+  test('publishes footer status while summary generation is running', () async {
+    final transcriptCompleter = Completer<String>();
+    final fixture = await _SummaryControllerFixture.create(
+      transcriptCompleter: transcriptCompleter,
+    );
+    addTearDown(fixture.dispose);
+
+    final generation = fixture.generate();
+    await fixture.waitForEvent('transcribe');
+
+    expect(
+      fixture.container.read(videoSummaryStatusProvider),
+      'Generating summary: video - Transcribing audio',
+    );
+
+    transcriptCompleter.complete('transcript');
+    await generation;
+
+    expect(fixture.container.read(videoSummaryStatusProvider), '');
+  });
+
+  test(
+    'uses sibling VTT transcript before extracting audio when preference is enabled',
+    () async {
+      final fixture = await _SummaryControllerFixture.create();
+      addTearDown(fixture.dispose);
+      await File(p.join(fixture.root.path, 'video.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+First subtitle line.
+
+00:00:02.000 --> 00:00:04.000
+Second subtitle line.
+''');
+
+      await fixture.generate();
+
+      expect(fixture.events, [
+        'start:${fixture.root.path}',
+        'summarize',
+        'stop:${fixture.root.path}',
+      ]);
+      expect(fixture.mediaService.extractedPaths, isEmpty);
+      expect(
+        fixture.naturalLanguageService.lastTranscript,
+        contains('First subtitle line.'),
+      );
+      expect(
+        fixture.naturalLanguageService.lastTranscript,
+        contains('Second subtitle line.'),
+      );
+
+      final summary = await fixture.db.videoSummariesDao.getSummaryForVideo(
+        fixture.video.id,
+      );
+      expect(summary, isNotNull);
+      expect(summary!.transcriptText, contains('First subtitle line.'));
+      expect(summary.transcriptModel, startsWith('vtt:'));
+    },
+  );
+
+  test(
+    'uses localized sibling VTT transcript when default VTT is absent',
+    () async {
+      final fixture = await _SummaryControllerFixture.create();
+      addTearDown(fixture.dispose);
+      await File(p.join(fixture.root.path, 'video.en.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Localized subtitle line.
+''');
+
+      await fixture.generate();
+
+      expect(fixture.mediaService.extractedPaths, isEmpty);
+      expect(
+        fixture.naturalLanguageService.lastTranscript,
+        contains('Localized subtitle line.'),
+      );
+    },
+  );
+
+  test('prefers default VTT over localized VTT', () async {
+    final fixture = await _SummaryControllerFixture.create();
+    addTearDown(fixture.dispose);
+    await File(p.join(fixture.root.path, 'video.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Default subtitle line.
+''');
+    await File(p.join(fixture.root.path, 'video.en.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Localized subtitle line.
+''');
+
+    await fixture.generate();
+
+    expect(
+      fixture.naturalLanguageService.lastTranscript,
+      contains('Default subtitle line.'),
+    );
+    expect(
+      fixture.naturalLanguageService.lastTranscript,
+      isNot(contains('Localized subtitle line.')),
+    );
+  });
+
+  test(
+    'does not require a whisper model when a VTT transcript is available',
+    () async {
+      final fixture = await _SummaryControllerFixture.create(
+        modelValidation: const SummaryModelValidationResult.invalid(
+          'Not configured',
+        ),
+      );
+      addTearDown(fixture.dispose);
+      await File(p.join(fixture.root.path, 'video.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Subtitle transcript can be summarized directly.
+''');
+
+      await fixture.generate();
+
+      final state = fixture.container.read(
+        videoSummaryTaskProvider(fixture.video.id),
+      );
+      expect(state?.phase, VideoSummaryTaskPhase.completed);
+      expect(fixture.mediaService.extractedPaths, isEmpty);
+      expect(fixture.events, [
+        'start:${fixture.root.path}',
+        'summarize',
+        'stop:${fixture.root.path}',
+      ]);
+    },
+  );
+
+  test(
+    'requires a whisper model when no VTT transcript is available',
+    () async {
+      final fixture = await _SummaryControllerFixture.create(
+        modelValidation: const SummaryModelValidationResult.invalid(
+          'Not configured',
+        ),
+      );
+      addTearDown(fixture.dispose);
+
+      await fixture.generate();
+
+      final state = fixture.container.read(
+        videoSummaryTaskProvider(fixture.video.id),
+      );
+      expect(state?.phase, VideoSummaryTaskPhase.failed);
+      expect(
+        state?.error.toString(),
+        contains('Summary model is not ready: Not configured.'),
+      );
+      expect(fixture.mediaService.extractedPaths, isEmpty);
+    },
+  );
+
+  test(
+    'falls back to audio extraction when VTT preference is disabled',
+    () async {
+      final fixture = await _SummaryControllerFixture.create(
+        preferVttSubtitles: false,
+      );
+      addTearDown(fixture.dispose);
+      await File(p.join(fixture.root.path, 'video.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Subtitle should be ignored.
+''');
+
+      await fixture.generate();
+
+      expect(fixture.events, [
+        'start:${fixture.root.path}',
+        'extract:${fixture.video.absolutePath}',
+        'transcribe',
+        'summarize',
+        'stop:${fixture.root.path}',
+      ]);
+      expect(fixture.naturalLanguageService.lastTranscript, 'transcript');
+    },
+  );
+
+  test('can override disabled VTT preference for one generation', () async {
+    final fixture = await _SummaryControllerFixture.create(
+      preferVttSubtitles: false,
+    );
+    addTearDown(fixture.dispose);
+    await File(p.join(fixture.root.path, 'video.vtt')).writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Override subtitle should be used.
+''');
+
+    await fixture.generate(preferVttSubtitlesOverride: true);
+
+    expect(fixture.mediaService.extractedPaths, isEmpty);
+    expect(
+      fixture.naturalLanguageService.lastTranscript,
+      contains('Override subtitle should be used.'),
+    );
+  });
 }
 
 class _SummaryControllerFixture {
@@ -76,6 +294,7 @@ class _SummaryControllerFixture {
     required this.video,
     required this.folderAccessService,
     required this.mediaService,
+    required this.naturalLanguageService,
     required this.audioFile,
     required this.events,
   });
@@ -86,11 +305,16 @@ class _SummaryControllerFixture {
   final Video video;
   final _FakeFolderAccessService folderAccessService;
   final _FakeMediaService mediaService;
+  final _FakeNaturalLanguageService naturalLanguageService;
   final File audioFile;
   final List<String> events;
 
   static Future<_SummaryControllerFixture> create({
     bool canAccessFolder = true,
+    Completer<String>? transcriptCompleter,
+    bool preferVttSubtitles = true,
+    SummaryModelValidationResult modelValidation =
+        const SummaryModelValidationResult.valid('Ready'),
   }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
 
@@ -132,20 +356,27 @@ class _SummaryControllerFixture {
       audioPath: audioFile.path,
       events: events,
     );
+    final naturalLanguageService = _FakeNaturalLanguageService(
+      events: events,
+      transcriptCompleter: transcriptCompleter,
+    );
 
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         settingsProvider.overrideWith(
-          () => _FakeSettings(modelPath: modelFile.path),
+          () => _FakeSettings(
+            modelPath: modelFile.path,
+            preferVttSubtitles: preferVttSubtitles,
+          ),
         ),
         summaryModelValidationProvider.overrideWith(
-          (_) async => const SummaryModelValidationResult.valid('Ready'),
+          (_) async => modelValidation,
         ),
         folderAccessServiceProvider.overrideWithValue(folderAccessService),
         mediaServiceProvider.overrideWithValue(mediaService),
         naturalLanguageServiceProvider.overrideWithValue(
-          _FakeNaturalLanguageService(),
+          naturalLanguageService,
         ),
       ],
     );
@@ -157,15 +388,29 @@ class _SummaryControllerFixture {
       video: video,
       folderAccessService: folderAccessService,
       mediaService: mediaService,
+      naturalLanguageService: naturalLanguageService,
       audioFile: audioFile,
       events: events,
     );
   }
 
-  Future<void> generate() {
+  Future<void> generate({bool? preferVttSubtitlesOverride}) {
     return container
-        .read(videoSummaryControllerProvider(video.id).notifier)
-        .generate(video);
+        .read(videoSummaryTasksProvider.notifier)
+        .generate(
+          video,
+          preferVttSubtitlesOverride: preferVttSubtitlesOverride,
+        );
+  }
+
+  Future<void> waitForEvent(String event) async {
+    for (var i = 0; i < 100; i++) {
+      if (events.contains(event)) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    throw StateError('Timed out waiting for $event');
   }
 
   Future<void> dispose() async {
@@ -178,13 +423,17 @@ class _SummaryControllerFixture {
 }
 
 class _FakeSettings extends Settings {
-  _FakeSettings({required this.modelPath});
+  _FakeSettings({required this.modelPath, required this.preferVttSubtitles});
 
   final String modelPath;
+  final bool preferVttSubtitles;
 
   @override
   Future<Map<String, dynamic>> build() async {
-    return <String, dynamic>{'summaryModelPath': modelPath};
+    return <String, dynamic>{
+      'summaryModelPath': modelPath,
+      'summaryPreferVttSubtitles': preferVttSubtitles,
+    };
   }
 }
 
@@ -199,7 +448,7 @@ class _FakeFolderAccessService extends FolderAccessService {
     required String path,
     required String? bookmark,
   }) async {
-    this.events.add('start:$path');
+    events.add('start:$path');
     return FolderAccessSession(
       path: path,
       canAccess: canAccess,
@@ -235,12 +484,21 @@ class _FakeMediaService extends MediaService {
 }
 
 class _FakeNaturalLanguageService extends NaturalLanguageService {
+  _FakeNaturalLanguageService({required this.events, this.transcriptCompleter});
+
+  final List<String> events;
+  final Completer<String>? transcriptCompleter;
+  String? lastTranscript;
+
   @override
   Future<String> transcribeAudio({
     required String audioPath,
     required String modelPath,
   }) async {
-    return 'transcript';
+    events.add('transcribe');
+    return transcriptCompleter == null
+        ? 'transcript'
+        : await transcriptCompleter!.future;
   }
 
   @override
@@ -249,6 +507,8 @@ class _FakeNaturalLanguageService extends NaturalLanguageService {
     required String metadataJson,
     required String transcript,
   }) async {
+    events.add('summarize');
+    lastTranscript = transcript;
     return StructuredVideoSummary(
       synopsis: 'synopsis',
       highlights: const ['highlight'],

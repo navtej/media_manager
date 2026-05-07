@@ -239,6 +239,20 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   Widget _buildActions(WidgetRef ref) {
+    final summaryRecord = ref
+        .watch(videoSummaryRecordProvider(widget.video.id))
+        .asData
+        ?.value;
+    final settings = ref.watch(settingsProvider);
+    final configuredModel = transcriptModelNameFromPath(
+      settings.value?['summaryModelPath']?.toString() ?? '',
+    );
+    final hasFreshSummary = _hasFreshSummary(
+      video: widget.video,
+      record: summaryRecord,
+      transcriptModel: configuredModel,
+    );
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -280,7 +294,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
           message: 'Video summary',
           child: MacosIconButton(
             padding: EdgeInsets.zero,
-            icon: const Icon(CupertinoIcons.doc_text, size: 16),
+            icon: Icon(
+              CupertinoIcons.doc_text,
+              color: hasFreshSummary ? MacosColors.systemGreenColor : null,
+              size: 16,
+            ),
             onPressed: () => _showSummaryDialog(context, widget.video),
           ),
         ),
@@ -395,121 +413,202 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   void _showSummaryDialog(BuildContext context, Video video) {
+    bool? useVttForThisSummary;
     showMacosAlertDialog(
       context: context,
-      builder: (_) => Consumer(
-        builder: (context, ref, _) {
-          final summaryRecord = ref.watch(videoSummaryRecordProvider(video.id));
-          final controllerState = ref.watch(
-            videoSummaryControllerProvider(video.id),
-          );
-          final modelValidation = ref.watch(summaryModelValidationProvider);
-          final settings = ref.watch(settingsProvider);
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => Consumer(
+          builder: (context, ref, _) {
+            final summaryRecord = ref.watch(
+              videoSummaryRecordProvider(video.id),
+            );
+            final taskState = ref.watch(videoSummaryTaskProvider(video.id));
+            final subtitleAvailability = ref.watch(
+              videoSummarySubtitleAvailabilityProvider(video),
+            );
+            final modelValidation = ref.watch(summaryModelValidationProvider);
+            final settings = ref.watch(settingsProvider);
 
-          final record = summaryRecord.asData?.value;
-          final summary = _parseStructuredSummary(record?.summaryJson);
-          final configuredModel = transcriptModelNameFromPath(
-            settings.value?['summaryModelPath']?.toString() ?? '',
-          );
+            final record = summaryRecord.asData?.value;
+            final summary = _parseStructuredSummary(record?.summaryJson);
+            final configuredModel = transcriptModelNameFromPath(
+              settings.value?['summaryModelPath']?.toString() ?? '',
+            );
+            final summaryPreferVttSubtitles =
+                settings.value?['summaryPreferVttSubtitles'] as bool? ?? true;
 
-          final isStale =
-              record != null &&
-              video.fileCreatedAt != null &&
-              !VideoSummaryFreshnessKey(
-                sourceVideoSize: record.sourceVideoSize,
-                sourceVideoModifiedAt: record.sourceVideoModifiedAt,
-                transcriptModel: record.transcriptModel,
-              ).matches(
-                fileSize: video.size,
-                fileModifiedAt: video.fileCreatedAt!,
-                transcriptModel: configuredModel,
-              );
+            final isStale =
+                record != null &&
+                video.fileCreatedAt != null &&
+                !_isFreshSummaryRecord(
+                  video: video,
+                  record: record,
+                  transcriptModel: configuredModel,
+                );
 
-          final actionLabel = record == null || isStale
-              ? 'Generate'
-              : 'Regenerate';
-          final errorText = controllerState.hasError
-              ? controllerState.error.toString()
-              : null;
+            final actionLabel = record == null || isStale
+                ? 'Generate'
+                : 'Regenerate';
+            final isGenerating = taskState?.isRunning == true;
+            final errorText = taskState?.phase == VideoSummaryTaskPhase.failed
+                ? taskState?.error.toString()
+                : null;
+            final vttAvailable =
+                subtitleAvailability.asData?.value.isFound == true;
+            useVttForThisSummary ??= summaryPreferVttSubtitles;
+            final effectiveUseVtt =
+                vttAvailable && (useVttForThisSummary ?? true);
 
-          return MacosAlertDialog(
-            appIcon: const MacosIcon(CupertinoIcons.doc_text),
-            title: Text(
-              'Summary: ${video.title}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            message: SizedBox(
-              width: 440,
-              height: 300,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  modelValidation.when(
-                    data: (result) => Text(
-                      'Model: ${result.status}'
-                      '${configuredModel.isNotEmpty ? ' ($configuredModel)' : ''}',
-                      style: MacosTheme.of(context).typography.caption1,
+            return MacosAlertDialog(
+              appIcon: const MacosIcon(CupertinoIcons.doc_text),
+              title: Text(
+                'Summary: ${video.title}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              message: SizedBox(
+                width: 440,
+                height: 300,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    modelValidation.when(
+                      data: (result) => Text(
+                        'Model: ${result.status}'
+                        '${configuredModel.isNotEmpty ? ' ($configuredModel)' : ''}',
+                        style: MacosTheme.of(context).typography.caption1,
+                      ),
+                      loading: () => const Text('Model: Checking...'),
+                      error: (error, _) => Text('Model: $error'),
                     ),
-                    loading: () => const Text('Model: Checking...'),
-                    error: (error, _) => Text('Model: $error'),
-                  ),
-                  const SizedBox(height: 8),
-                  if (controllerState.isLoading) ...[
-                    const ProgressCircle(),
                     const SizedBox(height: 8),
-                    const Text('Generating summary...'),
-                    const SizedBox(height: 12),
-                  ],
-                  if (isStale) ...[
-                    const Text(
-                      'Stored summary is stale and should be regenerated.',
+                    subtitleAvailability.when(
+                      data: (availability) {
+                        if (!availability.isFound) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return _SummarySubtitleSourceOption(
+                          fileName: availability.fileName,
+                          useVtt: effectiveUseVtt,
+                          onChanged: isGenerating
+                              ? null
+                              : (value) {
+                                  setDialogState(() {
+                                    useVttForThisSummary = value;
+                                  });
+                                },
+                        );
+                      },
+                      loading: () =>
+                          const Text('Subtitles: checking for .vtt file...'),
+                      error: (_, _) => const SizedBox.shrink(),
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (errorText != null) ...[
-                    Text(
-                      errorText,
-                      style: const TextStyle(color: MacosColors.appleRed),
+                    if (vttAvailable) const SizedBox(height: 8),
+                    if (isGenerating) ...[
+                      const ProgressCircle(),
+                      const SizedBox(height: 8),
+                      Text(taskState?.statusText ?? 'Generating summary...'),
+                      const SizedBox(height: 12),
+                    ],
+                    if (isStale) ...[
+                      const Text(
+                        'Stored summary is stale and should be regenerated.',
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (errorText != null) ...[
+                      SummaryErrorPanel(errorText: errorText),
+                      const SizedBox(height: 12),
+                    ],
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: summary == null
+                            ? const Text(
+                                'No summary has been generated for this video.',
+                              )
+                            : _SummaryContent(summary: summary),
+                      ),
                     ),
-                    const SizedBox(height: 12),
                   ],
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: summary == null
-                          ? const Text(
-                              'No summary has been generated for this video.',
-                            )
-                          : _SummaryContent(summary: summary),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-            primaryButton: PushButton(
-              controlSize: ControlSize.large,
-              onPressed: controllerState.isLoading
-                  ? null
-                  : () {
-                      ref
-                          .read(
-                            videoSummaryControllerProvider(video.id).notifier,
-                          )
-                          .generate(video, forceRefresh: record != null);
-                    },
-              child: Text(
-                controllerState.isLoading ? 'Working...' : actionLabel,
+              primaryButton: PushButton(
+                controlSize: ControlSize.large,
+                onPressed: isGenerating
+                    ? null
+                    : () {
+                        Navigator.of(context).pop();
+                        Future<void>.microtask(() {
+                          ref
+                              .read(videoSummaryTasksProvider.notifier)
+                              .generate(
+                                video,
+                                forceRefresh: record != null,
+                                preferVttSubtitlesOverride: vttAvailable
+                                    ? effectiveUseVtt
+                                    : null,
+                              );
+                        });
+                      },
+                child: Text(isGenerating ? 'Working...' : actionLabel),
               ),
-            ),
-            secondaryButton: PushButton(
-              controlSize: ControlSize.large,
-              secondary: true,
-              child: const Text('Close'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          );
-        },
+              secondaryButton: PushButton(
+                controlSize: ControlSize.large,
+                secondary: true,
+                child: const Text('Close'),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  bool _hasFreshSummary({
+    required Video video,
+    required VideoSummary? record,
+    required String transcriptModel,
+  }) {
+    if (record == null) {
+      return false;
+    }
+
+    final modifiedAt = video.fileCreatedAt;
+    if (modifiedAt == null) {
+      return true;
+    }
+
+    return _isFreshSummaryRecord(
+      video: video,
+      record: record,
+      transcriptModel: transcriptModel,
+    );
+  }
+
+  bool _isFreshSummaryRecord({
+    required Video video,
+    required VideoSummary record,
+    required String transcriptModel,
+  }) {
+    final modifiedAt = video.fileCreatedAt;
+    if (modifiedAt == null) {
+      return true;
+    }
+
+    final expectedTranscriptModel = record.transcriptModel.startsWith('vtt:')
+        ? record.transcriptModel
+        : transcriptModel;
+
+    return VideoSummaryFreshnessKey(
+      sourceVideoSize: record.sourceVideoSize,
+      sourceVideoModifiedAt: record.sourceVideoModifiedAt,
+      transcriptModel: record.transcriptModel,
+    ).matches(
+      fileSize: video.size,
+      fileModifiedAt: modifiedAt,
+      transcriptModel: expectedTranscriptModel,
     );
   }
 
@@ -595,6 +694,164 @@ class _SummaryContent extends StatelessWidget {
               .toList(),
         ),
       ],
+    );
+  }
+}
+
+class _SummarySubtitleSourceOption extends StatelessWidget {
+  const _SummarySubtitleSourceOption({
+    required this.fileName,
+    required this.useVtt,
+    required this.onChanged,
+  });
+
+  final String fileName;
+  final bool useVtt;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = useVtt
+        ? '$fileName found. VTT transcript will be used.'
+        : '$fileName found. Audio transcription will be used.';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _InlineMacosCheckbox(value: useVtt, onChanged: onChanged),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            status,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: MacosTheme.of(context).typography.caption1,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineMacosCheckbox extends StatelessWidget {
+  const _InlineMacosCheckbox({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    return Semantics(
+      checked: value,
+      button: true,
+      child: GestureDetector(
+        onTap: onChanged == null ? null : () => onChanged!(!value),
+        child: Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: value ? theme.primaryColor : MacosColors.transparent,
+            border: Border.all(
+              color: value
+                  ? theme.primaryColor
+                  : MacosColors.systemGrayColor.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+          ),
+          child: value
+              ? const MacosIcon(
+                  CupertinoIcons.checkmark,
+                  size: 12,
+                  color: MacosColors.white,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+class SummaryErrorPanel extends StatelessWidget {
+  const SummaryErrorPanel({super.key, required this.errorText});
+
+  final String errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: MacosColors.appleRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: MacosColors.appleRed.withValues(alpha: 0.25)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              color: MacosColors.appleRed,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Summary generation failed.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: MacosColors.appleRed),
+              ),
+            ),
+            const SizedBox(width: 8),
+            PushButton(
+              controlSize: ControlSize.small,
+              secondary: true,
+              onPressed: () => _showSummaryErrorDetails(context, errorText),
+              child: const Text('View Details'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSummaryErrorDetails(BuildContext context, String errorText) {
+    showMacosAlertDialog(
+      context: context,
+      builder: (context) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.exclamationmark_triangle),
+        title: const Text('Summary Error Details'),
+        message: SizedBox(
+          width: 520,
+          height: 260,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: MacosTheme.of(context).canvasColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: MacosTheme.of(context).dividerColor),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: SingleChildScrollView(child: SelectableText(errorText)),
+            ),
+          ),
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: errorText));
+          },
+          child: const Text('Copy Error'),
+        ),
+        secondaryButton: PushButton(
+          controlSize: ControlSize.large,
+          secondary: true,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ),
     );
   }
 }
