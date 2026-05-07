@@ -43,6 +43,8 @@ class Settings extends _$Settings {
         'summaryManagedModelDirectoryPath',
       ),
       'summaryDownloadedManagedModels': downloadedManagedModels,
+      'summaryPreferVttSubtitles':
+          prefs.getBool('summaryPreferVttSubtitles') ?? true,
     };
   }
 
@@ -216,6 +218,17 @@ class Settings extends _$Settings {
 
     final currentData = state.value ?? {};
     state = AsyncValue.data({...currentData, 'summaryModelPath': ''});
+  }
+
+  Future<void> updateSummaryPreferVttSubtitles(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('summaryPreferVttSubtitles', value);
+
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({
+      ...currentData,
+      'summaryPreferVttSubtitles': value,
+    });
   }
 }
 

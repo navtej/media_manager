@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:macos_ui/macos_ui.dart';
@@ -17,9 +18,11 @@ class SummaryModelSettingsPanel extends StatelessWidget {
     required this.catalogState,
     required this.downloadState,
     required this.canDeleteManagedModel,
+    required this.preferVttSubtitles,
     required this.statusMessage,
     required this.onSourceModeChanged,
     required this.onSelectedModelChanged,
+    required this.onPreferVttSubtitlesChanged,
     required this.onDownloadPressed,
     required this.onStopDownloadPressed,
     required this.onDeletePressed,
@@ -38,9 +41,11 @@ class SummaryModelSettingsPanel extends StatelessWidget {
   final WhisperModelCatalogState catalogState;
   final ModelDownloadState downloadState;
   final bool canDeleteManagedModel;
+  final bool preferVttSubtitles;
   final String? statusMessage;
   final ValueChanged<SummaryModelSourceMode> onSourceModeChanged;
   final ValueChanged<String?> onSelectedModelChanged;
+  final ValueChanged<bool> onPreferVttSubtitlesChanged;
   final VoidCallback onDownloadPressed;
   final VoidCallback onStopDownloadPressed;
   final VoidCallback onDeletePressed;
@@ -153,6 +158,20 @@ class SummaryModelSettingsPanel extends StatelessWidget {
                   modelPath.isEmpty ? 'Not configured' : modelPath,
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(width: 200, child: Text('Subtitle Transcript')),
+              _MacosPreferenceCheckbox(
+                key: const ValueKey('prefer-vtt-subtitles-checkbox'),
+                value: preferVttSubtitles,
+                onChanged: onPreferVttSubtitlesChanged,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Use .vtt subtitles when available')),
             ],
           ),
           const SizedBox(height: 20),
@@ -333,6 +352,50 @@ class SummaryModelSettingsPanel extends StatelessWidget {
   }
 }
 
+class _MacosPreferenceCheckbox extends StatelessWidget {
+  const _MacosPreferenceCheckbox({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    return Semantics(
+      checked: value,
+      button: true,
+      child: GestureDetector(
+        onTap: () => onChanged(!value),
+        child: Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: value ? theme.primaryColor : MacosColors.transparent,
+            border: Border.all(
+              color: value
+                  ? theme.primaryColor
+                  : MacosColors.systemGrayColor.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+          ),
+          child: value
+              ? const MacosIcon(
+                  CupertinoIcons.checkmark,
+                  size: 12,
+                  color: MacosColors.white,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
 class _LocalSelectedModelPathField extends StatelessWidget {
   const _LocalSelectedModelPathField({required this.modelPath});
 
@@ -442,9 +505,7 @@ class _KeyboardNavigableModelPickerState
             .map(
               (entry) => MacosPopupMenuItem(
                 value: entry.id,
-                child: Text(
-                  '${entry.displayName} (${entry.diskSizeLabel})',
-                ),
+                child: Text('${entry.displayName} (${entry.diskSizeLabel})'),
               ),
             )
             .toList(),
@@ -510,7 +571,9 @@ class _SelectionPillButton extends StatelessWidget {
               : MacosColors.systemGrayColor);
     final backgroundColor = isSelected
         ? MacosColors.systemBlueColor.withValues(alpha: 0.12)
-        : MacosColors.systemGrayColor.withValues(alpha: isEnabled ? 0.12 : 0.08);
+        : MacosColors.systemGrayColor.withValues(
+            alpha: isEnabled ? 0.12 : 0.08,
+          );
 
     return Semantics(
       button: true,

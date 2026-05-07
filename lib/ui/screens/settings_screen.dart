@@ -348,6 +348,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               (key, value) => MapEntry(key.toString(), value.toString()),
             ) ??
         <String, String>{};
+    final preferVttSubtitles =
+        settingsAsync.value?['summaryPreferVttSubtitles'] as bool? ?? true;
     final validationAsync = ref.watch(summaryModelValidationProvider);
     final runtimeStatusAsync = ref.watch(whisperRuntimeStatusProvider);
     final catalogState = ref.watch(whisperModelCatalogControllerProvider);
@@ -370,6 +372,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           runtimeStatus: runtimeStatus,
           catalogState: catalogState,
           downloadState: downloadState,
+          preferVttSubtitles: preferVttSubtitles,
           canDeleteManagedModel:
               sourceMode == SummaryModelSourceMode.managedDownload &&
               isManagedModelPath(
@@ -397,6 +400,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ? 'Switched summarization model.'
                   : null;
             });
+          },
+          onPreferVttSubtitlesChanged: (value) async {
+            await ref
+                .read(settingsProvider.notifier)
+                .updateSummaryPreferVttSubtitles(value);
           },
           onDownloadPressed: () async {
             final effectiveSelectedModelId =
@@ -497,7 +505,7 @@ class _OpenDataFolderWidget extends ConsumerWidget {
             ),
             loading: () =>
                 const SizedBox(width: 12, height: 12, child: ProgressCircle()),
-            error: (_, __) => const SizedBox(),
+            error: (error, stackTrace) => const SizedBox(),
           ),
         ],
       ),
@@ -523,7 +531,7 @@ class _FolderList extends ConsumerWidget {
           ),
           child: ListView.separated(
             itemCount: folders.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final folder = folders[index];
               final needsRepair =

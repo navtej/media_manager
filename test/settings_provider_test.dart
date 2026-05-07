@@ -9,6 +9,30 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'summary subtitle preference defaults to enabled and persists',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      var settings = await container.read(settingsProvider.future);
+      expect(settings['summaryPreferVttSubtitles'], isTrue);
+
+      await container
+          .read(settingsProvider.notifier)
+          .updateSummaryPreferVttSubtitles(false);
+      settings = await container.read(settingsProvider.future);
+      expect(settings['summaryPreferVttSubtitles'], isFalse);
+
+      final reloaded = ProviderContainer();
+      addTearDown(reloaded.dispose);
+      final reloadedSettings = await reloaded.read(settingsProvider.future);
+      expect(reloadedSettings['summaryPreferVttSubtitles'], isFalse);
+    },
+  );
+
+  test(
     'downloaded managed models and selected model persist across reloads',
     () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});

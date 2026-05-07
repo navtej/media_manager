@@ -8,9 +8,7 @@ import 'package:movie_manager/ui/widgets/summary_model_settings_panel.dart';
 
 void main() {
   Widget buildHarness(Widget child) {
-    return MacosApp(
-      home: MacosWindow(child: Material(child: child)),
-    );
+    return MacosApp(home: MacosWindow(child: child));
   }
 
   testWidgets(
@@ -47,9 +45,11 @@ void main() {
               error: null,
             ),
             canDeleteManagedModel: true,
+            preferVttSubtitles: true,
             statusMessage: null,
             onSourceModeChanged: (_) {},
             onSelectedModelChanged: (_) {},
+            onPreferVttSubtitlesChanged: (_) {},
             onDownloadPressed: () {},
             onStopDownloadPressed: () {},
             onDeletePressed: () {},
@@ -122,9 +122,11 @@ void main() {
           ),
           downloadState: const ModelDownloadState.idle(),
           canDeleteManagedModel: false,
+          preferVttSubtitles: true,
           statusMessage: null,
           onSourceModeChanged: (_) {},
           onSelectedModelChanged: (_) {},
+          onPreferVttSubtitlesChanged: (_) {},
           onDownloadPressed: () {},
           onStopDownloadPressed: () {},
           onDeletePressed: () {},
@@ -139,6 +141,55 @@ void main() {
     expect(find.text('Clear Selection'), findsOneWidget);
     expect(find.text('Delete Model'), findsNothing);
     expect(find.text('No managed models downloaded yet.'), findsOneWidget);
+  });
+
+  testWidgets('subtitle preference checkbox reports changes', (
+    WidgetTester tester,
+  ) async {
+    bool? changedValue;
+
+    await tester.pumpWidget(
+      buildHarness(
+        SummaryModelSettingsPanel(
+          sourceMode: SummaryModelSourceMode.managedDownload,
+          modelPath: '/tmp/ggml-base.en.bin',
+          selectedModelId: 'base.en',
+          downloadedManagedModels: const <String, String>{},
+          validation: const SummaryModelValidationResult.valid('Ready'),
+          runtimeStatus: 'Bundled runtime ready',
+          catalogState: WhisperModelCatalogState(
+            entries: builtInWhisperModelCatalog.take(1).toList(),
+            lastRefreshedAt: null,
+            isRefreshing: false,
+            refreshError: null,
+          ),
+          downloadState: const ModelDownloadState.idle(),
+          canDeleteManagedModel: false,
+          preferVttSubtitles: true,
+          statusMessage: null,
+          onSourceModeChanged: (_) {},
+          onSelectedModelChanged: (_) {},
+          onPreferVttSubtitlesChanged: (value) {
+            changedValue = value;
+          },
+          onDownloadPressed: () {},
+          onStopDownloadPressed: () {},
+          onDeletePressed: () {},
+          onBrowsePressed: () {},
+          onRevealPressed: () {},
+          onRefreshCatalogPressed: () {},
+          onClearSelectionPressed: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Use .vtt subtitles when available'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('prefer-vtt-subtitles-checkbox')),
+    );
+    await tester.pump();
+
+    expect(changedValue, isFalse);
   });
 
   testWidgets(
@@ -168,9 +219,11 @@ void main() {
             catalogState: catalog,
             downloadState: const ModelDownloadState.idle(),
             canDeleteManagedModel: false,
+            preferVttSubtitles: true,
             statusMessage: null,
             onSourceModeChanged: (_) {},
             onSelectedModelChanged: (_) {},
+            onPreferVttSubtitlesChanged: (_) {},
             onDownloadPressed: () {},
             onStopDownloadPressed: () {},
             onDeletePressed: () {},
@@ -182,8 +235,14 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const ValueKey('available-models-picker')), findsNothing);
-      expect(find.byKey(const ValueKey('local-selected-model-path')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('available-models-picker')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('local-selected-model-path')),
+        findsOneWidget,
+      );
       expect(find.text(localModelPath), findsWidgets);
       expect(find.text('Selected'), findsNothing);
       expect(find.text('Select'), findsOneWidget);
@@ -217,9 +276,11 @@ void main() {
           catalogState: catalog,
           downloadState: const ModelDownloadState.idle(),
           canDeleteManagedModel: true,
+          preferVttSubtitles: true,
           statusMessage: null,
           onSourceModeChanged: (_) {},
           onSelectedModelChanged: (_) {},
+          onPreferVttSubtitlesChanged: (_) {},
           onDownloadPressed: () {},
           onStopDownloadPressed: () {},
           onDeletePressed: () {},
@@ -267,11 +328,13 @@ void main() {
           catalogState: catalog,
           downloadState: const ModelDownloadState.idle(),
           canDeleteManagedModel: true,
+          preferVttSubtitles: true,
           statusMessage: null,
           onSourceModeChanged: (_) {},
           onSelectedModelChanged: (value) {
             changedModelId = value;
           },
+          onPreferVttSubtitlesChanged: (_) {},
           onDownloadPressed: () {},
           onStopDownloadPressed: () {},
           onDeletePressed: () {},
