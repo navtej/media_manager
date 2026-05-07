@@ -13,6 +13,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
     required this.selectedModelId,
     required this.downloadedManagedModels,
     required this.validation,
+    required this.runtimeStatus,
     required this.catalogState,
     required this.downloadState,
     required this.canDeleteManagedModel,
@@ -33,6 +34,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
   final String? selectedModelId;
   final Map<String, String> downloadedManagedModels;
   final SummaryModelValidationResult validation;
+  final String runtimeStatus;
   final WhisperModelCatalogState catalogState;
   final ModelDownloadState downloadState;
   final bool canDeleteManagedModel;
@@ -70,7 +72,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Video summarization requires a local Whisper model file and an installed whisper-cli runtime.',
+            "Video summarization uses MovieManager's bundled Whisper runtime.",
           ),
           const SizedBox(height: 20),
           Row(
@@ -131,6 +133,14 @@ class SummaryModelSettingsPanel extends StatelessWidget {
             children: [
               const SizedBox(width: 200, child: Text('Model Status')),
               Text(validation.status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(width: 200, child: Text('Runtime Status')),
+              Text(runtimeStatus),
             ],
           ),
           const SizedBox(height: 12),

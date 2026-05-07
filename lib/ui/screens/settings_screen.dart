@@ -16,6 +16,7 @@ import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
 import '../../services/folder_access_service.dart';
+import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../widgets/summary_model_settings_panel.dart';
 
@@ -348,102 +349,114 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ) ??
         <String, String>{};
     final validationAsync = ref.watch(summaryModelValidationProvider);
+    final runtimeStatusAsync = ref.watch(whisperRuntimeStatusProvider);
     final catalogState = ref.watch(whisperModelCatalogControllerProvider);
     final downloadState = ref.watch(modelDownloadControllerProvider);
 
     return validationAsync.when(
-      data: (validation) => SummaryModelSettingsPanel(
-        sourceMode: sourceMode,
-        modelPath: modelPath,
-        selectedModelId: selectedModelId,
-        downloadedManagedModels: downloadedManagedModels,
-        validation: validation,
-        catalogState: catalogState,
-        downloadState: downloadState,
-        canDeleteManagedModel:
-            sourceMode == SummaryModelSourceMode.managedDownload &&
-            isManagedModelPath(
-              modelPath: modelPath,
-              managedDirectoryPath: managedDirectoryPath,
-            ),
-        statusMessage: _summaryActionMessage,
-        onSourceModeChanged: (mode) async {
-          await ref
-              .read(settingsProvider.notifier)
-              .updateSummaryModelSource(mode);
-          setState(() {
-            _summaryActionMessage = null;
-          });
-        },
-        onSelectedModelChanged: (modelId) async {
-          await ref
-              .read(settingsProvider.notifier)
-              .selectManagedSummaryModel(modelId);
-          ref.invalidate(summaryModelValidationProvider);
-          setState(() {
-            _summaryActionMessage =
-                modelId != null && downloadedManagedModels.containsKey(modelId)
-                ? 'Switched summarization model.'
-                : null;
-          });
-        },
-        onDownloadPressed: () async {
-          final effectiveSelectedModelId =
-              selectedModelId ?? catalogState.entries.firstOrNull?.id;
-          if (effectiveSelectedModelId == null) {
-            setState(() {
-              _summaryActionMessage = 'No model is available to download.';
-            });
-            return;
-          }
+      data: (validation) {
+        final runtimeStatus = runtimeStatusAsync.when(
+          data: (status) => status.status,
+          loading: () => 'Checking bundled runtime...',
+          error: (_, _) => 'Bundled runtime missing',
+        );
 
-          final entry = catalogState.entries.firstWhere(
-            (item) => item.id == effectiveSelectedModelId,
-            orElse: () => catalogState.entries.first,
-          );
-          setState(() {
-            _summaryActionMessage = null;
-          });
-          await ref
-              .read(modelDownloadControllerProvider.notifier)
-              .downloadManagedModel(entry);
-        },
-        onStopDownloadPressed: () async {
-          await ref
-              .read(modelDownloadControllerProvider.notifier)
-              .cancelDownload();
-          setState(() {
-            _summaryActionMessage = 'Download stopped.';
-          });
-        },
-        onDeletePressed: () async {
-          await ref
-              .read(modelDownloadControllerProvider.notifier)
-              .deleteManagedModel(
-                modelId: selectedModelId,
+        return SummaryModelSettingsPanel(
+          sourceMode: sourceMode,
+          modelPath: modelPath,
+          selectedModelId: selectedModelId,
+          downloadedManagedModels: downloadedManagedModels,
+          validation: validation,
+          runtimeStatus: runtimeStatus,
+          catalogState: catalogState,
+          downloadState: downloadState,
+          canDeleteManagedModel:
+              sourceMode == SummaryModelSourceMode.managedDownload &&
+              isManagedModelPath(
                 modelPath: modelPath,
                 managedDirectoryPath: managedDirectoryPath,
-              );
-          setState(() {
-            _summaryActionMessage = 'Managed model removed.';
-          });
-        },
-        onBrowsePressed: _pickSummaryModel,
-        onRevealPressed: () => NaturalLanguageService().openInFinder(modelPath),
-        onRefreshCatalogPressed: () async {
-          await ref
-              .read(whisperModelCatalogControllerProvider.notifier)
-              .refresh();
-        },
-        onClearSelectionPressed: () async {
-          await ref
-              .read(modelDownloadControllerProvider.notifier)
-              .clearLocalSelection();
-          setState(() {
-            _summaryActionMessage = 'Local model selection cleared.';
-          });
-        },
-      ),
+              ),
+          statusMessage: _summaryActionMessage,
+          onSourceModeChanged: (mode) async {
+            await ref
+                .read(settingsProvider.notifier)
+                .updateSummaryModelSource(mode);
+            setState(() {
+              _summaryActionMessage = null;
+            });
+          },
+          onSelectedModelChanged: (modelId) async {
+            await ref
+                .read(settingsProvider.notifier)
+                .selectManagedSummaryModel(modelId);
+            ref.invalidate(summaryModelValidationProvider);
+            setState(() {
+              _summaryActionMessage =
+                  modelId != null &&
+                      downloadedManagedModels.containsKey(modelId)
+                  ? 'Switched summarization model.'
+                  : null;
+            });
+          },
+          onDownloadPressed: () async {
+            final effectiveSelectedModelId =
+                selectedModelId ?? catalogState.entries.firstOrNull?.id;
+            if (effectiveSelectedModelId == null) {
+              setState(() {
+                _summaryActionMessage = 'No model is available to download.';
+              });
+              return;
+            }
+
+            final entry = catalogState.entries.firstWhere(
+              (item) => item.id == effectiveSelectedModelId,
+              orElse: () => catalogState.entries.first,
+            );
+            setState(() {
+              _summaryActionMessage = null;
+            });
+            await ref
+                .read(modelDownloadControllerProvider.notifier)
+                .downloadManagedModel(entry);
+          },
+          onStopDownloadPressed: () async {
+            await ref
+                .read(modelDownloadControllerProvider.notifier)
+                .cancelDownload();
+            setState(() {
+              _summaryActionMessage = 'Download stopped.';
+            });
+          },
+          onDeletePressed: () async {
+            await ref
+                .read(modelDownloadControllerProvider.notifier)
+                .deleteManagedModel(
+                  modelId: selectedModelId,
+                  modelPath: modelPath,
+                  managedDirectoryPath: managedDirectoryPath,
+                );
+            setState(() {
+              _summaryActionMessage = 'Managed model removed.';
+            });
+          },
+          onBrowsePressed: _pickSummaryModel,
+          onRevealPressed: () =>
+              NaturalLanguageService().openInFinder(modelPath),
+          onRefreshCatalogPressed: () async {
+            await ref
+                .read(whisperModelCatalogControllerProvider.notifier)
+                .refresh();
+          },
+          onClearSelectionPressed: () async {
+            await ref
+                .read(modelDownloadControllerProvider.notifier)
+                .clearLocalSelection();
+            setState(() {
+              _summaryActionMessage = 'Local model selection cleared.';
+            });
+          },
+        );
+      },
       loading: () => const Center(child: ProgressCircle()),
       error: (error, _) => Center(child: Text(error.toString())),
     );

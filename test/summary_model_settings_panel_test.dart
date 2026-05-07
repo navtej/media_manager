@@ -35,6 +35,7 @@ void main() {
               'base.en': '/tmp/ggml-base.en.bin',
             },
             validation: const SummaryModelValidationResult.valid('Ready'),
+            runtimeStatus: 'Bundled runtime ready',
             catalogState: catalog,
             downloadState: const ModelDownloadState(
               phase: ModelDownloadPhase.downloading,
@@ -61,6 +62,13 @@ void main() {
       );
 
       expect(find.text('Available Models'), findsOneWidget);
+      expect(
+        find.text(
+          "Video summarization uses MovieManager's bundled Whisper runtime.",
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Bundled runtime ready'), findsOneWidget);
       expect(find.text('Stop Download'), findsOneWidget);
       expect(find.text('Download Model'), findsNothing);
       expect(find.text('50%'), findsOneWidget);
@@ -105,6 +113,7 @@ void main() {
           selectedModelId: null,
           downloadedManagedModels: const <String, String>{},
           validation: const SummaryModelValidationResult.valid('Ready'),
+          runtimeStatus: 'Bundled runtime ready',
           catalogState: WhisperModelCatalogState(
             entries: builtInWhisperModelCatalog.take(1).toList(),
             lastRefreshedAt: null,
@@ -155,6 +164,7 @@ void main() {
               'medium': '/tmp/ggml-medium.bin',
             },
             validation: const SummaryModelValidationResult.valid('Ready'),
+            runtimeStatus: 'Bundled runtime ready',
             catalogState: catalog,
             downloadState: const ModelDownloadState.idle(),
             canDeleteManagedModel: false,
@@ -203,6 +213,7 @@ void main() {
             'medium': '/tmp/ggml-medium.bin',
           },
           validation: const SummaryModelValidationResult.valid('Ready'),
+          runtimeStatus: 'Bundled runtime ready',
           catalogState: catalog,
           downloadState: const ModelDownloadState.idle(),
           canDeleteManagedModel: true,
@@ -252,6 +263,7 @@ void main() {
             'base.en': '/tmp/ggml-base.en.bin',
           },
           validation: const SummaryModelValidationResult.valid('Ready'),
+          runtimeStatus: 'Bundled runtime ready',
           catalogState: catalog,
           downloadState: const ModelDownloadState.idle(),
           canDeleteManagedModel: true,

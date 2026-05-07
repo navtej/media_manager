@@ -203,6 +203,14 @@ actor AILanguageModelManager {
 
 private func resolveWhisperCLIPath() -> String? {
     let fileManager = FileManager.default
+    if let bundledRuntime = Bundle.main.resourceURL?
+        .appendingPathComponent("WhisperRuntime")
+        .appendingPathComponent("whisper-cli")
+        .path,
+        fileManager.isExecutableFile(atPath: bundledRuntime) {
+        return bundledRuntime
+    }
+
     let explicitCandidates = [
         "/opt/homebrew/bin/whisper-cli",
         "/usr/local/bin/whisper-cli",

@@ -146,4 +146,8 @@ coverage/
 *.dmg
 *.bak
 .vscode/settings.json
+
+# Locally built Whisper runtime artifacts.
+third_party/whisper.cpp/
+macos/Runner/WhisperRuntime/whisper-cli
 *.md
