@@ -142,6 +142,7 @@ local.properties
 
 # Coverage
 coverage/
+dist/
 *.txt
 *.dmg
 *.bak

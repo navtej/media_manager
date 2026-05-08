@@ -19,22 +19,24 @@ if ! command -v create-dmg &> /dev/null; then
     exit 1
 fi
 
-# 2. Increment Version
+# 2. Resolve Version
 echo "-----------------------------------"
-echo "Incrementing Version..."
-if [ -x "./scripts/update_version.sh" ]; then
-    NEW_VERSION=$(./scripts/update_version.sh)
-else
-    # Try to make it executable if it exists but isn't executable
-    if [ -f "./scripts/update_version.sh" ]; then
-        chmod +x ./scripts/update_version.sh
-        NEW_VERSION=$(./scripts/update_version.sh)
-    else
-        echo "Error: ./scripts/update_version.sh not found."
+if [ -z "${RELEASE_VERSION:-}" ]; then
+    VERSION_LINE=$(grep "^version: " pubspec.yaml || true)
+    if [ -z "$VERSION_LINE" ]; then
+        echo "Error: 'version:' key not found in pubspec.yaml"
         exit 1
     fi
+
+    RELEASE_VERSION=${VERSION_LINE#version: }
+    RELEASE_VERSION=${RELEASE_VERSION%%+*}
 fi
-echo "New Version: $NEW_VERSION"
+
+BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-1}}"
+ARTIFACT_NAME="${ARTIFACT_NAME:-MovieManager-${RELEASE_VERSION}-macos-arm64.dmg}"
+
+echo "Release Version: $RELEASE_VERSION"
+echo "Build Number: $BUILD_NUMBER"
 
 # 3. Prepare Bundled Whisper Runtime
 echo "-----------------------------------"
@@ -50,12 +52,13 @@ fi
 echo "-----------------------------------"
 echo "Building Flutter Dependencies & MacOS Release..."
 flutter pub get
-flutter build macos --release
+flutter build macos --release --build-name "$RELEASE_VERSION" --build-number "$BUILD_NUMBER"
 
 # 5. Define Names
 APP_NAME="Media Manager"
-DMG_NAME="Media_Manager_v${NEW_VERSION}.dmg"
 APP_PATH="build/macos/Build/Products/Release/$APP_NAME.app"
+DIST_DIR="$PROJECT_ROOT/dist"
+DMG_PATH="$DIST_DIR/$ARTIFACT_NAME"
 
 # Verify App exists
 if [ ! -d "$APP_PATH" ]; then
@@ -74,10 +77,11 @@ fi
 
 # 7. Generate DMG
 echo "-----------------------------------"
-echo "Packaging $DMG_NAME..."
-if [ -f "$DMG_NAME" ]; then
-    echo "Removing existing $DMG_NAME"
-    rm "$DMG_NAME"
+mkdir -p "$DIST_DIR"
+echo "Packaging $DMG_PATH..."
+if [ -f "$DMG_PATH" ]; then
+    echo "Removing existing $DMG_PATH"
+    rm "$DMG_PATH"
 fi
 
 create-dmg \
@@ -88,9 +92,9 @@ create-dmg \
   --icon "$APP_NAME.app" 200 190 \
   --hide-extension "$APP_NAME.app" \
   --app-drop-link 600 185 \
-  "$DMG_NAME" \
+  "$DMG_PATH" \
   "$APP_PATH"
 
 echo "-----------------------------------"
 echo "✅ Build Complete!"
-echo "DMG Location: $PROJECT_ROOT/$DMG_NAME"
+echo "DMG Location: $DMG_PATH"

@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build artifacts without creating a GitHub Release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos-arm64:
+    name: Build macOS ARM64 release
+    runs-on: macos-latest
+
+    steps:
+      - name: Require main branch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "Releases must be dispatched from main." >&2
+          exit 1
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packaging tools
+        run: brew install cmake create-dmg
+
+      - name: Calculate CalVer release version
+        id: version
+        run: ./scripts/calculate_release_version.sh
+
+      - name: Build release DMG
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
+          BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
+          ARTIFACT_NAME: ${{ steps.version.outputs.ARTIFACT_NAME }}
+        run: ./scripts/build_release.sh
+
+      - name: Generate checksum
+        env:
+          ARTIFACT_NAME: ${{ steps.version.outputs.ARTIFACT_NAME }}
+        run: shasum -a 256 "dist/${ARTIFACT_NAME}" > "dist/${ARTIFACT_NAME}.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.TAG }}
+          path: |
+            dist/${{ steps.version.outputs.ARTIFACT_NAME }}
+            dist/${{ steps.version.outputs.ARTIFACT_NAME }}.sha256
+
+      - name: Create draft GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.TAG }}
+          ARTIFACT_NAME: ${{ steps.version.outputs.ARTIFACT_NAME }}
+        run: |
+          gh release create "$TAG" \
+            "dist/${ARTIFACT_NAME}" \
+            "dist/${ARTIFACT_NAME}.sha256" \
+            --draft \
+            --generate-notes \
+            --target "$GITHUB_SHA" \
+            --title "$TAG"
