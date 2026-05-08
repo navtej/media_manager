@@ -91,4 +91,44 @@ void main() {
       expect(summary.highlights, isNotEmpty);
     },
   );
+
+  test('playVideo passes folder bookmark context to native playback', () async {
+    MethodCall? receivedCall;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          receivedCall = call;
+          return null;
+        });
+
+    await NaturalLanguageService().playVideo(
+      '/Volumes/Media/Library/movie.mp4',
+      folderPath: '/Volumes/Media/Library',
+      folderBookmark: 'bookmark-data',
+    );
+
+    expect(receivedCall?.method, 'playVideo');
+    expect(receivedCall?.arguments, {
+      'path': '/Volumes/Media/Library/movie.mp4',
+      'folderPath': '/Volumes/Media/Library',
+      'folderBookmark': 'bookmark-data',
+    });
+  });
+
+  test('playVideo reports false when native playback fails', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          throw PlatformException(
+            code: 'BOOKMARK_ERROR',
+            message: 'Folder access needs repair.',
+          );
+        });
+
+    final opened = await NaturalLanguageService().playVideo(
+      '/Volumes/Media/Library/movie.mp4',
+      folderPath: '/Volumes/Media/Library',
+      folderBookmark: 'stale-bookmark',
+    );
+
+    expect(opened, isFalse);
+  });
 }

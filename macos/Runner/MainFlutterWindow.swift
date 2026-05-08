@@ -489,8 +489,39 @@ class MainFlutterWindow: NSWindow {
           result(FlutterError(code: "INVALID_ARGS", message: "Path argument missing", details: nil))
           return
         }
+
+        let folderPath = args["folderPath"] as? String
+        let folderBookmark = args["folderBookmark"] as? String
+        var didStartPlaybackAccess = false
+
+        if let folderPath,
+           let folderBookmark,
+           !folderPath.isEmpty,
+           !folderBookmark.isEmpty,
+           activeFolderAccess[folderPath] == nil {
+          do {
+            didStartPlaybackAccess = try startAccessingFolder(path: folderPath, bookmark: folderBookmark)
+            if !didStartPlaybackAccess {
+              result(FlutterError(code: "BOOKMARK_ERROR", message: "Folder access needs repair. Reselect this folder in Settings.", details: nil))
+              return
+            }
+          } catch {
+            result(FlutterError(code: "BOOKMARK_ERROR", message: error.localizedDescription, details: nil))
+            return
+          }
+        }
+
         let url = URL(fileURLWithPath: path)
-        NSWorkspace.shared.open(url)
+        let opened = NSWorkspace.shared.open(url)
+        if didStartPlaybackAccess, let folderPath {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            stopAccessingFolder(path: folderPath)
+          }
+        }
+        guard opened else {
+          result(FlutterError(code: "PLAYBACK_ERROR", message: "Unable to open video.", details: nil))
+          return
+        }
         result(nil)
       } else {
         result(FlutterMethodNotImplemented)

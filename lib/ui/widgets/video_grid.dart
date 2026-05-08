@@ -280,8 +280,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
         MacosIconButton(
           padding: EdgeInsets.zero,
           icon: const Icon(CupertinoIcons.play_fill, size: 16),
-          onPressed: () =>
-              NaturalLanguageService().playVideo(widget.video.absolutePath),
+          onPressed: () => _playVideo(ref, widget.video),
         ),
         // Finder
         MacosIconButton(
@@ -335,6 +334,55 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   // Removed _buildTagInput and replaced with _TagAutocompleteInput class below
+
+  Future<void> _playVideo(WidgetRef ref, Video video) async {
+    final folder = await ref
+        .read(foldersDaoProvider)
+        .getFolderById(video.folderId);
+    if (!mounted) return;
+
+    final bookmark = folder?.securityScopedBookmark;
+    if (folder == null) {
+      _showPlaybackError('Library folder is missing.');
+      return;
+    }
+    if (bookmark == null || bookmark.isEmpty) {
+      _showPlaybackError(
+        'Folder access needs repair. Reselect this folder in Settings.',
+      );
+      return;
+    }
+
+    final opened = await ref
+        .read(naturalLanguageServiceProvider)
+        .playVideo(
+          video.absolutePath,
+          folderPath: folder.path,
+          folderBookmark: bookmark,
+        );
+    if (!mounted) return;
+    if (!opened) {
+      _showPlaybackError(
+        'Folder access needs repair. Reselect this folder in Settings.',
+      );
+    }
+  }
+
+  void _showPlaybackError(String message) {
+    showMacosAlertDialog(
+      context: context,
+      builder: (_) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.exclamationmark_triangle),
+        title: const Text('Cannot Play Video'),
+        message: Text(message),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('OK'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
 
   void _confirmDelete(WidgetRef ref) {
     showMacosAlertDialog(

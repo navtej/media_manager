@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path/path.dart' as p;
 import '../data/providers.dart';
+import '../services/folder_access_service.dart';
 import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
 import 'stats_provider.dart';
@@ -95,14 +96,38 @@ class MaintenanceController extends _$MaintenanceController {
 
   Future<void> deleteVideo(int videoId) async {
     final videoDao = ref.read(videosDaoProvider);
+    final folderDao = ref.read(foldersDaoProvider);
+    final folderAccessService = ref.read(folderAccessServiceProvider);
 
     try {
       final video = await videoDao.getVideoById(videoId);
       if (video == null) return;
 
-      final file = File(video.absolutePath);
-      if (await file.exists()) {
-        try {
+      final folder = await folderDao.getFolderById(video.folderId);
+      if (folder == null) {
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus('Library folder is missing.');
+        return;
+      }
+
+      final access = await folderAccessService.startAccessing(
+        path: folder.path,
+        bookmark: folder.securityScopedBookmark,
+      );
+      if (!access.canAccess) {
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus(
+              access.message ??
+                  'Folder access needs repair. Reselect this folder in Settings.',
+            );
+        return;
+      }
+
+      try {
+        final file = File(video.absolutePath);
+        if (await file.exists()) {
           await file.delete();
           print('DEBUG: Deleted video file: ${video.absolutePath}');
 
@@ -127,17 +152,26 @@ class MaintenanceController extends _$MaintenanceController {
               }
             }
           }
-        } catch (e) {
-          print('ERROR: Failed to delete video file on disk: $e');
-          // Proceed to delete from DB anyway so UI is consistent
         }
+
+        await videoDao.deleteVideo(videoId, deleteFile: false);
+        print('DEBUG: Deleted video from DB');
+
+        // Update stats immediately
+        ref.invalidate(libraryStatsProvider);
+      } catch (e) {
+        print('ERROR: Failed to delete video file on disk: $e');
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus(
+              'Could not delete video file. Repair folder access in Settings.',
+            );
+      } finally {
+        await folderAccessService.stopAccessing(
+          path: folder.path,
+          bookmark: folder.securityScopedBookmark,
+        );
       }
-
-      await videoDao.deleteVideo(videoId, deleteFile: false);
-      print('DEBUG: Deleted video from DB');
-
-      // Update stats immediately
-      ref.invalidate(libraryStatsProvider);
     } catch (e) {
       print('ERROR in deleteVideo: $e');
     }
