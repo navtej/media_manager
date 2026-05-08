@@ -129,11 +129,15 @@ class NaturalLanguageService {
     final fallbackTitle = title.trim().isEmpty ? 'this video' : title.trim();
     final synopsis = sentences.take(2).join(' ').trim();
     final keywords = _extractKeywords('$title $transcript');
+    final themeBullets = sentences.take(5).toList(growable: false);
 
     return StructuredVideoSummary(
       synopsis: synopsis.isEmpty
           ? 'A transcript-based summary is available for $fallbackTitle.'
           : synopsis,
+      themes: themeBullets.isEmpty
+          ? const []
+          : [VideoSummaryTheme(title: 'Key Themes', bullets: themeBullets)],
       highlights: highlights.isEmpty
           ? ['Transcript was generated successfully.']
           : highlights,

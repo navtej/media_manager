@@ -2,27 +2,65 @@ const summaryManagedModelFileName = 'ggml-base.en.bin';
 const summaryManagedModelDownloadUrl =
     'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin';
 
+class VideoSummaryTheme {
+  const VideoSummaryTheme({required this.title, required this.bullets});
+
+  final String title;
+  final List<String> bullets;
+
+  factory VideoSummaryTheme.fromJson(Map<String, dynamic> json) {
+    final title = StructuredVideoSummary._normalizeText(json['title']);
+    final bullets = StructuredVideoSummary._normalizeStringList(
+      json['bullets'],
+    );
+
+    if (title.isEmpty || bullets.isEmpty) {
+      throw const FormatException('Summary theme title and bullets required.');
+    }
+
+    return VideoSummaryTheme(title: title, bullets: bullets);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'title': title, 'bullets': bullets};
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is VideoSummaryTheme &&
+            title == other.title &&
+            _listEquals(bullets, other.bullets);
+  }
+
+  @override
+  int get hashCode => Object.hash(title, Object.hashAll(bullets));
+}
+
 class StructuredVideoSummary {
-  StructuredVideoSummary({
+  const StructuredVideoSummary({
     required this.synopsis,
+    this.themes = const [],
     required this.highlights,
     required this.keywords,
   });
 
   final String synopsis;
+  final List<VideoSummaryTheme> themes;
   final List<String> highlights;
   final List<String> keywords;
 
   factory StructuredVideoSummary.fromJson(Map<String, dynamic> json) {
     final synopsis = _normalizeText(json['synopsis']);
+    final themes = _normalizeThemes(json['themes']);
     final highlights = _normalizeStringList(json['highlights']);
     final keywords = _normalizeStringList(json['keywords']);
 
     if (synopsis.isEmpty) {
       throw const FormatException('Summary synopsis is required.');
     }
-    if (highlights.isEmpty) {
-      throw const FormatException('Summary highlights are required.');
+    if (themes.isEmpty && highlights.isEmpty) {
+      throw const FormatException('Summary themes or highlights are required.');
     }
     if (keywords.isEmpty) {
       throw const FormatException('Summary keywords are required.');
@@ -30,6 +68,7 @@ class StructuredVideoSummary {
 
     return StructuredVideoSummary(
       synopsis: synopsis,
+      themes: themes,
       highlights: highlights,
       keywords: keywords,
     );
@@ -38,6 +77,8 @@ class StructuredVideoSummary {
   Map<String, dynamic> toJson() {
     return {
       'synopsis': synopsis,
+      if (themes.isNotEmpty)
+        'themes': themes.map((theme) => theme.toJson()).toList(),
       'highlights': highlights,
       'keywords': keywords,
     };
@@ -61,6 +102,41 @@ class StructuredVideoSummary {
         .where((entry) => entry.isNotEmpty)
         .toList(growable: false);
   }
+
+  static List<VideoSummaryTheme> _normalizeThemes(dynamic value) {
+    if (value == null) {
+      return const [];
+    }
+    if (value is! List) {
+      throw const FormatException('Summary themes must be a list.');
+    }
+
+    return value
+        .map((entry) {
+          if (entry is! Map) {
+            throw const FormatException('Summary theme is invalid.');
+          }
+          return VideoSummaryTheme.fromJson(
+            Map<String, dynamic>.from(entry as Map<Object?, Object?>),
+          );
+        })
+        .toList(growable: false);
+  }
+}
+
+bool _listEquals<T>(List<T> first, List<T> second) {
+  if (identical(first, second)) {
+    return true;
+  }
+  if (first.length != second.length) {
+    return false;
+  }
+  for (var index = 0; index < first.length; index += 1) {
+    if (first[index] != second[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 class VideoSummaryFreshnessKey {

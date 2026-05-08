@@ -15,11 +15,60 @@ void main() {
       expect(summary.keywords, ['drama', 'festival']);
     });
 
+    test('parses and normalizes themed summary sections', () {
+      final summary = StructuredVideoSummary.fromJson({
+        'synopsis': 'A short synopsis.',
+        'themes': [
+          {
+            'title': ' Setup ',
+            'bullets': [' First detail ', 'Second detail', '  '],
+          },
+          {
+            'title': 'Resolution',
+            'bullets': ['Final detail'],
+          },
+        ],
+        'highlights': ['Legacy highlight'],
+        'keywords': ['drama'],
+      });
+
+      expect(summary.themes, [
+        const VideoSummaryTheme(
+          title: 'Setup',
+          bullets: ['First detail', 'Second detail'],
+        ),
+        const VideoSummaryTheme(title: 'Resolution', bullets: ['Final detail']),
+      ]);
+      expect(summary.toJson()['themes'], [
+        {
+          'title': 'Setup',
+          'bullets': ['First detail', 'Second detail'],
+        },
+        {
+          'title': 'Resolution',
+          'bullets': ['Final detail'],
+        },
+      ]);
+    });
+
     test('rejects payloads with missing required sections', () {
       expect(
         () => StructuredVideoSummary.fromJson({
           'synopsis': 'Present',
           'highlights': <String>[],
+          'keywords': ['tag'],
+        }),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects theme sections with missing title or bullets', () {
+      expect(
+        () => StructuredVideoSummary.fromJson({
+          'synopsis': 'Present',
+          'themes': [
+            {'title': 'Theme', 'bullets': <String>[]},
+          ],
           'keywords': ['tag'],
         }),
         throwsA(isA<FormatException>()),

@@ -63,6 +63,9 @@ void main() {
       expect(summary, isA<StructuredVideoSummary>());
       expect(summary.synopsis, contains('Consumer AI products'));
       expect(summary.highlights, isNotEmpty);
+      expect(summary.themes, isNotEmpty);
+      expect(summary.themes.first.title, 'Key Themes');
+      expect(summary.themes.first.bullets, hasLength(3));
       expect(summary.keywords, contains('Consumer'));
     },
   );

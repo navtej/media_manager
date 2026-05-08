@@ -575,7 +575,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                             ? const Text(
                                 'No summary has been generated for this video.',
                               )
-                            : _SummaryContent(summary: summary),
+                            : VideoSummaryContent(summary: summary),
                       ),
                     ),
                   ],
@@ -694,8 +694,8 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 }
 
-class _SummaryContent extends StatelessWidget {
-  const _SummaryContent({required this.summary});
+class VideoSummaryContent extends StatelessWidget {
+  const VideoSummaryContent({super.key, required this.summary});
 
   final StructuredVideoSummary summary;
 
@@ -706,17 +706,10 @@ class _SummaryContent extends StatelessWidget {
       children: [
         Text(summary.synopsis, style: MacosTheme.of(context).typography.body),
         const SizedBox(height: 12),
-        Text(
-          'Highlights',
-          style: MacosTheme.of(context).typography.subheadline,
-        ),
-        const SizedBox(height: 4),
-        ...summary.highlights.map(
-          (highlight) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('• $highlight'),
-          ),
-        ),
+        if (summary.themes.isNotEmpty)
+          _ThemedSummarySections(themes: summary.themes)
+        else
+          _LegacySummaryHighlights(highlights: summary.highlights),
         const SizedBox(height: 12),
         Text('Keywords', style: MacosTheme.of(context).typography.subheadline),
         const SizedBox(height: 4),
@@ -740,6 +733,73 @@ class _SummaryContent extends StatelessWidget {
                 ),
               )
               .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ThemedSummarySections extends StatelessWidget {
+  const _ThemedSummarySections({required this.themes});
+
+  final List<VideoSummaryTheme> themes;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Themes', style: theme.typography.subheadline),
+        const SizedBox(height: 6),
+        ...themes.map(
+          (section) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  section.title,
+                  style: theme.typography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ...section.bullets.map(
+                  (bullet) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $bullet'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegacySummaryHighlights extends StatelessWidget {
+  const _LegacySummaryHighlights({required this.highlights});
+
+  final List<String> highlights;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Highlights',
+          style: MacosTheme.of(context).typography.subheadline,
+        ),
+        const SizedBox(height: 4),
+        ...highlights.map(
+          (highlight) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('• $highlight'),
+          ),
         ),
       ],
     );
