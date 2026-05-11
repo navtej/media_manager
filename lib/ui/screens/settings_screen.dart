@@ -8,6 +8,7 @@ import '../../data/providers.dart';
 
 import '../../logic/model_download_controller.dart';
 import '../../logic/maintenance_controller.dart';
+import '../../logic/folder_storage_status.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_summary_models.dart';
@@ -570,9 +571,11 @@ class _FolderList extends ConsumerWidget {
             separatorBuilder: (context, index) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final folder = folders[index];
-              final needsRepair =
-                  folder.securityScopedBookmark == null ||
-                  folder.securityScopedBookmark!.isEmpty;
+              final storageStatus = FolderStorageStatus.fromFolder(
+                path: folder.path,
+                securityScopedBookmark: folder.securityScopedBookmark,
+              );
+              final statusLabel = storageStatus.statusLabel;
               return Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -590,11 +593,13 @@ class _FolderList extends ConsumerWidget {
                             folder.path,
                             style: const TextStyle(fontSize: 13),
                           ),
-                          if (needsRepair)
+                          if (statusLabel != null)
                             Text(
-                              'Access repair required',
+                              statusLabel,
                               style: TextStyle(
-                                color: MacosColors.systemOrangeColor,
+                                color: storageStatus.needsRepair
+                                    ? MacosColors.systemOrangeColor
+                                    : MacosColors.systemBlueColor,
                                 fontSize: 11,
                               ),
                             ),
@@ -604,8 +609,10 @@ class _FolderList extends ConsumerWidget {
                     MacosIconButton(
                       icon: Icon(
                         CupertinoIcons.exclamationmark_shield,
-                        color: needsRepair
+                        color: storageStatus.needsRepair
                             ? MacosColors.systemOrangeColor
+                            : storageStatus.isRemovableStorage
+                            ? MacosColors.systemBlueColor
                             : MacosColors.systemGrayColor,
                         size: 16,
                       ),
