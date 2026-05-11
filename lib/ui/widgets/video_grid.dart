@@ -247,10 +247,14 @@ class _VideoGridItemState extends State<VideoGridItem> {
     final configuredModel = transcriptModelNameFromPath(
       settings.value?['summaryModelPath']?.toString() ?? '',
     );
+    final configuredSummaryModel = summaryModelNameFromApiUrl(
+      settings.value?['summaryApiUrl']?.toString() ?? '',
+    );
     final hasFreshSummary = _hasFreshSummary(
       video: widget.video,
       record: summaryRecord,
       transcriptModel: configuredModel,
+      summaryModel: configuredSummaryModel,
     );
 
     return Row(
@@ -482,6 +486,9 @@ class _VideoGridItemState extends State<VideoGridItem> {
             final configuredModel = transcriptModelNameFromPath(
               settings.value?['summaryModelPath']?.toString() ?? '',
             );
+            final configuredSummaryModel = summaryModelNameFromApiUrl(
+              settings.value?['summaryApiUrl']?.toString() ?? '',
+            );
             final summaryPreferVttSubtitles =
                 settings.value?['summaryPreferVttSubtitles'] as bool? ?? true;
 
@@ -492,6 +499,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                   video: video,
                   record: record,
                   transcriptModel: configuredModel,
+                  summaryModel: configuredSummaryModel,
                 );
 
             final actionLabel = record == null || isStale
@@ -618,6 +626,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
     required Video video,
     required VideoSummary? record,
     required String transcriptModel,
+    required String summaryModel,
   }) {
     if (record == null) {
       return false;
@@ -632,6 +641,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
       video: video,
       record: record,
       transcriptModel: transcriptModel,
+      summaryModel: summaryModel,
     );
   }
 
@@ -639,6 +649,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
     required Video video,
     required VideoSummary record,
     required String transcriptModel,
+    required String summaryModel,
   }) {
     final modifiedAt = video.fileCreatedAt;
     if (modifiedAt == null) {
@@ -649,15 +660,16 @@ class _VideoGridItemState extends State<VideoGridItem> {
         ? record.transcriptModel
         : transcriptModel;
 
-    return VideoSummaryFreshnessKey(
-      sourceVideoSize: record.sourceVideoSize,
-      sourceVideoModifiedAt: record.sourceVideoModifiedAt,
-      transcriptModel: record.transcriptModel,
-    ).matches(
-      fileSize: video.size,
-      fileModifiedAt: modifiedAt,
-      transcriptModel: expectedTranscriptModel,
-    );
+    return record.summaryModel == summaryModel &&
+        VideoSummaryFreshnessKey(
+          sourceVideoSize: record.sourceVideoSize,
+          sourceVideoModifiedAt: record.sourceVideoModifiedAt,
+          transcriptModel: record.transcriptModel,
+        ).matches(
+          fileSize: video.size,
+          fileModifiedAt: modifiedAt,
+          transcriptModel: expectedTranscriptModel,
+        );
   }
 
   String _getDriveName(String path) {

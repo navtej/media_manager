@@ -19,8 +19,9 @@ import '../../services/folder_access_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../widgets/summary_model_settings_panel.dart';
+import '../widgets/summarization_api_settings_panel.dart';
 
-enum _SettingsTab { general, summary }
+enum _SettingsTab { general, transcribe, summarization }
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -35,6 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _paginationSizeController;
   _SettingsTab _selectedTab = _SettingsTab.general;
   String? _summaryActionMessage;
+  String? _summarizationActionMessage;
 
   @override
   void initState() {
@@ -129,7 +131,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           child: Text('General'),
                         ),
-                        _SettingsTab.summary: Padding(
+                        _SettingsTab.transcribe: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Text('Transcribe'),
+                        ),
+                        _SettingsTab.summarization: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 6,
@@ -147,9 +156,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 20),
                     Expanded(
-                      child: _selectedTab == _SettingsTab.general
-                          ? _buildGeneralSettings(context, settingsAsync)
-                          : _buildSummarySettings(context, settingsAsync),
+                      child: switch (_selectedTab) {
+                        _SettingsTab.general => _buildGeneralSettings(
+                          context,
+                          settingsAsync,
+                        ),
+                        _SettingsTab.transcribe => _buildTranscribeSettings(
+                          context,
+                          settingsAsync,
+                        ),
+                        _SettingsTab.summarization =>
+                          _buildSummarizationSettings(settingsAsync),
+                      },
                     ),
                   ],
                 ),
@@ -327,7 +345,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSummarySettings(
+  Widget _buildTranscribeSettings(
     BuildContext context,
     AsyncValue<Map<String, dynamic>> settingsAsync,
   ) {
@@ -467,6 +485,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       },
       loading: () => const Center(child: ProgressCircle()),
       error: (error, _) => Center(child: Text(error.toString())),
+    );
+  }
+
+  Widget _buildSummarizationSettings(
+    AsyncValue<Map<String, dynamic>> settingsAsync,
+  ) {
+    return SummarizationApiSettingsPanel(
+      apiUrl: settingsAsync.value?['summaryApiUrl']?.toString() ?? '',
+      apiKey: settingsAsync.value?['summaryApiKey']?.toString() ?? '',
+      statusMessage: _summarizationActionMessage,
+      onSave: ({required apiUrl, required apiKey}) async {
+        final notifier = ref.read(settingsProvider.notifier);
+        await notifier.updateSummaryApiUrl(apiUrl);
+        await notifier.updateSummaryApiKey(apiKey);
+        setState(() {
+          _summarizationActionMessage = 'Summarization settings saved.';
+        });
+      },
     );
   }
 }

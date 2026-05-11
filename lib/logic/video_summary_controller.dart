@@ -13,7 +13,6 @@ import '../services/natural_language_service.dart';
 import 'settings_provider.dart';
 import 'video_summary_models.dart';
 
-const _summaryModelName = 'foundation_models';
 const _vttTranscriptModelPrefix = 'vtt:';
 
 final videoSummaryRecordProvider = StreamProvider.autoDispose
@@ -206,6 +205,12 @@ class VideoSummaryTasksController
       _setPhase(video.id, VideoSummaryTaskPhase.validating);
       final settings = await ref.read(settingsProvider.future);
       final modelPath = (settings['summaryModelPath'] as String? ?? '').trim();
+      final summaryApiUrl = (settings['summaryApiUrl'] as String? ?? '').trim();
+      if (summaryApiUrl.isEmpty) {
+        throw StateError('Summarization API URL is not configured.');
+      }
+      final summaryApiKey = (settings['summaryApiKey'] as String? ?? '').trim();
+      final summaryModel = summaryModelNameFromApiUrl(summaryApiUrl);
       final preferVttSubtitles =
           preferVttSubtitlesOverride ??
           (settings['summaryPreferVttSubtitles'] as bool? ?? true);
@@ -260,8 +265,12 @@ class VideoSummaryTasksController
               transcriptModel: transcriptModel,
             ) &&
             cachedSummary.synopsis.isNotEmpty) {
-          _setPhase(video.id, VideoSummaryTaskPhase.completed);
-          return;
+          if (existing.summaryModel != summaryModel) {
+            // Continue generation when the summarization endpoint changed.
+          } else {
+            _setPhase(video.id, VideoSummaryTaskPhase.completed);
+            return;
+          }
         }
       }
 
@@ -296,6 +305,8 @@ class VideoSummaryTasksController
         title: video.title,
         metadataJson: video.metadataJson,
         transcript: transcript,
+        apiUrl: summaryApiUrl,
+        apiKey: summaryApiKey,
       );
 
       _setPhase(video.id, VideoSummaryTaskPhase.saving);
@@ -306,7 +317,7 @@ class VideoSummaryTasksController
           transcriptText: drift.Value(transcript),
           summaryJson: drift.Value(jsonEncode(summary.toJson())),
           transcriptModel: drift.Value(transcriptModel),
-          summaryModel: const drift.Value(_summaryModelName),
+          summaryModel: drift.Value(summaryModel),
           sourceVideoSize: drift.Value(stat.size),
           sourceVideoModifiedAt: drift.Value(stat.modified),
           generatedAt: drift.Value(now),

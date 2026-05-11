@@ -67,8 +67,30 @@ void main() {
       );
       expect(summary, isNotNull);
       expect(summary!.transcriptText, 'transcript');
+      expect(
+        fixture.naturalLanguageService.lastApiUrl,
+        'https://summary.example.test/v1/chat/completions',
+      );
+      expect(fixture.naturalLanguageService.lastApiKey, 'sk-test');
     },
   );
+
+  test('requires a summarization API URL before summarizing', () async {
+    final fixture = await _SummaryControllerFixture.create(summaryApiUrl: '');
+    addTearDown(fixture.dispose);
+
+    await fixture.generate();
+
+    final state = fixture.container.read(
+      videoSummaryTaskProvider(fixture.video.id),
+    );
+    expect(state?.phase, VideoSummaryTaskPhase.failed);
+    expect(
+      state?.error.toString(),
+      contains('Summarization API URL is not configured.'),
+    );
+    expect(fixture.naturalLanguageService.lastTranscript, isNull);
+  });
 
   test('publishes footer status while summary generation is running', () async {
     final transcriptCompleter = Completer<String>();
@@ -313,6 +335,8 @@ class _SummaryControllerFixture {
     bool canAccessFolder = true,
     Completer<String>? transcriptCompleter,
     bool preferVttSubtitles = true,
+    String summaryApiUrl = 'https://summary.example.test/v1/chat/completions',
+    String summaryApiKey = 'sk-test',
     SummaryModelValidationResult modelValidation =
         const SummaryModelValidationResult.valid('Ready'),
   }) async {
@@ -368,6 +392,8 @@ class _SummaryControllerFixture {
           () => _FakeSettings(
             modelPath: modelFile.path,
             preferVttSubtitles: preferVttSubtitles,
+            summaryApiUrl: summaryApiUrl,
+            summaryApiKey: summaryApiKey,
           ),
         ),
         summaryModelValidationProvider.overrideWith(
@@ -423,16 +449,25 @@ class _SummaryControllerFixture {
 }
 
 class _FakeSettings extends Settings {
-  _FakeSettings({required this.modelPath, required this.preferVttSubtitles});
+  _FakeSettings({
+    required this.modelPath,
+    required this.preferVttSubtitles,
+    required this.summaryApiUrl,
+    required this.summaryApiKey,
+  });
 
   final String modelPath;
   final bool preferVttSubtitles;
+  final String summaryApiUrl;
+  final String summaryApiKey;
 
   @override
   Future<Map<String, dynamic>> build() async {
     return <String, dynamic>{
       'summaryModelPath': modelPath,
       'summaryPreferVttSubtitles': preferVttSubtitles,
+      'summaryApiUrl': summaryApiUrl,
+      'summaryApiKey': summaryApiKey,
     };
   }
 }
@@ -489,6 +524,8 @@ class _FakeNaturalLanguageService extends NaturalLanguageService {
   final List<String> events;
   final Completer<String>? transcriptCompleter;
   String? lastTranscript;
+  String? lastApiUrl;
+  String? lastApiKey;
 
   @override
   Future<String> transcribeAudio({
@@ -506,9 +543,13 @@ class _FakeNaturalLanguageService extends NaturalLanguageService {
     required String title,
     required String metadataJson,
     required String transcript,
+    required String apiUrl,
+    required String apiKey,
   }) async {
     events.add('summarize');
     lastTranscript = transcript;
+    lastApiUrl = apiUrl;
+    lastApiKey = apiKey;
     return StructuredVideoSummary(
       synopsis: 'synopsis',
       highlights: const ['highlight'],

@@ -33,6 +33,42 @@ void main() {
   );
 
   test(
+    'summary API settings default to empty and persist across reloads',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      var settings = await container.read(settingsProvider.future);
+      expect(settings['summaryApiUrl'], '');
+      expect(settings['summaryApiKey'], '');
+
+      final notifier = container.read(settingsProvider.notifier);
+      await notifier.updateSummaryApiUrl(
+        ' https://summary.example.test/v1/chat/completions ',
+      );
+      await notifier.updateSummaryApiKey(' sk-test ');
+
+      settings = await container.read(settingsProvider.future);
+      expect(
+        settings['summaryApiUrl'],
+        'https://summary.example.test/v1/chat/completions',
+      );
+      expect(settings['summaryApiKey'], 'sk-test');
+
+      final reloaded = ProviderContainer();
+      addTearDown(reloaded.dispose);
+      final reloadedSettings = await reloaded.read(settingsProvider.future);
+      expect(
+        reloadedSettings['summaryApiUrl'],
+        'https://summary.example.test/v1/chat/completions',
+      );
+      expect(reloadedSettings['summaryApiKey'], 'sk-test');
+    },
+  );
+
+  test(
     'downloaded managed models and selected model persist across reloads',
     () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});

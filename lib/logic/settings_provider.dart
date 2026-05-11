@@ -45,6 +45,8 @@ class Settings extends _$Settings {
       'summaryDownloadedManagedModels': downloadedManagedModels,
       'summaryPreferVttSubtitles':
           prefs.getBool('summaryPreferVttSubtitles') ?? true,
+      'summaryApiUrl': prefs.getString('summaryApiUrl') ?? '',
+      'summaryApiKey': prefs.getString('summaryApiKey') ?? '',
     };
   }
 
@@ -229,6 +231,32 @@ class Settings extends _$Settings {
       ...currentData,
       'summaryPreferVttSubtitles': value,
     });
+  }
+
+  Future<void> updateSummaryApiUrl(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove('summaryApiUrl');
+    } else {
+      await prefs.setString('summaryApiUrl', trimmed);
+    }
+
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({...currentData, 'summaryApiUrl': trimmed});
+  }
+
+  Future<void> updateSummaryApiKey(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove('summaryApiKey');
+    } else {
+      await prefs.setString('summaryApiKey', trimmed);
+    }
+
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({...currentData, 'summaryApiKey': trimmed});
   }
 }
 

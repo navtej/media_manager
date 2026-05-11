@@ -1,11 +1,34 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../logic/video_summary_models.dart';
 
+typedef SummaryHttpPost =
+    Future<SummaryHttpResponse> Function(
+      Uri url, {
+      required Map<String, String> headers,
+      required String body,
+    });
+
+class SummaryHttpResponse {
+  const SummaryHttpResponse({required this.statusCode, required this.body});
+
+  final int statusCode;
+  final String body;
+}
+
 class NaturalLanguageService {
+  NaturalLanguageService({SummaryHttpPost? summaryHttpPost})
+    : _summaryHttpPost = summaryHttpPost ?? _defaultSummaryHttpPost;
+
   static const MethodChannel _channel = MethodChannel(
     'com.example.moviemanager/natural_language',
   );
+  static const _defaultSummaryModel = 'gpt-4o-mini';
+
+  final SummaryHttpPost _summaryHttpPost;
 
   Future<List<String>> extractTags(String text) async {
     return extractTagsStatic(text);
@@ -85,39 +108,148 @@ class NaturalLanguageService {
     required String title,
     required String metadataJson,
     required String transcript,
+    required String apiUrl,
+    required String apiKey,
   }) async {
-    final dynamic raw;
-    try {
-      raw = await _channel.invokeMethod<dynamic>('summarizeTranscript', {
-        'title': title,
-        'metadataJson': metadataJson,
-        'transcript': transcript,
-      });
-    } on PlatformException catch (e) {
-      if (_shouldUseExtractiveSummaryFallback(e)) {
-        return _buildExtractiveSummary(title: title, transcript: transcript);
-      }
-      final message = (e.message ?? e.code).trim();
-      throw StateError('Summary failed: $message');
+    final trimmedUrl = apiUrl.trim();
+    if (trimmedUrl.isEmpty) {
+      throw StateError('Summarization API URL is not configured.');
     }
 
-    if (raw is! Map) {
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      throw StateError('Summarization API URL is invalid.');
+    }
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (apiKey.trim().isNotEmpty) 'Authorization': 'Bearer ${apiKey.trim()}',
+    };
+
+    try {
+      final response = await _summaryHttpPost(
+        uri,
+        headers: headers,
+        body: jsonEncode(
+          _buildSummaryRequestPayload(
+            title: title,
+            metadataJson: metadataJson,
+            transcript: transcript,
+          ),
+        ),
+      );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(
+          'Summarization API failed with status ${response.statusCode}.',
+        );
+      }
+
+      return _parseOpenAiSummaryResponse(response.body);
+    } on FormatException {
+      return _buildExtractiveSummary(title: title, transcript: transcript);
+    } on StateError {
+      rethrow;
+    } catch (e) {
+      final message = e.toString().trim();
+      throw StateError('Summary failed: $message');
+    }
+  }
+
+  static Future<SummaryHttpResponse> _defaultSummaryHttpPost(
+    Uri url, {
+    required Map<String, String> headers,
+    required String body,
+  }) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(url);
+      headers.forEach(request.headers.set);
+      request.write(body);
+      final response = await request.close();
+      return SummaryHttpResponse(
+        statusCode: response.statusCode,
+        body: await utf8.decoder.bind(response).join(),
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Map<String, dynamic> _buildSummaryRequestPayload({
+    required String title,
+    required String metadataJson,
+    required String transcript,
+  }) {
+    return {
+      'model': _defaultSummaryModel,
+      'temperature': 0.2,
+      'response_format': {'type': 'json_object'},
+      'messages': [
+        {
+          'role': 'system',
+          'content':
+              'Summarize video transcripts as strict JSON with keys '
+              'synopsis, themes, highlights, and keywords. '
+              'themes must be an array of objects with title and bullets.',
+        },
+        {
+          'role': 'user',
+          'content': jsonEncode({
+            'title': title,
+            'metadata': _decodeMetadata(metadataJson),
+            'transcript': transcript,
+          }),
+        },
+      ],
+    };
+  }
+
+  Object _decodeMetadata(String metadataJson) {
+    if (metadataJson.trim().isEmpty) {
+      return <String, dynamic>{};
+    }
+    try {
+      return jsonDecode(metadataJson);
+    } catch (_) {
+      return metadataJson;
+    }
+  }
+
+  StructuredVideoSummary _parseOpenAiSummaryResponse(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) {
+      throw const FormatException('Summary response is invalid.');
+    }
+
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) {
+      throw const FormatException('Summary response has no choices.');
+    }
+
+    final firstChoice = choices.first;
+    if (firstChoice is! Map) {
+      throw const FormatException('Summary response choice is invalid.');
+    }
+
+    final message = firstChoice['message'];
+    if (message is! Map) {
+      throw const FormatException('Summary response message is invalid.');
+    }
+
+    final content = message['content'];
+    if (content is! String || content.trim().isEmpty) {
+      throw const FormatException('Summary response content is empty.');
+    }
+
+    final summaryJson = jsonDecode(content);
+    if (summaryJson is! Map) {
       throw const FormatException('Summary payload is invalid.');
     }
 
     return StructuredVideoSummary.fromJson(
-      Map<String, dynamic>.from(raw as Map<Object?, Object?>),
+      Map<String, dynamic>.from(summaryJson as Map<Object?, Object?>),
     );
-  }
-
-  bool _shouldUseExtractiveSummaryFallback(PlatformException error) {
-    final message = '${error.code} ${error.message ?? ''}'.toLowerCase();
-    if (error.code != 'SUMMARY_ERROR') {
-      return false;
-    }
-    return (message.contains('unsafe') && message.contains('content')) ||
-        message.contains('correct format') ||
-        message.contains('invalid summary');
   }
 
   StructuredVideoSummary _buildExtractiveSummary({

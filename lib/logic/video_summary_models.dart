@@ -1,6 +1,11 @@
 const summaryManagedModelFileName = 'ggml-base.en.bin';
 const summaryManagedModelDownloadUrl =
     'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin';
+const summaryModelPrefix = 'openai_compatible:';
+
+String summaryModelNameFromApiUrl(String apiUrl) {
+  return '$summaryModelPrefix${apiUrl.trim()}';
+}
 
 class VideoSummaryTheme {
   const VideoSummaryTheme({required this.title, required this.bullets});
