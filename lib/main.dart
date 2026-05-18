@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'ui/screens/home_screen.dart';
 
-import 'package:flutter/services.dart';
+import 'services/app_lifecycle_service.dart';
 import 'ui/screens/settings_screen.dart';
 import 'ui/widgets/about_dialog.dart';
 
@@ -31,9 +31,9 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
         final settings = ref.watch(settingsProvider);
         final themeModeString = settings.value?['themeMode'] ?? 'system';
         final themeMode = switch (themeModeString) {
-            'light' => ThemeMode.light,
-            'dark' => ThemeMode.dark,
-            _ => ThemeMode.system,
+          'light' => ThemeMode.light,
+          'dark' => ThemeMode.dark,
+          _ => ThemeMode.system,
         };
 
         return PlatformMenuBar(
@@ -54,14 +54,16 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
                       shortcut: const CharacterActivator(',', meta: true),
                       onSelected: () {
                         _navigatorKey.currentState?.push(
-                          CupertinoPageRoute(builder: (_) => const SettingsScreen()),
+                          CupertinoPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
                         );
                       },
                     ),
                     PlatformMenuItem(
                       label: 'Quit Media Manager',
                       shortcut: const CharacterActivator('q', meta: true),
-                      onSelected: () => SystemNavigator.pop(),
+                      onSelected: AppLifecycleService.quit,
                     ),
                   ],
                 ),
@@ -78,7 +80,7 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
             home: const HomeScreen(),
           ),
         );
-      }
+      },
     );
   }
 }

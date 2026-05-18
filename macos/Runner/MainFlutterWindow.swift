@@ -252,6 +252,19 @@ class MainFlutterWindow: NSWindow {
     let channel = FlutterMethodChannel(
       name: "com.example.moviemanager/natural_language",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+    let appLifecycleChannel = FlutterMethodChannel(
+      name: "com.example.moviemanager/app_lifecycle",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+    appLifecycleChannel.setMethodCallHandler { (call, result) in
+      if call.method == "terminateApplication" {
+        NSApp.terminate(nil)
+        result(nil)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
     
     channel.setMethodCallHandler { (call, result) in
       if call.method == "analyzeText" {
