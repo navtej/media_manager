@@ -30,7 +30,9 @@ fi
 
 cmake -S "$SOURCE_DIR" -B "$SOURCE_DIR/build" \
   -DWHISPER_BUILD_TESTS=OFF \
-  -DWHISPER_BUILD_EXAMPLES=ON
+  -DWHISPER_BUILD_EXAMPLES=ON \
+  -DGGML_NATIVE=OFF \
+  -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16
 cmake --build "$SOURCE_DIR/build" --target whisper-cli --config Release
 
 SOURCE_CLI="$SOURCE_DIR/build/bin/whisper-cli"
