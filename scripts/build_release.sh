@@ -75,7 +75,24 @@ else
     exit 1
 fi
 
-# 7. Generate DMG
+# 7. Re-sign after relocation so added libraries are sealed in the app bundle
+echo "-----------------------------------"
+echo "Signing relocated app bundle..."
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
+if [ -z "$SIGNING_IDENTITY" ]; then
+    SIGNING_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+fi
+
+ENTITLEMENTS_PATH="${ENTITLEMENTS_PATH:-$PROJECT_ROOT/macos/Runner/Release.entitlements}"
+CODESIGN_ARGS=(--force --deep --sign "$SIGNING_IDENTITY")
+if [ -f "$ENTITLEMENTS_PATH" ]; then
+    CODESIGN_ARGS+=(--entitlements "$ENTITLEMENTS_PATH")
+fi
+
+codesign "${CODESIGN_ARGS[@]}" "$APP_PATH"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+# 8. Generate DMG
 echo "-----------------------------------"
 mkdir -p "$DIST_DIR"
 echo "Packaging $DMG_PATH..."
