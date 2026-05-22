@@ -41,7 +41,7 @@ brew update
 brew upgrade --cask media-manager
 ```
 
-The Homebrew cask currently ships the macOS Apple Silicon DMG from the
+The Homebrew cask currently ships the macOS 26 Apple Silicon DMG from the
 GitHub releases page.
 
 ### Build from Source
