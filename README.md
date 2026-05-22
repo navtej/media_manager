@@ -21,6 +21,31 @@ Media Manager is a powerful, macOS-native application built with Flutter designe
 
 ## Getting Started
 
+### Install with Homebrew
+
+```bash
+brew install --cask navtej/tap/media-manager
+```
+
+Or tap the repository first:
+
+```bash
+brew tap navtej/tap
+brew install --cask media-manager
+```
+
+To upgrade an existing Homebrew install:
+
+```bash
+brew update
+brew upgrade --cask media-manager
+```
+
+The Homebrew cask currently ships the macOS Apple Silicon DMG from the
+GitHub releases page.
+
+### Build from Source
+
 1.  **Prerequisites**: Ensure you have Flutter installed and set up for macOS development.
 2.  **Install Dependencies**:
     ```bash
