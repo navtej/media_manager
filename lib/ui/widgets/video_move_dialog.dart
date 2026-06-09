@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'
+    show Colors, Dialog, RoundedRectangleBorder;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +13,8 @@ import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/video_move_controller.dart';
+
+const _dialogBorderRadius = BorderRadius.all(Radius.circular(12));
 
 class VideoMoveDialogResult {
   const VideoMoveDialogResult({
@@ -61,23 +65,20 @@ Future<void> showVideoMoveResultDialog({
   return showMacosAlertDialog<void>(
     context: context,
     builder: (dialogContext) {
-      final dialogBodySize = _wideCompactDialogBodySize(dialogContext);
-      return MacosAlertDialog(
+      final dialogSize = _wideCompactDialogSize(dialogContext);
+      return _WideMoveDialogFrame(
+        size: dialogSize,
         appIcon: const MacosIcon(CupertinoIcons.arrow_right_arrow_left),
         title: const Text('Move Results'),
-        message: SizedBox(
-          width: dialogBodySize.width,
-          height: dialogBodySize.height,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ResultSection(title: 'Skipped', items: result.skipped),
-                if (result.skipped.isNotEmpty && result.failures.isNotEmpty)
-                  const SizedBox(height: 12),
-                _ResultSection(title: 'Failed', items: result.failures),
-              ],
-            ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ResultSection(title: 'Skipped', items: result.skipped),
+              if (result.skipped.isNotEmpty && result.failures.isNotEmpty)
+                const SizedBox(height: 12),
+              _ResultSection(title: 'Failed', items: result.failures),
+            ],
           ),
         ),
         primaryButton: PushButton(
@@ -91,24 +92,115 @@ Future<void> showVideoMoveResultDialog({
 }
 
 @visibleForTesting
-Size wideCompactMoveDialogBodySizeForTesting(Size windowSize) {
-  return _wideCompactDialogBodySizeForWindow(windowSize);
+const Key wideMoveDialogFrameKey = Key('wide-move-dialog-frame');
+
+@visibleForTesting
+Size wideCompactMoveDialogSizeForTesting(Size windowSize) {
+  return _wideCompactDialogSizeForWindow(windowSize);
 }
 
-Size _wideCompactDialogBodySize(BuildContext context) {
-  return _wideCompactDialogBodySizeForWindow(MediaQuery.sizeOf(context));
+Size _wideCompactDialogSize(BuildContext context) {
+  return _wideCompactDialogSizeForWindow(MediaQuery.sizeOf(context));
 }
 
-Size _wideCompactDialogBodySizeForWindow(Size windowSize) {
+Size _wideCompactDialogSizeForWindow(Size windowSize) {
   final availableWidth = math.max(0.0, windowSize.width - 48);
-  final availableHeight = math.max(0.0, windowSize.height - 260);
+  final availableHeight = math.max(0.0, windowSize.height - 96);
   final width = (windowSize.width * 0.90).clamp(760.0, 1280.0);
-  final height = (windowSize.height * 0.38).clamp(220.0, 320.0);
+  final height = (windowSize.height * 0.44).clamp(340.0, 420.0);
 
   return Size(
     math.min(width, availableWidth),
     math.min(height, availableHeight),
   );
+}
+
+class _WideMoveDialogFrame extends StatelessWidget {
+  const _WideMoveDialogFrame({
+    required this.size,
+    required this.appIcon,
+    required this.title,
+    required this.content,
+    required this.primaryButton,
+    this.secondaryButton,
+  });
+
+  final Size size;
+  final Widget appIcon;
+  final Widget title;
+  final Widget content;
+  final PushButton primaryButton;
+  final PushButton? secondaryButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    final brightness = MacosTheme.brightnessOf(context);
+    final outerBorderColor = brightness.resolve(
+      Colors.black.withValues(alpha: 0.23),
+      Colors.black.withValues(alpha: 0.76),
+    );
+    final innerBorderColor = brightness.resolve(
+      Colors.white.withValues(alpha: 0.45),
+      Colors.white.withValues(alpha: 0.15),
+    );
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      backgroundColor: brightness.resolve(
+        CupertinoColors.systemGrey6.color,
+        MacosColors.controlBackgroundColor.darkColor,
+      ),
+      shape: const RoundedRectangleBorder(borderRadius: _dialogBorderRadius),
+      child: Container(
+        key: wideMoveDialogFrameKey,
+        width: size.width,
+        height: size.height,
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
+        decoration: BoxDecoration(
+          border: Border.all(width: 2, color: innerBorderColor),
+          borderRadius: _dialogBorderRadius,
+        ),
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(width: 1, color: outerBorderColor),
+          borderRadius: _dialogBorderRadius,
+        ),
+        child: Column(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 28, maxWidth: 28),
+              child: appIcon,
+            ),
+            const SizedBox(height: 12),
+            DefaultTextStyle(
+              style: theme.typography.headline,
+              textAlign: TextAlign.center,
+              child: title,
+            ),
+            const SizedBox(height: 18),
+            Expanded(
+              child: DefaultTextStyle(
+                style: theme.typography.body,
+                textAlign: TextAlign.start,
+                child: content,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (secondaryButton != null) ...[
+                  SizedBox(width: 164, child: secondaryButton!),
+                  const SizedBox(width: 10),
+                ],
+                SizedBox(width: 164, child: primaryButton),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _VideoMoveDialog extends ConsumerStatefulWidget {
@@ -160,7 +252,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
     );
   }
 
-  MacosAlertDialog _buildDialog({
+  Widget _buildDialog({
     required BuildContext context,
     required List<Folder> folders,
     required int? effectiveDestinationId,
@@ -176,93 +268,90 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
         !moveState.isMoving &&
         effectiveDestinationId != null &&
         preflight?.canMove == true;
-    final dialogBodySize = _wideCompactDialogBodySize(context);
+    final dialogSize = _wideCompactDialogSize(context);
 
-    return MacosAlertDialog(
+    return _WideMoveDialogFrame(
+      size: dialogSize,
       appIcon: const MacosIcon(CupertinoIcons.arrow_right_arrow_left),
       title: const Text('Move Selected Videos'),
-      message: SizedBox(
-        width: dialogBodySize.width,
-        height: dialogBodySize.height,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${widget.selectedVideoIds.length} selected'),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final labelWidth = math.max(
-                        0.0,
-                        constraints.maxWidth - _popupLabelReservedWidth,
-                      );
-                      return MacosPopupButton<int>(
-                        value: effectiveDestinationId,
-                        selectedItemBuilder: (_) => folders
-                            .map(
-                              (folder) => _FolderPopupLabel(
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${widget.selectedVideoIds.length} selected'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final labelWidth = math.max(
+                      0.0,
+                      constraints.maxWidth - _popupLabelReservedWidth,
+                    );
+                    return MacosPopupButton<int>(
+                      value: effectiveDestinationId,
+                      selectedItemBuilder: (_) => folders
+                          .map(
+                            (folder) => _FolderPopupLabel(
+                              label: _folderLabel(folder),
+                              width: labelWidth,
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: _isSubmitting
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _destinationFolderId = value;
+                                _actionError = null;
+                                _clearPreflight();
+                              });
+                            },
+                      items: folders
+                          .map(
+                            (folder) => MacosPopupMenuItem<int>(
+                              value: folder.id,
+                              child: _FolderPopupLabel(
                                 label: _folderLabel(folder),
                                 width: labelWidth,
                               ),
-                            )
-                            .toList(growable: false),
-                        onChanged: _isSubmitting
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setState(() {
-                                  _destinationFolderId = value;
-                                  _actionError = null;
-                                  _clearPreflight();
-                                });
-                              },
-                        items: folders
-                            .map(
-                              (folder) => MacosPopupMenuItem<int>(
-                                value: folder.id,
-                                child: _FolderPopupLabel(
-                                  label: _folderLabel(folder),
-                                  width: labelWidth,
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      );
-                    },
-                  ),
+                            ),
+                          )
+                          .toList(growable: false),
+                    );
+                  },
                 ),
-                const SizedBox(width: 8),
-                PushButton(
-                  controlSize: ControlSize.small,
-                  secondary: true,
-                  onPressed: _isSubmitting ? null : _addDestinationFolder,
-                  child: const Text('Add Folder'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _CleanupOption(
-              value: _removeEmptySourceFolders,
-              onChanged: _isSubmitting
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _removeEmptySourceFolders = value;
-                      });
-                    },
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: _PreflightPreview(
-                isLoading: isLoadingPreflight,
-                preflight: preflight,
-                error: preflightSnapshot.error ?? _actionError,
               ),
+              const SizedBox(width: 8),
+              PushButton(
+                controlSize: ControlSize.small,
+                secondary: true,
+                onPressed: _isSubmitting ? null : _addDestinationFolder,
+                child: const Text('Add Folder'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _CleanupOption(
+            value: _removeEmptySourceFolders,
+            onChanged: _isSubmitting
+                ? null
+                : (value) {
+                    setState(() {
+                      _removeEmptySourceFolders = value;
+                    });
+                  },
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _PreflightPreview(
+              isLoading: isLoadingPreflight,
+              preflight: preflight,
+              error: preflightSnapshot.error ?? _actionError,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       primaryButton: PushButton(
         controlSize: ControlSize.large,

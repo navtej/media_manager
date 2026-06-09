@@ -12,17 +12,17 @@ import 'package:movie_manager/ui/widgets/video_move_dialog.dart';
 
 void main() {
   test('wide compact sizing scales from the window size', () {
-    final defaultWindowSize = wideCompactMoveDialogBodySizeForTesting(
+    final defaultWindowSize = wideCompactMoveDialogSizeForTesting(
       const Size(800, 600),
     );
     expect(defaultWindowSize.width, 752);
-    expect(defaultWindowSize.height, 228);
+    expect(defaultWindowSize.height, 340);
 
-    final largeWindowSize = wideCompactMoveDialogBodySizeForTesting(
+    final largeWindowSize = wideCompactMoveDialogSizeForTesting(
       const Size(1400, 900),
     );
     expect(largeWindowSize.width, 1260);
-    expect(largeWindowSize.height, 320);
+    expect(largeWindowSize.height, 396);
   });
 
   testWidgets('move dialog ellipsizes long destination folder labels', (
@@ -105,17 +105,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Move Selected Videos'), findsOneWidget);
-    final expectedBodySize = wideCompactMoveDialogBodySizeForTesting(
+    final expectedDialogSize = wideCompactMoveDialogSizeForTesting(
       tester.view.physicalSize / tester.view.devicePixelRatio,
     );
     expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SizedBox &&
-            widget.width == expectedBodySize.width &&
-            widget.height == expectedBodySize.height,
-      ),
-      findsOneWidget,
+      tester.getSize(find.byKey(wideMoveDialogFrameKey)),
+      expectedDialogSize,
     );
     expect(tester.takeException(), isNull);
     expect(destinationFolderId, isPositive);
@@ -178,17 +173,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Move Results'), findsOneWidget);
-    final expectedBodySize = wideCompactMoveDialogBodySizeForTesting(
+    final expectedDialogSize = wideCompactMoveDialogSizeForTesting(
       tester.view.physicalSize / tester.view.devicePixelRatio,
     );
     expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SizedBox &&
-            widget.width == expectedBodySize.width &&
-            widget.height == expectedBodySize.height,
-      ),
-      findsOneWidget,
+      tester.getSize(find.byKey(wideMoveDialogFrameKey)),
+      expectedDialogSize,
     );
     expect(tester.takeException(), isNull);
 
