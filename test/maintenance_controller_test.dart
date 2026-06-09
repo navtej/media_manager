@@ -29,6 +29,29 @@ void main() {
     expect(await fixture.db.videosDao.getVideoById(fixture.video.id), isNull);
   });
 
+  test('deleteVideos deletes selected media files and sidecars', () async {
+    final fixture = await _MaintenanceFixture.create();
+    addTearDown(fixture.dispose);
+    final second = await fixture.addVideo('second.mp4', '.srt');
+
+    await fixture.container
+        .read(maintenanceControllerProvider.notifier)
+        .deleteVideos([fixture.video.id, second.video.id]);
+
+    expect(fixture.events, [
+      'start:${fixture.root.path}:bookmark',
+      'stop:${fixture.root.path}:bookmark',
+      'start:${fixture.root.path}:bookmark',
+      'stop:${fixture.root.path}:bookmark',
+    ]);
+    expect(await fixture.videoFile.exists(), isFalse);
+    expect(await fixture.subtitleFile.exists(), isFalse);
+    expect(await second.videoFile.exists(), isFalse);
+    expect(await second.subtitleFile.exists(), isFalse);
+    expect(await fixture.db.videosDao.getVideoById(fixture.video.id), isNull);
+    expect(await fixture.db.videosDao.getVideoById(second.video.id), isNull);
+  });
+
   test(
     'deleteVideo keeps database row when folder access needs repair',
     () async {
@@ -38,6 +61,29 @@ void main() {
       await fixture.container
           .read(maintenanceControllerProvider.notifier)
           .deleteVideo(fixture.video.id);
+
+      expect(fixture.events, ['start:${fixture.root.path}:bookmark']);
+      expect(await fixture.videoFile.exists(), isTrue);
+      expect(
+        await fixture.db.videosDao.getVideoById(fixture.video.id),
+        isNotNull,
+      );
+      expect(
+        fixture.container.read(scanStatusProvider),
+        'Folder access needs repair. Reselect this folder in Settings.',
+      );
+    },
+  );
+
+  test(
+    'deleteVideos keeps database rows when folder access needs repair',
+    () async {
+      final fixture = await _MaintenanceFixture.create(canAccessFolder: false);
+      addTearDown(fixture.dispose);
+
+      await fixture.container
+          .read(maintenanceControllerProvider.notifier)
+          .deleteVideos([fixture.video.id]);
 
       expect(fixture.events, ['start:${fixture.root.path}:bookmark']);
       expect(await fixture.videoFile.exists(), isTrue);
@@ -120,6 +166,35 @@ class _MaintenanceFixture {
     );
   }
 
+  Future<_FixtureVideo> addVideo(
+    String fileName,
+    String subtitleExtension,
+  ) async {
+    final videoFile = File(p.join(root.path, fileName));
+    await videoFile.writeAsBytes(const <int>[1, 2, 3]);
+    final subtitleFile = File(
+      p.join(
+        root.path,
+        '${p.basenameWithoutExtension(fileName)}$subtitleExtension',
+      ),
+    );
+    await subtitleFile.writeAsString('WEBVTT');
+
+    await db.videosDao.insertVideo(
+      VideosCompanion.insert(
+        folderId: video.folderId,
+        absolutePath: videoFile.path,
+        title: p.basenameWithoutExtension(fileName),
+      ),
+    );
+    final inserted = (await db.videosDao.getVideoByPath(videoFile.path))!;
+    return _FixtureVideo(
+      videoFile: videoFile,
+      subtitleFile: subtitleFile,
+      video: inserted,
+    );
+  }
+
   Future<void> dispose() async {
     container.dispose();
     await db.close();
@@ -127,6 +202,18 @@ class _MaintenanceFixture {
       await root.delete(recursive: true);
     }
   }
+}
+
+class _FixtureVideo {
+  const _FixtureVideo({
+    required this.videoFile,
+    required this.subtitleFile,
+    required this.video,
+  });
+
+  final File videoFile;
+  final File subtitleFile;
+  final Video video;
 }
 
 class _FakeFolderAccessService extends FolderAccessService {

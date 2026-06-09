@@ -215,6 +215,11 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return (select(videos)..where((t) => t.folderId.equals(folderId))).get();
   }
 
+  Future<List<Video>> getVideosByIds(List<int> ids) {
+    if (ids.isEmpty) return Future.value(const []);
+    return (select(videos)..where((t) => t.id.isIn(ids))).get();
+  }
+
   Future<Video?> getVideoById(int id) {
     return (select(videos)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
@@ -234,9 +239,30 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     );
   }
 
+  Future<void> updateVideoLocation({
+    required int id,
+    required int folderId,
+    required String absolutePath,
+  }) {
+    return (update(videos)..where((t) => t.id.equals(id))).write(
+      VideosCompanion(
+        folderId: Value(folderId),
+        absolutePath: Value(absolutePath),
+        isOffline: const Value(false),
+      ),
+    );
+  }
+
   Future<void> toggleFavorite(int id, bool currentStatus) {
     return (update(videos)..where((t) => t.id.equals(id))).write(
       VideosCompanion(isFavorite: Value(!currentStatus)),
+    );
+  }
+
+  Future<void> setFavoriteForVideos(List<int> ids, bool isFavorite) {
+    if (ids.isEmpty) return Future.value();
+    return (update(videos)..where((t) => t.id.isIn(ids))).write(
+      VideosCompanion(isFavorite: Value(isFavorite)),
     );
   }
 
@@ -623,6 +649,11 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
 
   Future<void> deleteAllTagsForVideo(int videoId) async {
     await (delete(videoTags)..where((t) => t.videoId.equals(videoId))).go();
+  }
+
+  Future<void> deleteAllTagsForVideos(List<int> videoIds) async {
+    if (videoIds.isEmpty) return;
+    await (delete(videoTags)..where((t) => t.videoId.isIn(videoIds))).go();
   }
 
   Future<void> deleteTagFromAllVideos(String tagText) async {

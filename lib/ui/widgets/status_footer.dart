@@ -7,6 +7,8 @@ import '../../logic/status_message_provider.dart';
 import '../../logic/stats_provider.dart';
 import '../../logic/filter_controller.dart';
 import '../../logic/video_summary_controller.dart';
+import '../../logic/video_move_controller.dart';
+import '../../logic/video_selection_controller.dart';
 
 class StatusFooter extends ConsumerWidget {
   const StatusFooter({super.key});
@@ -16,7 +18,9 @@ class StatusFooter extends ConsumerWidget {
     final scanStatus = ref.watch(scanStatusProvider);
     final aiStatus = ref.watch(aIStatusProvider);
     final summaryStatus = ref.watch(videoSummaryStatusProvider);
+    final moveState = ref.watch(videoMoveControllerProvider);
     final statusMsg = ref.watch(statusMessageProvider);
+    final selectedBulkCount = ref.watch(videoSelectionControllerProvider).count;
 
     final totalVideosSync = ref.watch(libraryStatsProvider);
     final visibleVideosSync = ref.watch(filteredVideosProvider);
@@ -61,7 +65,8 @@ class StatusFooter extends ConsumerWidget {
             ),
           ] else if (scanStatus.isNotEmpty ||
               aiStatus.isNotEmpty ||
-              summaryStatus.isNotEmpty) ...[
+              summaryStatus.isNotEmpty ||
+              moveState.statusMessage.isNotEmpty) ...[
             const CupertinoActivityIndicator(
               radius: 7,
               color: MacosColors.white,
@@ -73,6 +78,7 @@ class StatusFooter extends ConsumerWidget {
                   scanStatus,
                   aiStatus,
                   summaryStatus,
+                  moveState.statusMessage,
                 ].where((s) => s.isNotEmpty).join(' | '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -90,7 +96,7 @@ class StatusFooter extends ConsumerWidget {
           if (statusMsg == null) ...[
             const Spacer(),
             Text(
-              'Loaded: $visibleCount / Selected: $selectedCount / Total: $totalCount',
+              'Loaded: $visibleCount / Matching: $selectedCount / Selected: $selectedBulkCount / Total: $totalCount',
               style: const TextStyle(
                 fontSize: 11,
                 color: MacosColors.white,

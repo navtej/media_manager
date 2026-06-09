@@ -176,4 +176,14 @@ class MaintenanceController extends _$MaintenanceController {
       print('ERROR in deleteVideo: $e');
     }
   }
+
+  Future<void> deleteVideos(List<int> videoIds) async {
+    if (videoIds.isEmpty) {
+      return;
+    }
+
+    for (final videoId in videoIds) {
+      await deleteVideo(videoId);
+    }
+  }
 }

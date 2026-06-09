@@ -13,6 +13,7 @@ import 'settings_provider.dart';
 import '../services/thumbnail_service.dart';
 import 'ai_controller.dart';
 import 'maintenance_controller.dart';
+import 'library_operation_controller.dart';
 
 part 'library_controller.g.dart';
 
@@ -79,6 +80,17 @@ class LibraryController extends _$LibraryController {
           .setStatus('Scan already in progress');
       Future.delayed(const Duration(seconds: 2), () {
         if (!_isScanning) ref.read(scanStatusProvider.notifier).setStatus('');
+      });
+      return;
+    }
+
+    final operation = ref.read(libraryOperationControllerProvider.notifier);
+    if (!operation.beginScan()) {
+      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!ref.read(libraryOperationControllerProvider).isMoving) {
+          ref.read(scanStatusProvider.notifier).setStatus('');
+        }
       });
       return;
     }
@@ -202,6 +214,7 @@ class LibraryController extends _$LibraryController {
       print(stack);
     } finally {
       _isScanning = false;
+      operation.endScan();
       ref.read(scanStatusProvider.notifier).setStatus('');
     }
   }
@@ -229,52 +242,63 @@ class LibraryController extends _$LibraryController {
           .setStatus('Scan already in progress');
       return;
     }
-    print('DEBUG: addFolder called with $path');
-    final dao = ref.read(foldersDaoProvider);
-    final bookmark = await ref
-        .read(folderAccessServiceProvider)
-        .createBookmark(path);
-
-    // Check if exists first to get ID
-    final folders = await dao.getAllFolders();
-    final existing = folders.where((f) => f.path == path).toList();
-
-    int id;
-    if (existing.isNotEmpty) {
-      id = existing.first.id;
-      if (bookmark != null) {
-        await dao.updateFolderBookmark(id, bookmark);
-      }
-      print('DEBUG: Folder already exists with ID: $id');
-    } else {
-      id = await dao.insertFolder(
-        FoldersCompanion(
-          path: drift.Value(path),
-          alias: drift.Value(p.basename(path)),
-          securityScopedBookmark: drift.Value(bookmark),
-        ),
-      );
-      if (id == 0) {
-        // Should not happen with the check above, but for safety:
-        final refetched = await dao.getAllFolders();
-        id = refetched.firstWhere((f) => f.path == path).id;
-      }
-      print('DEBUG: Folder inserted with ID: $id');
-    }
-
-    // Start scan
-    final refetched = (await dao.getAllFolders()).firstWhere((f) => f.id == id);
-    final access = await _startFolderAccess(refetched);
-    if (!access.canAccess) {
-      ref
-          .read(scanStatusProvider.notifier)
-          .setStatus(access.message ?? 'Cannot access $path');
+    final operation = ref.read(libraryOperationControllerProvider.notifier);
+    if (!operation.beginScan()) {
+      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
       return;
     }
+    print('DEBUG: addFolder called with $path');
     try {
-      await scanFolder(path, id);
+      final dao = ref.read(foldersDaoProvider);
+      final bookmark = await ref
+          .read(folderAccessServiceProvider)
+          .createBookmark(path);
+
+      // Check if exists first to get ID
+      final folders = await dao.getAllFolders();
+      final existing = folders.where((f) => f.path == path).toList();
+
+      int id;
+      if (existing.isNotEmpty) {
+        id = existing.first.id;
+        if (bookmark != null) {
+          await dao.updateFolderBookmark(id, bookmark);
+        }
+        print('DEBUG: Folder already exists with ID: $id');
+      } else {
+        id = await dao.insertFolder(
+          FoldersCompanion(
+            path: drift.Value(path),
+            alias: drift.Value(p.basename(path)),
+            securityScopedBookmark: drift.Value(bookmark),
+          ),
+        );
+        if (id == 0) {
+          // Should not happen with the check above, but for safety:
+          final refetched = await dao.getAllFolders();
+          id = refetched.firstWhere((f) => f.path == path).id;
+        }
+        print('DEBUG: Folder inserted with ID: $id');
+      }
+
+      // Start scan
+      final refetched = (await dao.getAllFolders()).firstWhere(
+        (f) => f.id == id,
+      );
+      final access = await _startFolderAccess(refetched);
+      if (!access.canAccess) {
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus(access.message ?? 'Cannot access $path');
+        return;
+      }
+      try {
+        await scanFolder(path, id);
+      } finally {
+        await _stopFolderAccess(refetched);
+      }
     } finally {
-      await _stopFolderAccess(refetched);
+      operation.endScan();
     }
   }
 
@@ -287,6 +311,11 @@ class LibraryController extends _$LibraryController {
       ref
           .read(scanStatusProvider.notifier)
           .setStatus('Scan already in progress');
+      return;
+    }
+    final operation = ref.read(libraryOperationControllerProvider.notifier);
+    if (!operation.beginScan()) {
+      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
       return;
     }
 
@@ -323,11 +352,16 @@ class LibraryController extends _$LibraryController {
       ref.read(scanStatusProvider.notifier).setStatus('Rebuild failed');
     } finally {
       _isScanning = false;
+      operation.endScan();
       ref.read(scanStatusProvider.notifier).setStatus('');
     }
   }
 
   Future<void> scanFolder(String rootPath, int folderId) async {
+    if (ref.read(libraryOperationControllerProvider).isMoving) {
+      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
+      return;
+    }
     print('DEBUG: scanFolder called for $rootPath');
     ref.read(scanStatusProvider.notifier).setStatus('Scanning $rootPath...');
 
