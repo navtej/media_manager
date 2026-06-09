@@ -15,13 +15,13 @@ void main() {
     final defaultWindowSize = wideCompactMoveDialogSizeForTesting(
       const Size(800, 600),
     );
-    expect(defaultWindowSize.width, 752);
+    expect(defaultWindowSize.width, 720);
     expect(defaultWindowSize.height, 340);
 
     final largeWindowSize = wideCompactMoveDialogSizeForTesting(
       const Size(1400, 900),
     );
-    expect(largeWindowSize.width, 1260);
+    expect(largeWindowSize.width, 1120);
     expect(largeWindowSize.height, 396);
   });
 

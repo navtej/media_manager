@@ -106,7 +106,7 @@ Size _wideCompactDialogSize(BuildContext context) {
 Size _wideCompactDialogSizeForWindow(Size windowSize) {
   final availableWidth = math.max(0.0, windowSize.width - 48);
   final availableHeight = math.max(0.0, windowSize.height - 96);
-  final width = (windowSize.width * 0.90).clamp(760.0, 1280.0);
+  final width = (windowSize.width * 0.82).clamp(720.0, 1120.0);
   final height = (windowSize.height * 0.44).clamp(340.0, 420.0);
 
   return Size(
