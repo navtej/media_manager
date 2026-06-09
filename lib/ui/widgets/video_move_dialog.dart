@@ -100,10 +100,10 @@ Size _wideCompactDialogBodySize(BuildContext context) {
 }
 
 Size _wideCompactDialogBodySizeForWindow(Size windowSize) {
-  final availableWidth = math.max(0.0, windowSize.width - 96);
-  final availableHeight = math.max(0.0, windowSize.height - 220);
-  final width = (windowSize.width * 0.82).clamp(700.0, 1100.0);
-  final height = (windowSize.height * 0.48).clamp(260.0, 360.0);
+  final availableWidth = math.max(0.0, windowSize.width - 48);
+  final availableHeight = math.max(0.0, windowSize.height - 260);
+  final width = (windowSize.width * 0.90).clamp(760.0, 1280.0);
+  final height = (windowSize.height * 0.38).clamp(220.0, 320.0);
 
   return Size(
     math.min(width, availableWidth),

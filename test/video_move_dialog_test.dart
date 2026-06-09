@@ -15,14 +15,14 @@ void main() {
     final defaultWindowSize = wideCompactMoveDialogBodySizeForTesting(
       const Size(800, 600),
     );
-    expect(defaultWindowSize.width, 700);
-    expect(defaultWindowSize.height, 288);
+    expect(defaultWindowSize.width, 752);
+    expect(defaultWindowSize.height, 228);
 
     final largeWindowSize = wideCompactMoveDialogBodySizeForTesting(
       const Size(1400, 900),
     );
-    expect(largeWindowSize.width, 1100);
-    expect(largeWindowSize.height, 360);
+    expect(largeWindowSize.width, 1260);
+    expect(largeWindowSize.height, 320);
   });
 
   testWidgets('move dialog ellipsizes long destination folder labels', (
