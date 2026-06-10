@@ -576,6 +576,7 @@ class _FolderList extends ConsumerWidget {
                 securityScopedBookmark: folder.securityScopedBookmark,
               );
               final statusLabel = storageStatus.statusLabel;
+              final accessTooltip = _folderAccessTooltip(storageStatus);
               return Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -606,58 +607,67 @@ class _FolderList extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    MacosIconButton(
-                      icon: Icon(
-                        CupertinoIcons.exclamationmark_shield,
-                        color: storageStatus.needsRepair
-                            ? MacosColors.systemOrangeColor
-                            : storageStatus.isRemovableStorage
-                            ? MacosColors.systemBlueColor
-                            : MacosColors.systemGrayColor,
-                        size: 16,
+                    MacosTooltip(
+                      message: accessTooltip,
+                      child: MacosIconButton(
+                        icon: Icon(
+                          CupertinoIcons.exclamationmark_shield,
+                          color: storageStatus.needsRepair
+                              ? MacosColors.systemOrangeColor
+                              : storageStatus.isRemovableStorage
+                              ? MacosColors.systemBlueColor
+                              : MacosColors.systemGrayColor,
+                          size: 16,
+                        ),
+                        onPressed: () async {
+                          final selectedDirectory = await FilePicker.platform
+                              .getDirectoryPath();
+                          if (selectedDirectory == null) {
+                            return;
+                          }
+                          if (selectedDirectory != folder.path) {
+                            ref
+                                .read(statusMessageProvider.notifier)
+                                .set(
+                                  'Select the same folder to repair access.',
+                                );
+                            return;
+                          }
+
+                          final bookmark = await ref
+                              .read(folderAccessServiceProvider)
+                              .createBookmark(selectedDirectory);
+                          if (bookmark == null || bookmark.isEmpty) {
+                            ref
+                                .read(statusMessageProvider.notifier)
+                                .set('Could not repair folder access.');
+                            return;
+                          }
+
+                          await ref
+                              .read(foldersDaoProvider)
+                              .updateFolderBookmark(folder.id, bookmark);
+                          ref
+                              .read(statusMessageProvider.notifier)
+                              .set('Folder access repaired.');
+                        },
                       ),
-                      onPressed: () async {
-                        final selectedDirectory = await FilePicker.platform
-                            .getDirectoryPath();
-                        if (selectedDirectory == null) {
-                          return;
-                        }
-                        if (selectedDirectory != folder.path) {
-                          ref
-                              .read(statusMessageProvider.notifier)
-                              .set('Select the same folder to repair access.');
-                          return;
-                        }
-
-                        final bookmark = await ref
-                            .read(folderAccessServiceProvider)
-                            .createBookmark(selectedDirectory);
-                        if (bookmark == null || bookmark.isEmpty) {
-                          ref
-                              .read(statusMessageProvider.notifier)
-                              .set('Could not repair folder access.');
-                          return;
-                        }
-
-                        await ref
-                            .read(foldersDaoProvider)
-                            .updateFolderBookmark(folder.id, bookmark);
-                        ref
-                            .read(statusMessageProvider.notifier)
-                            .set('Folder access repaired.');
-                      },
                     ),
-                    MacosIconButton(
-                      icon: const Icon(
-                        CupertinoIcons.trash,
-                        color: MacosColors.appleRed,
-                        size: 16,
+                    MacosTooltip(
+                      message:
+                          'Remove this folder from the library. Files stay on disk.',
+                      child: MacosIconButton(
+                        icon: const Icon(
+                          CupertinoIcons.trash,
+                          color: MacosColors.appleRed,
+                          size: 16,
+                        ),
+                        onPressed: () {
+                          ref
+                              .read(maintenanceControllerProvider.notifier)
+                              .removeFolder(folder.id);
+                        },
                       ),
-                      onPressed: () {
-                        ref
-                            .read(maintenanceControllerProvider.notifier)
-                            .removeFolder(folder.id);
-                      },
                     ),
                   ],
                 ),
@@ -668,4 +678,14 @@ class _FolderList extends ConsumerWidget {
       },
     );
   }
+}
+
+String _folderAccessTooltip(FolderStorageStatus status) {
+  if (status.needsRepair) {
+    return 'Access repair required. Click to reselect this folder and restore access.';
+  }
+  if (status.isRemovableStorage) {
+    return 'Removable storage. macOS keeps saved access for this folder; click to refresh or repair it.';
+  }
+  return 'Folder access. Click to refresh access permissions.';
 }
