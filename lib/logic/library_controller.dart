@@ -121,19 +121,21 @@ class LibraryController extends _$LibraryController {
       final toUpdateDate = <int, DateTime>{};
 
       for (final f in folders) {
+        final folderVideos = await videoDao.getVideosByFolder(f.id);
         final access = await _startFolderAccess(f);
         if (!access.canAccess) {
           final message = access.message ?? 'Cannot access ${f.path}';
           print('DEBUG: $message');
           ref.read(scanStatusProvider.notifier).setStatus(message);
+          for (final v in folderVideos) {
+            if (!v.isOffline) toMarkOffline.add(v.id);
+          }
           continue;
         }
 
         try {
           final folderDir = Directory(f.path);
           final folderExists = await folderDir.exists();
-
-          final folderVideos = await videoDao.getVideosByFolder(f.id);
 
           if (!folderExists) {
             print('DEBUG: Folder ${f.path} is offline');
