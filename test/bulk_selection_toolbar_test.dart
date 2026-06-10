@@ -1,6 +1,6 @@
-import 'dart:ui';
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:icon_craft/icon_craft.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/ui/widgets/bulk_selection_toolbar.dart';
 
@@ -58,6 +58,81 @@ void main() {
           .widget<PushButton>(find.widgetWithText(PushButton, 'Clear Tags'))
           .onPressed,
       isNull,
+    );
+  });
+
+  testWidgets('bulk toolbar labels include action icons', (tester) async {
+    tester.view.physicalSize = const Size(1400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: BulkSelectionToolbar(
+            selectedCount: 3,
+            isBusy: false,
+            onSelectLoaded: () {},
+            onMove: () {},
+            onDelete: () {},
+            onFavorite: () {},
+            onUnfavorite: () {},
+            onClearTags: () {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Select Loaded'),
+        matching: find.byIcon(CupertinoIcons.check_mark_circled),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Move'),
+        matching: find.byIcon(CupertinoIcons.arrow_right_arrow_left),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Delete'),
+        matching: find.byIcon(CupertinoIcons.trash),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Favorite'),
+        matching: find.byIcon(CupertinoIcons.heart_fill),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Unfavorite'),
+        matching: find.byIcon(CupertinoIcons.heart),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Clear Tags'),
+        matching: find.byType(IconCraft),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Clear Selection'),
+        matching: find.byIcon(CupertinoIcons.clear_circled),
+      ),
+      findsOneWidget,
     );
   });
 
