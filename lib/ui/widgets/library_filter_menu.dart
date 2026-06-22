@@ -33,7 +33,32 @@ class LibraryFilterMenu extends ConsumerWidget {
               a,
             ).toLowerCase().compareTo(libraryDisplayName(b).toLowerCase()),
           );
-        final hasPrivateFolders = folders.any((folder) => folder.isPrivate);
+        final publicFolders = sortedFolders
+            .where((folder) => !folder.isPrivate)
+            .toList(growable: false);
+        final privateFolders = sortedFolders
+            .where((folder) => folder.isPrivate)
+            .toList(growable: false);
+        final hasPrivateFolders = privateFolders.isNotEmpty;
+        MacosPulldownMenuItem folderItem(Folder folder) {
+          return MacosPulldownMenuItem(
+            title: MacosTooltip(
+              message: folder.path,
+              child: _LibraryMenuRow(
+                icon: selectedFolderIds.contains(folder.id)
+                    ? CupertinoIcons.checkmark
+                    : folder.isPrivate
+                    ? CupertinoIcons.lock
+                    : CupertinoIcons.folder,
+                label: libraryDisplayName(folder),
+                muted: folder.isPrivate && !privateAccess.isUnlocked,
+              ),
+            ),
+            label: libraryDisplayName(folder),
+            onTap: () => _toggleFolder(ref, folder, privateAccess),
+          );
+        }
+
         final items = <MacosPulldownMenuEntry>[
           MacosPulldownMenuItem(
             title: _LibraryMenuRow(
@@ -46,23 +71,7 @@ class LibraryFilterMenu extends ConsumerWidget {
                 .selectAllVisible(),
           ),
           const MacosPulldownMenuDivider(),
-          for (final folder in sortedFolders)
-            MacosPulldownMenuItem(
-              title: MacosTooltip(
-                message: folder.path,
-                child: _LibraryMenuRow(
-                  icon: selectedFolderIds.contains(folder.id)
-                      ? CupertinoIcons.checkmark
-                      : folder.isPrivate
-                      ? CupertinoIcons.lock
-                      : CupertinoIcons.folder,
-                  label: libraryDisplayName(folder),
-                  muted: folder.isPrivate && !privateAccess.isUnlocked,
-                ),
-              ),
-              label: libraryDisplayName(folder),
-              onTap: () => _toggleFolder(ref, folder, privateAccess),
-            ),
+          for (final folder in publicFolders) folderItem(folder),
           if (hasPrivateFolders) const MacosPulldownMenuDivider(),
           if (hasPrivateFolders)
             MacosPulldownMenuItem(
@@ -86,6 +95,7 @@ class LibraryFilterMenu extends ConsumerWidget {
                         .read(privateLibraryAccessControllerProvider.notifier)
                         .unlock(),
             ),
+          for (final folder in privateFolders) folderItem(folder),
         ];
 
         return MacosPulldownButton(title: title, items: items);

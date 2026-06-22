@@ -141,6 +141,80 @@ void main() {
     );
   });
 
+  testWidgets('library filter lists private folders below unlock action', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 6, 22);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(
+            _StaticFoldersDao(db, [
+              Folder(
+                id: 1,
+                path: '/Volumes/Public Movies',
+                alias: 'Public Movies',
+                securityScopedBookmark: 'public-bookmark',
+                isPrivate: false,
+                addedAt: now,
+              ),
+              Folder(
+                id: 2,
+                path: '/Volumes/Archive Private',
+                alias: 'Archive Private',
+                securityScopedBookmark: 'archive-private-bookmark',
+                isPrivate: true,
+                addedAt: now,
+              ),
+              Folder(
+                id: 3,
+                path: '/Volumes/Zoo Private',
+                alias: 'Zoo Private',
+                securityScopedBookmark: 'zoo-private-bookmark',
+                isPrivate: true,
+                addedAt: now,
+              ),
+            ]),
+          ),
+          privateLibraryAuthServiceProvider.overrideWithValue(
+            _FakePrivateLibraryAuthService(result: true),
+          ),
+        ],
+        child: const MacosApp(
+          home: MacosWindow(
+            child: MacosScaffold(
+              children: [ContentArea(builder: _libraryFilterContentBuilder)],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Libraries: All'));
+    await tester.pumpAndSettle();
+
+    final unlockTop = tester
+        .getTopLeft(find.text('Unlock Private Libraries'))
+        .dy;
+
+    expect(
+      tester.getTopLeft(find.text('Public Movies')).dy,
+      lessThan(unlockTop),
+    );
+    expect(
+      tester.getTopLeft(find.text('Archive Private')).dy,
+      greaterThan(unlockTop),
+    );
+    expect(
+      tester.getTopLeft(find.text('Zoo Private')).dy,
+      greaterThan(unlockTop),
+    );
+  });
+
   testWidgets(
     'library filter shows descriptive names for duplicate basenames',
     (tester) async {
