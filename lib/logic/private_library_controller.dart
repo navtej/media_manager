@@ -110,13 +110,17 @@ final effectiveLibraryFolderIdsProvider = Provider<List<int>>((ref) {
 
   final selectedFolderIds = ref.watch(selectedLibraryFoldersControllerProvider);
   final privateAccess = ref.watch(privateLibraryAccessControllerProvider);
+  final publicFolderIds = folders
+      .where((folder) => !folder.isPrivate)
+      .map((folder) => folder.id)
+      .toList(growable: false);
   final accessibleFolderIds = folders
       .where((folder) => !folder.isPrivate || privateAccess.isUnlocked)
       .map((folder) => folder.id)
       .toList(growable: false);
 
   if (selectedFolderIds.isEmpty) {
-    return accessibleFolderIds;
+    return publicFolderIds;
   }
 
   return accessibleFolderIds

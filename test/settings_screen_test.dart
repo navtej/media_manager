@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +11,7 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
+import 'package:movie_manager/services/folder_access_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
 
@@ -67,6 +72,72 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(foldersDao.nameUpdates, [(1, 'Primary Movies')]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('settings add folder button adds selected library folder', (
+    tester,
+  ) async {
+    final root = Directory.systemTemp.createTempSync(
+      'settings_add_library_test_',
+    );
+    addTearDown(() {
+      if (root.existsSync()) {
+        root.deleteSync(recursive: true);
+      }
+    });
+    final selectedDirectory = Directory('${root.path}/Settings Library');
+    selectedDirectory.createSync();
+
+    final filePicker = _FakeFilePicker(selectedDirectory.path);
+    FilePicker.platform = filePicker;
+    addTearDown(FilePickerIO.registerWith);
+
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final foldersDao = _TestFoldersDao(db, []);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          foldersDaoProvider.overrideWithValue(foldersDao),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+          folderAccessServiceProvider.overrideWithValue(
+            _AlwaysAllowedFolderAccessService(),
+          ),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Libraries'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is MacosTooltip && widget.message == 'Add Folder',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings-add-library-folder-button')),
+    );
+    await tester.pump();
+
+    final folder = await tester.runAsync(
+      () => _waitForFolder(foldersDao, selectedDirectory.path),
+    );
+
+    expect(filePicker.directoryPickCount, 1);
+    expect(folder, isNotNull);
+    expect(folder!.path, selectedDirectory.path);
+    expect(folder.alias, 'Settings Library');
+    expect(folder.securityScopedBookmark, 'bookmark:${selectedDirectory.path}');
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -356,6 +427,52 @@ class _TestFoldersDao extends FoldersDao {
   Stream<List<Folder>> watchAllFolders() => Stream.value(_folders);
 
   @override
+  Future<List<Folder>> getAllFolders() async => List.unmodifiable(_folders);
+
+  @override
+  Future<Folder?> getFolderById(int id) async {
+    for (final folder in _folders) {
+      if (folder.id == id) {
+        return folder;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<int> insertFolder(FoldersCompanion folder) async {
+    final path = folder.path.value;
+    for (final existing in _folders) {
+      if (existing.path == path) {
+        return 0;
+      }
+    }
+
+    var id = folder.id.present ? folder.id.value : 1;
+    if (!folder.id.present) {
+      for (final existing in _folders) {
+        if (existing.id >= id) {
+          id = existing.id + 1;
+        }
+      }
+    }
+
+    _folders.add(
+      Folder(
+        id: id,
+        path: path,
+        alias: folder.alias.present ? folder.alias.value : null,
+        securityScopedBookmark: folder.securityScopedBookmark.present
+            ? folder.securityScopedBookmark.value
+            : null,
+        isPrivate: folder.isPrivate.present ? folder.isPrivate.value : false,
+        addedAt: folder.addedAt.present ? folder.addedAt.value : DateTime.now(),
+      ),
+    );
+    return id;
+  }
+
+  @override
   Future<void> updateFolderName(int id, String name) async {
     nameUpdates.add((id, name));
   }
@@ -363,6 +480,24 @@ class _TestFoldersDao extends FoldersDao {
   @override
   Future<void> updateFolderPrivacy(int id, bool isPrivate) async {
     privacyUpdates.add((id, isPrivate));
+  }
+
+  @override
+  Future<void> updateFolderBookmark(int id, String? bookmark) async {
+    for (var index = 0; index < _folders.length; index += 1) {
+      final folder = _folders[index];
+      if (folder.id == id) {
+        _folders[index] = Folder(
+          id: folder.id,
+          path: folder.path,
+          alias: folder.alias,
+          securityScopedBookmark: bookmark,
+          isPrivate: folder.isPrivate,
+          addedAt: folder.addedAt,
+        );
+        return;
+      }
+    }
   }
 }
 
@@ -394,4 +529,54 @@ class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {
     attempts += 1;
     return result;
   }
+}
+
+class _FakeFilePicker extends FilePicker {
+  _FakeFilePicker(this.selectedDirectory);
+
+  final String? selectedDirectory;
+  int directoryPickCount = 0;
+
+  @override
+  Future<String?> getDirectoryPath({
+    String? dialogTitle,
+    bool lockParentWindow = false,
+    String? initialDirectory,
+  }) async {
+    directoryPickCount += 1;
+    return selectedDirectory;
+  }
+}
+
+class _AlwaysAllowedFolderAccessService extends FolderAccessService {
+  @override
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<FolderAccessSession> startAccessing({
+    required String path,
+    required String? bookmark,
+  }) async {
+    return FolderAccessSession(path: path, canAccess: true, needsRepair: false);
+  }
+
+  @override
+  Future<void> stopAccessing({
+    required String path,
+    required String? bookmark,
+  }) async {}
+}
+
+Future<Folder> _waitForFolder(FoldersDao foldersDao, String path) async {
+  for (var attempt = 0; attempt < 50; attempt += 1) {
+    final folders = await foldersDao.getAllFolders();
+    for (final folder in folders) {
+      if (folder.path == path) {
+        return folder;
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+
+  fail('Expected folder $path to be added.');
 }

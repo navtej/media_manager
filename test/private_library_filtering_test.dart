@@ -91,10 +91,9 @@ void main() {
 
       expect(unlocked, isTrue);
       expect(auth.attempts, 1);
-      expect(container.read(effectiveLibraryFolderIdsProvider).toSet(), {
+      expect(container.read(effectiveLibraryFolderIdsProvider), [
         fixture.publicFolderId,
-        fixture.privateFolderId,
-      });
+      ]);
 
       container
           .read(selectedLibraryFoldersControllerProvider.notifier)
@@ -109,6 +108,62 @@ void main() {
           filteredVideosProvider,
         )).map((video) => video.title),
         ['Private Clip'],
+      );
+    },
+  );
+
+  test(
+    'select all visible returns to public libraries after private selection',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'showOfflineMedia': true,
+      });
+      final fixture = await _PrivateLibraryFixture.create();
+      addTearDown(fixture.db.close);
+      final auth = _FakePrivateLibraryAuthService(result: true);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(fixture.db),
+          foldersDaoProvider.overrideWithValue(
+            _StaticFoldersDao(fixture.db, fixture.folders),
+          ),
+          privateLibraryAuthServiceProvider.overrideWithValue(auth),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await _readAsyncValue(container, libraryFoldersProvider);
+      await container
+          .read(privateLibraryAccessControllerProvider.notifier)
+          .unlock();
+      container
+          .read(selectedLibraryFoldersControllerProvider.notifier)
+          .toggle(fixture.privateFolderId);
+
+      expect(container.read(effectiveLibraryFolderIdsProvider), [
+        fixture.privateFolderId,
+      ]);
+      expect(
+        (await _readAsyncValue(
+          container,
+          filteredVideosProvider,
+        )).map((video) => video.title),
+        ['Private Clip'],
+      );
+
+      container
+          .read(selectedLibraryFoldersControllerProvider.notifier)
+          .selectAllVisible();
+
+      expect(container.read(effectiveLibraryFolderIdsProvider), [
+        fixture.publicFolderId,
+      ]);
+      expect(
+        (await _readAsyncValue(
+          container,
+          filteredVideosProvider,
+        )).map((video) => video.title),
+        ['Public Clip'],
       );
     },
   );

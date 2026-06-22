@@ -10,6 +10,7 @@ import '../../data/providers.dart';
 import '../../logic/model_download_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/folder_storage_status.dart';
+import '../../logic/library_controller.dart';
 import '../../logic/library_name.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
@@ -78,6 +79,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() {
       _summaryActionMessage = 'Using local model file.';
     });
+  }
+
+  Future<void> _pickLibraryFolder() async {
+    final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    if (selectedDirectory == null || selectedDirectory.isEmpty) {
+      return;
+    }
+
+    await ref
+        .read(libraryControllerProvider.notifier)
+        .addFolder(selectedDirectory);
   }
 
   @override
@@ -240,7 +252,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Libraries', style: MacosTheme.of(context).typography.headline),
+        Row(
+          children: [
+            Text(
+              'Libraries',
+              style: MacosTheme.of(context).typography.headline,
+            ),
+            const Spacer(),
+            MacosTooltip(
+              message: 'Add Folder',
+              child: MacosIconButton(
+                key: const ValueKey('settings-add-library-folder-button'),
+                icon: const MacosIcon(CupertinoIcons.add),
+                onPressed: () {
+                  _pickLibraryFolder();
+                },
+                shape: BoxShape.rectangle,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         Expanded(child: _FolderList()),
         const SizedBox(height: 12),
