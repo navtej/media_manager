@@ -11,6 +11,128 @@ import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
 
 void main() {
+  testWidgets('settings labels libraries and saves inline name edits', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 6, 22);
+    final foldersDao = _TestFoldersDao(db, [
+      Folder(
+        id: 1,
+        path: '/Volumes/Media/Movies',
+        alias: 'Movies',
+        securityScopedBookmark: 'bookmark',
+        isPrivate: false,
+        addedAt: now,
+      ),
+      Folder(
+        id: 2,
+        path: '/Volumes/Archive/Movies',
+        alias: 'Archive Movies',
+        securityScopedBookmark: 'bookmark',
+        isPrivate: false,
+        addedAt: now,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(foldersDao),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Libraries'), findsOneWidget);
+    expect(find.text('Library Folders'), findsNothing);
+    expect(find.text('/Volumes/Media/Movies'), findsOneWidget);
+    expect(
+      (tester.getCenter(find.byKey(const ValueKey('library-name-field-1'))).dy -
+              tester.getCenter(find.text('/Volumes/Media/Movies')).dy)
+          .abs(),
+      lessThan(12),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('library-name-field-1')));
+    await tester.enterText(
+      find.byKey(const ValueKey('library-name-field-1')),
+      '  Primary Movies  ',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(foldersDao.nameUpdates, [(1, 'Primary Movies')]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('settings rejects blank and duplicate inline library names', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 6, 22);
+    final foldersDao = _TestFoldersDao(db, [
+      Folder(
+        id: 1,
+        path: '/Volumes/Media/Movies',
+        alias: 'Movies',
+        securityScopedBookmark: 'bookmark',
+        isPrivate: false,
+        addedAt: now,
+      ),
+      Folder(
+        id: 2,
+        path: '/Volumes/Archive/Shows',
+        alias: 'Shows',
+        securityScopedBookmark: 'bookmark',
+        isPrivate: false,
+        addedAt: now,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(foldersDao),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('library-name-field-2')),
+      ' movies ',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Library name must be unique.'), findsOneWidget);
+    expect(foldersDao.nameUpdates, isEmpty);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('library-name-field-2')),
+      ' ',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Library name is required.'), findsOneWidget);
+    expect(foldersDao.nameUpdates, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('library folder action icons expose explanatory tooltips', (
     tester,
   ) async {
@@ -228,9 +350,15 @@ class _TestFoldersDao extends FoldersDao {
 
   final List<Folder> _folders;
   final List<(int, bool)> privacyUpdates = [];
+  final List<(int, String)> nameUpdates = [];
 
   @override
   Stream<List<Folder>> watchAllFolders() => Stream.value(_folders);
+
+  @override
+  Future<void> updateFolderName(int id, String name) async {
+    nameUpdates.add((id, name));
+  }
 
   @override
   Future<void> updateFolderPrivacy(int id, bool isPrivate) async {

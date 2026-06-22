@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import 'package:path/path.dart' as p;
 
 import '../../data/database.dart';
+import '../../logic/library_name.dart';
 import '../../logic/private_library_controller.dart';
 
 class LibraryFilterMenu extends ConsumerWidget {
@@ -28,7 +28,11 @@ class LibraryFilterMenu extends ConsumerWidget {
           const MacosPulldownButton(title: 'Libraries', items: null),
       data: (folders) {
         final sortedFolders = List<Folder>.from(folders)
-          ..sort((a, b) => _libraryLabel(a).compareTo(_libraryLabel(b)));
+          ..sort(
+            (a, b) => libraryDisplayName(
+              a,
+            ).toLowerCase().compareTo(libraryDisplayName(b).toLowerCase()),
+          );
         final hasPrivateFolders = folders.any((folder) => folder.isPrivate);
         final items = <MacosPulldownMenuEntry>[
           MacosPulldownMenuItem(
@@ -52,11 +56,11 @@ class LibraryFilterMenu extends ConsumerWidget {
                       : folder.isPrivate
                       ? CupertinoIcons.lock
                       : CupertinoIcons.folder,
-                  label: _libraryLabel(folder),
+                  label: libraryDisplayName(folder),
                   muted: folder.isPrivate && !privateAccess.isUnlocked,
                 ),
               ),
-              label: _libraryLabel(folder),
+              label: libraryDisplayName(folder),
               onTap: () => _toggleFolder(ref, folder, privateAccess),
             ),
           if (hasPrivateFolders) const MacosPulldownMenuDivider(),
@@ -116,15 +120,6 @@ void _lockPrivateLibraries(WidgetRef ref, List<Folder> folders) {
   ref
       .read(selectedLibraryFoldersControllerProvider.notifier)
       .retainVisible(publicFolderIds);
-}
-
-String _libraryLabel(Folder folder) {
-  final alias = folder.alias?.trim();
-  if (alias != null && alias.isNotEmpty) {
-    return alias;
-  }
-  final basename = p.basename(folder.path);
-  return basename.isEmpty ? folder.path : basename;
 }
 
 class _LibraryMenuRow extends StatelessWidget {

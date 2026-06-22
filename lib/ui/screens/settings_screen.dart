@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:flutter/services.dart';
+import '../../data/database.dart';
 import '../../data/providers.dart';
 
 import '../../logic/model_download_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/folder_storage_status.dart';
+import '../../logic/library_name.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_summary_models.dart';
@@ -238,10 +240,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Library Folders',
-          style: MacosTheme.of(context).typography.headline,
-        ),
+        Text('Libraries', style: MacosTheme.of(context).typography.headline),
         const SizedBox(height: 10),
         Expanded(child: _FolderList()),
         const SizedBox(height: 12),
@@ -591,9 +590,28 @@ class _FolderList extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            folder.path,
-                            style: const TextStyle(fontSize: 13),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _LibraryNameField(
+                                folder: folder,
+                                folders: folders,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    folder.path,
+                                    style: MacosTheme.of(
+                                      context,
+                                    ).typography.caption1,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           if (statusLabel != null)
                             Text(
@@ -720,6 +738,140 @@ class _FolderList extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _LibraryNameField extends ConsumerStatefulWidget {
+  const _LibraryNameField({required this.folder, required this.folders});
+
+  final Folder folder;
+  final List<Folder> folders;
+
+  @override
+  ConsumerState<_LibraryNameField> createState() => _LibraryNameFieldState();
+}
+
+class _LibraryNameFieldState extends ConsumerState<_LibraryNameField> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  String? _errorText;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: libraryDisplayName(widget.folder),
+    );
+    _focusNode = FocusNode(debugLabel: 'library-name-${widget.folder.id}');
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(_LibraryNameField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.folder != widget.folder && !_focusNode.hasFocus) {
+      _controller.text = libraryDisplayName(widget.folder);
+      _errorText = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (!_focusNode.hasFocus) {
+      _saveName();
+    }
+  }
+
+  Future<void> _saveName() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final name = _controller.text.trim();
+    final validationError = validateLibraryName(
+      folderId: widget.folder.id,
+      name: name,
+      folders: widget.folders,
+    );
+    if (validationError != null) {
+      if (mounted) {
+        setState(() {
+          _errorText = validationError;
+        });
+      }
+      return;
+    }
+
+    final currentName = libraryDisplayName(widget.folder);
+    if (name == currentName) {
+      if (mounted) {
+        setState(() {
+          _errorText = null;
+        });
+      }
+      if (_controller.text != name) {
+        _controller.text = name;
+      }
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+    await ref.read(foldersDaoProvider).updateFolderName(widget.folder.id, name);
+    if (!mounted) {
+      return;
+    }
+    _controller.text = name;
+    setState(() {
+      _isSaving = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = MacosTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 260,
+          child: MacosTextField(
+            key: ValueKey('library-name-field-${widget.folder.id}'),
+            controller: _controller,
+            focusNode: _focusNode,
+            enabled: !_isSaving,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) {
+              if (_errorText != null) {
+                setState(() {
+                  _errorText = null;
+                });
+              }
+            },
+            onSubmitted: (_) => _saveName(),
+          ),
+        ),
+        if (_errorText != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            _errorText!,
+            style: theme.typography.caption1.copyWith(
+              color: MacosColors.systemRedColor,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

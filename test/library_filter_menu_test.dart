@@ -140,6 +140,60 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'library filter shows descriptive names for duplicate basenames',
+    (tester) async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final now = DateTime(2026, 6, 22);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            foldersDaoProvider.overrideWithValue(
+              _StaticFoldersDao(db, [
+                Folder(
+                  id: 1,
+                  path: '/Volumes/Media/Movies',
+                  alias: 'Family Movies',
+                  securityScopedBookmark: 'public-bookmark',
+                  isPrivate: false,
+                  addedAt: now,
+                ),
+                Folder(
+                  id: 2,
+                  path: '/Volumes/Archive/Movies',
+                  alias: 'Archive Movies',
+                  securityScopedBookmark: 'archive-bookmark',
+                  isPrivate: false,
+                  addedAt: now,
+                ),
+              ]),
+            ),
+            privateLibraryAuthServiceProvider.overrideWithValue(
+              _FakePrivateLibraryAuthService(result: true),
+            ),
+          ],
+          child: const MacosApp(
+            home: MacosWindow(
+              child: MacosScaffold(
+                children: [ContentArea(builder: _libraryFilterContentBuilder)],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Libraries: All'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Family Movies'), findsOneWidget);
+      expect(find.text('Archive Movies'), findsOneWidget);
+      expect(find.text('Movies'), findsNothing);
+    },
+  );
 }
 
 Widget _libraryFilterContentBuilder(BuildContext context, ScrollController _) {

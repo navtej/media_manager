@@ -14,6 +14,7 @@ import '../services/thumbnail_service.dart';
 import 'ai_controller.dart';
 import 'maintenance_controller.dart';
 import 'library_operation_controller.dart';
+import 'library_name.dart';
 
 part 'library_controller.g.dart';
 
@@ -39,6 +40,7 @@ class LibraryController extends _$LibraryController {
     // Get initial settings and setup timer
     final settings = await ref.read(settingsProvider.future);
     final initialInterval = settings['scanInterval'] ?? 5;
+    await ref.read(foldersDaoProvider).normalizeLibraryNames();
     _setupTimer(initialInterval);
 
     // Listen for settings changes to update the timer
@@ -271,7 +273,7 @@ class LibraryController extends _$LibraryController {
         id = await dao.insertFolder(
           FoldersCompanion(
             path: drift.Value(path),
-            alias: drift.Value(p.basename(path)),
+            alias: drift.Value(uniqueLibraryNameForPath(path, folders)),
             securityScopedBookmark: drift.Value(bookmark),
           ),
         );

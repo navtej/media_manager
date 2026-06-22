@@ -200,6 +200,32 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
 
   Future<int> insertFolder(FoldersCompanion folder) =>
       into(folders).insert(folder, mode: InsertMode.insertOrIgnore);
+
+  Future<void> updateFolderName(int id, String name) {
+    return (update(folders)..where((tbl) => tbl.id.equals(id))).write(
+      FoldersCompanion(alias: Value(name.trim())),
+    );
+  }
+
+  Future<void> normalizeLibraryNames() async {
+    final allFolders = await getAllFolders();
+    final usedNames = <String>{};
+
+    for (final folder in allFolders) {
+      final trimmedAlias = folder.alias?.trim() ?? '';
+      final normalizedName =
+          trimmedAlias.isEmpty ||
+              usedNames.contains(_folderNameKey(trimmedAlias))
+          ? _uniqueFolderNameForPath(folder.path, usedNames)
+          : trimmedAlias;
+
+      usedNames.add(_folderNameKey(normalizedName));
+      if (normalizedName != folder.alias) {
+        await updateFolderName(folder.id, normalizedName);
+      }
+    }
+  }
+
   Future<void> updateFolderBookmark(int id, String? bookmark) {
     return (update(folders)..where((tbl) => tbl.id.equals(id))).write(
       FoldersCompanion(securityScopedBookmark: Value(bookmark)),
@@ -215,6 +241,56 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
   Future<void> deleteFolder(int id) =>
       (delete(folders)..where((tbl) => tbl.id.equals(id))).go();
 }
+
+String _uniqueFolderNameForPath(String path, Set<String> usedNames) {
+  final baseName = _folderPathDisplayName(path);
+  final parentName = _folderParentDisplayName(path);
+  final candidates = <String>[
+    baseName,
+    if (parentName != null &&
+        _folderNameKey(parentName) != _folderNameKey(baseName))
+      '$parentName / $baseName',
+  ];
+
+  for (final candidate in candidates) {
+    if (!usedNames.contains(_folderNameKey(candidate))) {
+      return candidate;
+    }
+  }
+
+  var suffix = 2;
+  while (true) {
+    final candidate = '$baseName ($suffix)';
+    if (!usedNames.contains(_folderNameKey(candidate))) {
+      return candidate;
+    }
+    suffix += 1;
+  }
+}
+
+String _folderPathDisplayName(String path) {
+  final normalizedPath = p.normalize(path);
+  final basename = p.basename(normalizedPath).trim();
+  if (basename.isNotEmpty && basename != p.separator) {
+    return basename;
+  }
+  final trimmedPath = path.trim();
+  return trimmedPath.isEmpty ? 'Library' : trimmedPath;
+}
+
+String? _folderParentDisplayName(String path) {
+  final normalizedPath = p.normalize(path);
+  final parent = p.basename(p.dirname(normalizedPath)).trim();
+  if (parent.isEmpty ||
+      parent == '.' ||
+      parent == p.separator ||
+      parent == p.basename(normalizedPath)) {
+    return null;
+  }
+  return parent;
+}
+
+String _folderNameKey(String name) => name.trim().toLowerCase();
 
 @DriftAccessor(
   tables: [Videos, TagDefinitions, VideoTags],

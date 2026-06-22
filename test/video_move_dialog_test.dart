@@ -39,7 +39,7 @@ void main() {
     final sourceFolderId = await db.foldersDao.insertFolder(
       FoldersCompanion.insert(
         path: '/Volumes/Source Library',
-        alias: const drift.Value('Source Library'),
+        alias: const drift.Value('  Source Library  '),
         securityScopedBookmark: const drift.Value('source-bookmark'),
       ),
     );
@@ -114,6 +114,10 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(destinationFolderId, isPositive);
+    expect(
+      find.text('Source Library (/Volumes/Source Library)'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
