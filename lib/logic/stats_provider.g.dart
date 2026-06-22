@@ -46,7 +46,7 @@ final class LibraryStatsProvider
   }
 }
 
-String _$libraryStatsHash() => r'90e77f9633c383af8500672ead864fa987354056';
+String _$libraryStatsHash() => r'ebf9f6f8fce94994c45b146aa26bd94b75082904';
 
 @ProviderFor(dataFolderSize)
 final dataFolderSizeProvider = DataFolderSizeProvider._();

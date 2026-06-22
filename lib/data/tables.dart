@@ -5,6 +5,7 @@ class Folders extends Table {
   TextColumn get path => text().unique()();
   TextColumn get alias => text().nullable()();
   TextColumn get securityScopedBookmark => text().nullable()();
+  BoolColumn get isPrivate => boolean().withDefault(const Constant(false))();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 

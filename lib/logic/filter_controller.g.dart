@@ -448,7 +448,7 @@ final class VideoLimitProvider extends $NotifierProvider<VideoLimit, int> {
   }
 }
 
-String _$videoLimitHash() => r'10e99d7906e6e3541efb257f11c8a4deb615bfe6';
+String _$videoLimitHash() => r'd19fe3d66c5726d7742ad47a24fdf08d0f942c88';
 
 abstract class _$VideoLimit extends $Notifier<int> {
   int build();

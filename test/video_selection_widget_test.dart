@@ -20,6 +20,7 @@ void main() {
       id: 1,
       path: '/Volumes/Test Library',
       alias: 'Test Library',
+      isPrivate: false,
       addedAt: now,
     );
     final video = Video(
@@ -99,6 +100,9 @@ class _TestFoldersDao extends FoldersDao {
 
   @override
   Future<List<Folder>> getAllFolders() async => _folders;
+
+  @override
+  Stream<List<Folder>> watchAllFolders() => Stream.value(_folders);
 }
 
 class _TestTagsDao extends TagsDao {
@@ -108,7 +112,8 @@ class _TestTagsDao extends TagsDao {
   Stream<List<Tag>> watchTagsForVideo(int videoId) => Stream.value(const []);
 
   @override
-  Stream<List<String>> watchAllUniqueTags() => Stream.value(const []);
+  Stream<List<String>> watchAllUniqueTags({List<int>? folderIds}) =>
+      Stream.value(const []);
 }
 
 class _TestVideoSummariesDao extends VideoSummariesDao {

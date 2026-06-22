@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -81,6 +81,13 @@ class AppDatabase extends _$AppDatabase {
             print(
               'MIGRATION INFO: securityScopedBookmark already exists or error: $e',
             );
+          }
+        }
+        if (from < 9) {
+          try {
+            await m.addColumn(folders, folders.isPrivate);
+          } catch (e) {
+            print('MIGRATION INFO: isPrivate already exists or error: $e');
           }
         }
       },
@@ -196,6 +203,12 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
   Future<void> updateFolderBookmark(int id, String? bookmark) {
     return (update(folders)..where((tbl) => tbl.id.equals(id))).write(
       FoldersCompanion(securityScopedBookmark: Value(bookmark)),
+    );
+  }
+
+  Future<void> updateFolderPrivacy(int id, bool isPrivate) {
+    return (update(folders)..where((tbl) => tbl.id.equals(id))).write(
+      FoldersCompanion(isPrivate: Value(isPrivate)),
     );
   }
 
@@ -353,8 +366,16 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     SortDirection direction = SortDirection.asc,
     int limit = 0,
     bool includeOffline = true,
+    List<int>? folderIds,
   }) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(const <Video>[]);
+    }
+
     final query = select(videos);
+    if (folderIds != null) {
+      query.where((t) => t.folderId.isIn(folderIds));
+    }
     if (favoritesOnly) {
       query.where((t) => t.isFavorite.equals(true));
     }
@@ -396,6 +417,7 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     SortDirection direction = SortDirection.asc,
     int limit = 0,
     bool includeOffline = true,
+    List<int>? folderIds,
   }) {
     // If no tags and no search and including offline, use watchAllVideos
     if (tagsAny.isEmpty &&
@@ -408,12 +430,19 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
         direction: direction,
         limit: limit,
         includeOffline: includeOffline,
+        folderIds: folderIds,
       );
+    }
+
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(const <Video>[]);
     }
 
     // Build WHERE clause components
     final variables = <Variable>[];
     final conditions = <String>[];
+
+    _addFolderIdFilter(conditions, variables, folderIds);
 
     // 1. OR Logic (Attributes Any)
     if (tagsAny.isNotEmpty) {
@@ -492,7 +521,7 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return customSelect(
       sql,
       variables: variables,
-      readsFrom: {videos, this.videoTags, this.tagDefinitions},
+      readsFrom: {videos, videoTags, tagDefinitions},
     ).watch().map((rows) => rows.map((row) => videos.map(row.data)).toList());
   }
 
@@ -502,10 +531,17 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     String? searchQuery,
     bool favoritesOnly = false,
     bool includeOffline = true,
+    List<int>? folderIds,
   }) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(0);
+    }
+
     // Replicates WHERE clause logic from searchVideos but returns count only
     final List<Variable> variables = [];
     final conditions = <String>[];
+
+    _addFolderIdFilter(conditions, variables, folderIds);
 
     // 1. OR Logic
     if (tagsAny.isNotEmpty) {
@@ -562,12 +598,29 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return customSelect(
       sql,
       variables: variables,
-      readsFrom: {videos, this.videoTags, this.tagDefinitions},
+      readsFrom: {videos, videoTags, tagDefinitions},
     ).watch().map((rows) => rows.first.read<int>('c'));
   }
 }
 
-@DriftAccessor(tables: [TagDefinitions, VideoTags])
+void _addFolderIdFilter(
+  List<String> conditions,
+  List<Variable> variables,
+  List<int>? folderIds,
+) {
+  if (folderIds == null) {
+    return;
+  }
+  if (folderIds.isEmpty) {
+    conditions.add('0 = 1');
+    return;
+  }
+  final placeholders = folderIds.map((_) => '?').join(',');
+  conditions.add('folder_id IN ($placeholders)');
+  variables.addAll(folderIds.map((id) => Variable.withInt(id)));
+}
+
+@DriftAccessor(tables: [Videos, TagDefinitions, VideoTags])
 class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
   TagsDao(AppDatabase db) : super(db);
 
@@ -697,18 +750,50 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
     });
   }
 
-  Future<List<String>> getAllUniqueTags() {
-    return (select(tagDefinitions)
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
-        .map((t) => t.name)
-        .get();
+  Future<List<String>> getAllUniqueTags({List<int>? folderIds}) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Future.value(const <String>[]);
+    }
+    if (folderIds == null) {
+      return (select(tagDefinitions)
+            ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          .map((t) => t.name)
+          .get();
+    }
+
+    final query = select(tagDefinitions).join([
+      innerJoin(videoTags, videoTags.tagId.equalsExp(tagDefinitions.id)),
+      innerJoin(videos, videos.id.equalsExp(videoTags.videoId)),
+    ]);
+    query
+      ..where(videos.folderId.isIn(folderIds))
+      ..groupBy([tagDefinitions.id])
+      ..orderBy([OrderingTerm.asc(tagDefinitions.name)]);
+    return query.map((row) => row.readTable(tagDefinitions).name).get();
   }
 
-  Stream<List<String>> watchAllUniqueTags() {
-    return (select(tagDefinitions)
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
-        .map((t) => t.name)
-        .watch();
+  Stream<List<String>> watchAllUniqueTags({List<int>? folderIds}) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(const <String>[]);
+    }
+    if (folderIds == null) {
+      return (select(tagDefinitions)
+            ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          .map((t) => t.name)
+          .watch();
+    }
+
+    final query = select(tagDefinitions).join([
+      innerJoin(videoTags, videoTags.tagId.equalsExp(tagDefinitions.id)),
+      innerJoin(videos, videos.id.equalsExp(videoTags.videoId)),
+    ]);
+    query
+      ..where(videos.folderId.isIn(folderIds))
+      ..groupBy([tagDefinitions.id])
+      ..orderBy([OrderingTerm.asc(tagDefinitions.name)]);
+    return query.watch().map(
+      (rows) => rows.map((row) => row.readTable(tagDefinitions).name).toList(),
+    );
   }
 
   Future<int> getTagUsageCount(String tagText) async {
@@ -724,12 +809,21 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
     return await query.map((row) => row.read(countExp)).getSingle() ?? 0;
   }
 
-  Stream<Map<String, int>> watchTagsWithCounts() {
+  Stream<Map<String, int>> watchTagsWithCounts({List<int>? folderIds}) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(const <String, int>{});
+    }
+
     // New normalized query
     final countExp = videoTags.videoId.count();
     final query = select(tagDefinitions).join([
       innerJoin(videoTags, videoTags.tagId.equalsExp(tagDefinitions.id)),
+      if (folderIds != null)
+        innerJoin(videos, videos.id.equalsExp(videoTags.videoId)),
     ]);
+    if (folderIds != null) {
+      query.where(videos.folderId.isIn(folderIds));
+    }
 
     final grouped = query
       ..addColumns([tagDefinitions.name, countExp])
@@ -974,7 +1068,11 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
   }
 
   /// Gets all tags with their video counts and source info for management UI.
-  Stream<List<TagInfo>> watchAllTagsWithInfo() {
+  Stream<List<TagInfo>> watchAllTagsWithInfo({List<int>? folderIds}) {
+    if (folderIds != null && folderIds.isEmpty) {
+      return Stream.value(const <TagInfo>[]);
+    }
+
     // Normalized query: Group by TagDefinition
     // We lost granular source-per-video info, so we just use the TagDefinition's source.
     /*
@@ -991,7 +1089,12 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
 
     final query = select(tagDefinitions).join([
       leftOuterJoin(videoTags, videoTags.tagId.equalsExp(tagDefinitions.id)),
+      if (folderIds != null)
+        innerJoin(videos, videos.id.equalsExp(videoTags.videoId)),
     ]);
+    if (folderIds != null) {
+      query.where(videos.folderId.isIn(folderIds));
+    }
 
     final grouped = query
       ..addColumns([tagDefinitions.name, tagDefinitions.source, countExp])
@@ -1009,29 +1112,90 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
     });
   }
 
-  Future<TagStatistics> getTagStatistics() async {
+  Future<TagStatistics> getTagStatistics({List<int>? folderIds}) async {
+    if (folderIds != null && folderIds.isEmpty) {
+      return const TagStatistics(
+        uniqueTagCount: 0,
+        totalAssignments: 0,
+        userTags: 0,
+        autoTags: 0,
+        minTagsPerVideo: 0,
+        maxTagsPerVideo: 0,
+        avgTagsPerVideo: 0,
+      );
+    }
+
+    final joinVideos = folderIds == null
+        ? ''
+        : 'JOIN videos v ON v.id = vt.video_id';
+    final whereClause = folderIds == null
+        ? ''
+        : 'WHERE v.folder_id IN (${folderIds.map((_) => '?').join(',')})';
+    final variables = folderIds == null
+        ? const <Variable>[]
+        : folderIds.map((id) => Variable.withInt(id)).toList();
+
     final uniqueTagsResult = await customSelect(
-      'SELECT COUNT(DISTINCT tag_text) as count FROM tags',
+      '''
+        SELECT COUNT(DISTINCT td.name) as count
+        FROM tag_definitions td
+        JOIN video_tags vt ON vt.tag_id = td.id
+        $joinVideos
+        $whereClause
+      ''',
+      variables: variables,
+      readsFrom: {tagDefinitions, videoTags, videos},
     ).getSingle();
     final uniqueCount = uniqueTagsResult.read<int>('count');
 
     final totalResult = await customSelect(
-      'SELECT COUNT(*) as count FROM tags',
+      '''
+        SELECT COUNT(*) as count
+        FROM video_tags vt
+        $joinVideos
+        $whereClause
+      ''',
+      variables: variables,
+      readsFrom: {videoTags, videos},
     ).getSingle();
     final totalAssignments = totalResult.read<int>('count');
 
     final userResult = await customSelect(
-      "SELECT COUNT(*) as count FROM tags WHERE source = 'user'",
+      '''
+        SELECT COUNT(*) as count
+        FROM tag_definitions td
+        JOIN video_tags vt ON vt.tag_id = td.id
+        $joinVideos
+        $whereClause ${whereClause.isEmpty ? 'WHERE' : 'AND'} td.source = 'user'
+      ''',
+      variables: variables,
+      readsFrom: {tagDefinitions, videoTags, videos},
     ).getSingle();
     final userTags = userResult.read<int>('count');
 
     final autoResult = await customSelect(
-      "SELECT COUNT(*) as count FROM tags WHERE source = 'auto'",
+      '''
+        SELECT COUNT(*) as count
+        FROM tag_definitions td
+        JOIN video_tags vt ON vt.tag_id = td.id
+        $joinVideos
+        $whereClause ${whereClause.isEmpty ? 'WHERE' : 'AND'} td.source = 'auto'
+      ''',
+      variables: variables,
+      readsFrom: {tagDefinitions, videoTags, videos},
     ).getSingle();
     final autoTags = autoResult.read<int>('count');
 
     final tagsPerVideoResult = await customSelect(
-      'SELECT video_id, COUNT(*) as tag_count FROM tags GROUP BY video_id',
+      '''
+        SELECT vt.video_id, COUNT(*) as tag_count
+        FROM video_tags vt
+        $joinVideos
+        $whereClause
+        GROUP BY vt.video_id
+      ''',
+      variables: variables,
+      readsFrom: {videoTags, videos},
     ).get();
 
     int minTags = 0, maxTags = 0;

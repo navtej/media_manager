@@ -41,7 +41,7 @@ final class StatusMessageProvider
   }
 }
 
-String _$statusMessageHash() => r'e1978a641ba97752dd125b61ded3b297bb9e4711';
+String _$statusMessageHash() => r'062a7843d3238492cde316b703f8c2c0ab9eb6f2';
 
 abstract class _$StatusMessage extends $Notifier<String?> {
   String? build();

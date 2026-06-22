@@ -17,6 +17,7 @@ import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
 import '../../services/folder_access_service.dart';
+import '../../services/private_library_auth_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../widgets/summary_model_settings_panel.dart';
@@ -605,6 +606,49 @@ class _FolderList extends ConsumerWidget {
                               ),
                             ),
                         ],
+                      ),
+                    ),
+                    MacosTooltip(
+                      message: folder.isPrivate
+                          ? 'Private library. Click to make videos visible by default.'
+                          : 'Public library. Click to require authentication before videos appear.',
+                      child: MacosIconButton(
+                        icon: Icon(
+                          folder.isPrivate
+                              ? CupertinoIcons.lock
+                              : CupertinoIcons.lock_open,
+                          color: folder.isPrivate
+                              ? MacosColors.systemPurpleColor
+                              : MacosColors.systemGrayColor,
+                          size: 16,
+                        ),
+                        onPressed: () async {
+                          final nextIsPrivate = !folder.isPrivate;
+                          if (!nextIsPrivate) {
+                            final authenticated = await ref
+                                .read(privateLibraryAuthServiceProvider)
+                                .authenticate();
+                            if (!authenticated) {
+                              ref
+                                  .read(statusMessageProvider.notifier)
+                                  .set(
+                                    'Authentication cancelled. Library remains private.',
+                                  );
+                              return;
+                            }
+                          }
+
+                          await ref
+                              .read(foldersDaoProvider)
+                              .updateFolderPrivacy(folder.id, nextIsPrivate);
+                          ref
+                              .read(statusMessageProvider.notifier)
+                              .set(
+                                nextIsPrivate
+                                    ? 'Library is now private.'
+                                    : 'Library is now visible by default.',
+                              );
+                        },
                       ),
                     ),
                     MacosTooltip(
