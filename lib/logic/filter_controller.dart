@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database.dart';
 import '../data/providers.dart';
+import 'private_library_controller.dart';
 import 'settings_provider.dart';
 
 part 'filter_controller.g.dart';
@@ -12,7 +13,7 @@ enum LibraryCategory { all, favorites }
 class SelectedCategory extends _$SelectedCategory {
   @override
   LibraryCategory build() => LibraryCategory.all;
-  
+
   void set(LibraryCategory category) => state = category;
 }
 
@@ -20,7 +21,7 @@ class SelectedCategory extends _$SelectedCategory {
 class SelectedSort extends _$SelectedSort {
   @override
   SortOption build() => SortOption.addedAt;
-  
+
   void set(SortOption sort) => state = sort;
 }
 
@@ -28,8 +29,10 @@ class SelectedSort extends _$SelectedSort {
 class SelectedSortDirection extends _$SelectedSortDirection {
   @override
   SortDirection build() => SortDirection.desc;
-  
-  void toggle() => state = state == SortDirection.asc ? SortDirection.desc : SortDirection.asc;
+
+  void toggle() => state = state == SortDirection.asc
+      ? SortDirection.desc
+      : SortDirection.asc;
 }
 
 @riverpod
@@ -59,15 +62,15 @@ class PrimarySelectedTags extends _$PrimarySelectedTags {
     } else {
       state = [...state, tag];
     }
-    
+
     // Logic: If primary becomes empty, we might want to clear secondary?
     // Implementation plan says: "Clearing the Top filtering (Primary) will automatically clear the Related filtering (Secondary)."
     // We can check if state is empty.
     if (state.isEmpty) {
-       ref.read(secondarySelectedTagsProvider.notifier).clear();
+      ref.read(secondarySelectedTagsProvider.notifier).clear();
     }
   }
-  
+
   void clear() {
     state = [];
     ref.read(secondarySelectedTagsProvider.notifier).clear();
@@ -99,7 +102,7 @@ class SecondarySelectedTags extends _$SecondarySelectedTags {
       state = [...state, tag];
     }
   }
-  
+
   void clear() => state = [];
 }
 
@@ -119,17 +122,19 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
   final searchQuery = ref.watch(searchQueryProvider);
   final settings = ref.watch(settingsProvider).value;
   final showOffline = settings?['showOfflineMedia'] ?? true;
+  final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
   final dao = ref.watch(videosDaoProvider);
-  
+
   return dao.searchVideos(
     tagsAny: primaryTags,
-    tagsAll: secondaryTags, 
+    tagsAll: secondaryTags,
     searchQuery: searchQuery,
     favoritesOnly: category == LibraryCategory.favorites,
     sortBy: sort,
     direction: direction,
     limit: ref.watch(videoLimitProvider), // Use pagination
     includeOffline: showOffline,
+    folderIds: folderIds,
   );
 });
 
@@ -140,14 +145,16 @@ final selectedVideoCountProvider = StreamProvider.autoDispose<int>((ref) {
   final searchQuery = ref.watch(searchQueryProvider);
   final settings = ref.watch(settingsProvider).value;
   final showOffline = settings?['showOfflineMedia'] ?? true;
+  final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
   final dao = ref.watch(videosDaoProvider);
-  
+
   return dao.countVideos(
     tagsAny: primaryTags,
     tagsAll: secondaryTags,
     searchQuery: searchQuery,
     favoritesOnly: category == LibraryCategory.favorites,
     includeOffline: showOffline,
+    folderIds: folderIds,
   );
 });
 
@@ -162,12 +169,13 @@ class VideoLimit extends _$VideoLimit {
     ref.watch(selectedSortProvider);
     ref.watch(selectedSortDirectionProvider);
     ref.watch(searchQueryProvider);
-    
+    ref.watch(effectiveLibraryFolderIdsProvider);
+
     // Get page size from settings
     final settings = ref.watch(settingsProvider).value;
     return settings?['paginationSize'] ?? 50;
   }
-  
+
   void loadMore() {
     final settings = ref.read(settingsProvider).value;
     final pageSize = settings?['paginationSize'] ?? 50;
@@ -175,79 +183,100 @@ class VideoLimit extends _$VideoLimit {
   }
 }
 
-final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>((ref) {
-  final selected = ref.watch(primarySelectedTagsProvider);
-  final filterQuery = ref.watch(tagFilterQueryProvider).toLowerCase();
-  final stream = ref.watch(tagsDaoProvider).watchTagsWithCounts();
-  
-  return stream.map((tagCounts) {
-    var tags = tagCounts.keys.toList();
-    
-    // Prune selected tags that no longer exist
-    Future.microtask(() {
-      ref.read(primarySelectedTagsProvider.notifier).deselectIfMissing(tags);
+final allTagsProvider = StreamProvider.autoDispose<List<MapEntry<String, int>>>(
+  (ref) {
+    final selected = ref.watch(primarySelectedTagsProvider);
+    final filterQuery = ref.watch(tagFilterQueryProvider).toLowerCase();
+    final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
+    final stream = ref
+        .watch(tagsDaoProvider)
+        .watchTagsWithCounts(folderIds: folderIds);
+
+    return stream.map((tagCounts) {
+      var tags = tagCounts.keys.toList();
+
+      // Prune selected tags that no longer exist
+      Future.microtask(() {
+        ref.read(primarySelectedTagsProvider.notifier).deselectIfMissing(tags);
+      });
+
+      // Filter by query if present
+      if (filterQuery.isNotEmpty) {
+        tags = tags
+            .where((t) => t.toLowerCase().contains(filterQuery))
+            .toList();
+      }
+
+      final sortedTags = List<String>.from(tags);
+      sortedTags.sort((a, b) {
+        // 1. By Selection status (selected first)
+        final aSelected = selected.contains(a);
+        final bSelected = selected.contains(b);
+        if (aSelected && !bSelected) return -1;
+        if (!aSelected && bSelected) return 1;
+
+        // 2. By Popularity (count desc)
+        final aCount = tagCounts[a] ?? 0;
+        final bCount = tagCounts[b] ?? 0;
+        if (aCount != bCount) return bCount.compareTo(aCount);
+
+        // 3. Alphabetically
+        return a.compareTo(b);
+      });
+
+      return sortedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
     });
+  },
+);
 
-    // Filter by query if present
-    if (filterQuery.isNotEmpty) {
-      tags = tags.where((t) => t.toLowerCase().contains(filterQuery)).toList();
-    }
-
-    final sortedTags = List<String>.from(tags);
-    sortedTags.sort((a, b) {
-      // 1. By Selection status (selected first)
-      final aSelected = selected.contains(a);
-      final bSelected = selected.contains(b);
-      if (aSelected && !bSelected) return -1;
-      if (!aSelected && bSelected) return 1;
-
-      // 2. By Popularity (count desc)
-      final aCount = tagCounts[a] ?? 0;
-      final bCount = tagCounts[b] ?? 0;
-      if (aCount != bCount) return bCount.compareTo(aCount);
-
-      // 3. Alphabetically
-      return a.compareTo(b);
-    });
-
-    return sortedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
-  });
+final visibleUniqueTagsProvider = StreamProvider.autoDispose<List<String>>((
+  ref,
+) {
+  final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
+  return ref.watch(tagsDaoProvider).watchAllUniqueTags(folderIds: folderIds);
 });
 
-final relatedTagsProvider = FutureProvider.autoDispose<List<MapEntry<String, int>>>((ref) async {
-  print('DEBUG: relatedTagsProvider computing...');
-  final primarySelected = ref.watch(primarySelectedTagsProvider);
-  print('DEBUG: primary selected tags: $primarySelected');
-  
-  if (primarySelected.isEmpty) {
-    print('DEBUG: No tags selected, returning empty related.');
-    return [];
-  }
+final relatedTagsProvider =
+    FutureProvider.autoDispose<List<MapEntry<String, int>>>((ref) async {
+      print('DEBUG: relatedTagsProvider computing...');
+      final primarySelected = ref.watch(primarySelectedTagsProvider);
+      print('DEBUG: primary selected tags: $primarySelected');
 
-  final filteredVideos = await ref.watch(filteredVideosProvider.future);
-  print('DEBUG: filteredVideos count: ${filteredVideos.length}');
-  
-  if (filteredVideos.isEmpty) {
-    print('DEBUG: No filtered videos, returning empty related.');
-    return [];
-  }
+      if (primarySelected.isEmpty) {
+        print('DEBUG: No tags selected, returning empty related.');
+        return [];
+      }
 
-  final videoIds = filteredVideos.map((v) => v.id).toList();
-  final tagCounts = await ref.read(tagsDaoProvider).getTagsWithCountsForVideos(videoIds);
-  print('DEBUG: Raw tag counts from DAO: ${tagCounts.length}');
-  
-  // Filter out tags that are already selected in PRIMARY.
-  // We DO want to show tags selected in Secondary (so they can be unselected).
-  final relatedTags = tagCounts.keys.where((t) => !primarySelected.contains(t)).toList();
-  print('DEBUG: Related tags after filtering selected: ${relatedTags.length}');
+      final filteredVideos = await ref.watch(filteredVideosProvider.future);
+      print('DEBUG: filteredVideos count: ${filteredVideos.length}');
 
-  // Sort by popularity (count desc) then alpha
-  relatedTags.sort((a, b) {
-    final aCount = tagCounts[a] ?? 0;
-    final bCount = tagCounts[b] ?? 0;
-    if (aCount != bCount) return bCount.compareTo(aCount);
-    return a.compareTo(b);
-  });
+      if (filteredVideos.isEmpty) {
+        print('DEBUG: No filtered videos, returning empty related.');
+        return [];
+      }
 
-  return relatedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
-});
+      final videoIds = filteredVideos.map((v) => v.id).toList();
+      final tagCounts = await ref
+          .read(tagsDaoProvider)
+          .getTagsWithCountsForVideos(videoIds);
+      print('DEBUG: Raw tag counts from DAO: ${tagCounts.length}');
+
+      // Filter out tags that are already selected in PRIMARY.
+      // We DO want to show tags selected in Secondary (so they can be unselected).
+      final relatedTags = tagCounts.keys
+          .where((t) => !primarySelected.contains(t))
+          .toList();
+      print(
+        'DEBUG: Related tags after filtering selected: ${relatedTags.length}',
+      );
+
+      // Sort by popularity (count desc) then alpha
+      relatedTags.sort((a, b) {
+        final aCount = tagCounts[a] ?? 0;
+        final bCount = tagCounts[b] ?? 0;
+        if (aCount != bCount) return bCount.compareTo(aCount);
+        return a.compareTo(b);
+      });
+
+      return relatedTags.map((t) => MapEntry(t, tagCounts[t] ?? 0)).toList();
+    });

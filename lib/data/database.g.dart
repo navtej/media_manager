@@ -51,6 +51,21 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _isPrivateMeta = const VerificationMeta(
+    'isPrivate',
+  );
+  @override
+  late final GeneratedColumn<bool> isPrivate = GeneratedColumn<bool>(
+    'is_private',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_private" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _addedAtMeta = const VerificationMeta(
     'addedAt',
   );
@@ -69,6 +84,7 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     path,
     alias,
     securityScopedBookmark,
+    isPrivate,
     addedAt,
   ];
   @override
@@ -109,6 +125,12 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         ),
       );
     }
+    if (data.containsKey('is_private')) {
+      context.handle(
+        _isPrivateMeta,
+        isPrivate.isAcceptableOrUnknown(data['is_private']!, _isPrivateMeta),
+      );
+    }
     if (data.containsKey('added_at')) {
       context.handle(
         _addedAtMeta,
@@ -140,6 +162,10 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.string,
         data['${effectivePrefix}security_scoped_bookmark'],
       ),
+      isPrivate: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_private'],
+      )!,
       addedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}added_at'],
@@ -158,12 +184,14 @@ class Folder extends DataClass implements Insertable<Folder> {
   final String path;
   final String? alias;
   final String? securityScopedBookmark;
+  final bool isPrivate;
   final DateTime addedAt;
   const Folder({
     required this.id,
     required this.path,
     this.alias,
     this.securityScopedBookmark,
+    required this.isPrivate,
     required this.addedAt,
   });
   @override
@@ -179,6 +207,7 @@ class Folder extends DataClass implements Insertable<Folder> {
         securityScopedBookmark,
       );
     }
+    map['is_private'] = Variable<bool>(isPrivate);
     map['added_at'] = Variable<DateTime>(addedAt);
     return map;
   }
@@ -193,6 +222,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       securityScopedBookmark: securityScopedBookmark == null && nullToAbsent
           ? const Value.absent()
           : Value(securityScopedBookmark),
+      isPrivate: Value(isPrivate),
       addedAt: Value(addedAt),
     );
   }
@@ -209,6 +239,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       securityScopedBookmark: serializer.fromJson<String?>(
         json['securityScopedBookmark'],
       ),
+      isPrivate: serializer.fromJson<bool>(json['isPrivate']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
     );
   }
@@ -222,6 +253,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       'securityScopedBookmark': serializer.toJson<String?>(
         securityScopedBookmark,
       ),
+      'isPrivate': serializer.toJson<bool>(isPrivate),
       'addedAt': serializer.toJson<DateTime>(addedAt),
     };
   }
@@ -231,6 +263,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     String? path,
     Value<String?> alias = const Value.absent(),
     Value<String?> securityScopedBookmark = const Value.absent(),
+    bool? isPrivate,
     DateTime? addedAt,
   }) => Folder(
     id: id ?? this.id,
@@ -239,6 +272,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     securityScopedBookmark: securityScopedBookmark.present
         ? securityScopedBookmark.value
         : this.securityScopedBookmark,
+    isPrivate: isPrivate ?? this.isPrivate,
     addedAt: addedAt ?? this.addedAt,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
@@ -249,6 +283,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       securityScopedBookmark: data.securityScopedBookmark.present
           ? data.securityScopedBookmark.value
           : this.securityScopedBookmark,
+      isPrivate: data.isPrivate.present ? data.isPrivate.value : this.isPrivate,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
     );
   }
@@ -260,6 +295,7 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('path: $path, ')
           ..write('alias: $alias, ')
           ..write('securityScopedBookmark: $securityScopedBookmark, ')
+          ..write('isPrivate: $isPrivate, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -267,7 +303,7 @@ class Folder extends DataClass implements Insertable<Folder> {
 
   @override
   int get hashCode =>
-      Object.hash(id, path, alias, securityScopedBookmark, addedAt);
+      Object.hash(id, path, alias, securityScopedBookmark, isPrivate, addedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -276,6 +312,7 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.path == this.path &&
           other.alias == this.alias &&
           other.securityScopedBookmark == this.securityScopedBookmark &&
+          other.isPrivate == this.isPrivate &&
           other.addedAt == this.addedAt);
 }
 
@@ -284,12 +321,14 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<String> path;
   final Value<String?> alias;
   final Value<String?> securityScopedBookmark;
+  final Value<bool> isPrivate;
   final Value<DateTime> addedAt;
   const FoldersCompanion({
     this.id = const Value.absent(),
     this.path = const Value.absent(),
     this.alias = const Value.absent(),
     this.securityScopedBookmark = const Value.absent(),
+    this.isPrivate = const Value.absent(),
     this.addedAt = const Value.absent(),
   });
   FoldersCompanion.insert({
@@ -297,6 +336,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     required String path,
     this.alias = const Value.absent(),
     this.securityScopedBookmark = const Value.absent(),
+    this.isPrivate = const Value.absent(),
     this.addedAt = const Value.absent(),
   }) : path = Value(path);
   static Insertable<Folder> custom({
@@ -304,6 +344,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<String>? path,
     Expression<String>? alias,
     Expression<String>? securityScopedBookmark,
+    Expression<bool>? isPrivate,
     Expression<DateTime>? addedAt,
   }) {
     return RawValuesInsertable({
@@ -312,6 +353,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (alias != null) 'alias': alias,
       if (securityScopedBookmark != null)
         'security_scoped_bookmark': securityScopedBookmark,
+      if (isPrivate != null) 'is_private': isPrivate,
       if (addedAt != null) 'added_at': addedAt,
     });
   }
@@ -321,6 +363,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<String>? path,
     Value<String?>? alias,
     Value<String?>? securityScopedBookmark,
+    Value<bool>? isPrivate,
     Value<DateTime>? addedAt,
   }) {
     return FoldersCompanion(
@@ -329,6 +372,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       alias: alias ?? this.alias,
       securityScopedBookmark:
           securityScopedBookmark ?? this.securityScopedBookmark,
+      isPrivate: isPrivate ?? this.isPrivate,
       addedAt: addedAt ?? this.addedAt,
     );
   }
@@ -350,6 +394,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
         securityScopedBookmark.value,
       );
     }
+    if (isPrivate.present) {
+      map['is_private'] = Variable<bool>(isPrivate.value);
+    }
     if (addedAt.present) {
       map['added_at'] = Variable<DateTime>(addedAt.value);
     }
@@ -363,6 +410,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('path: $path, ')
           ..write('alias: $alias, ')
           ..write('securityScopedBookmark: $securityScopedBookmark, ')
+          ..write('isPrivate: $isPrivate, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -2671,6 +2719,7 @@ typedef $$FoldersTableCreateCompanionBuilder =
       required String path,
       Value<String?> alias,
       Value<String?> securityScopedBookmark,
+      Value<bool> isPrivate,
       Value<DateTime> addedAt,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -2679,6 +2728,7 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<String> path,
       Value<String?> alias,
       Value<String?> securityScopedBookmark,
+      Value<bool> isPrivate,
       Value<DateTime> addedAt,
     });
 
@@ -2732,6 +2782,11 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<String> get securityScopedBookmark => $composableBuilder(
     column: $table.securityScopedBookmark,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPrivate => $composableBuilder(
+    column: $table.isPrivate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2795,6 +2850,11 @@ class $$FoldersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isPrivate => $composableBuilder(
+    column: $table.isPrivate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get addedAt => $composableBuilder(
     column: $table.addedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2823,6 +2883,9 @@ class $$FoldersTableAnnotationComposer
     column: $table.securityScopedBookmark,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isPrivate =>
+      $composableBuilder(column: $table.isPrivate, builder: (column) => column);
 
   GeneratedColumn<DateTime> get addedAt =>
       $composableBuilder(column: $table.addedAt, builder: (column) => column);
@@ -2885,12 +2948,14 @@ class $$FoldersTableTableManager
                 Value<String> path = const Value.absent(),
                 Value<String?> alias = const Value.absent(),
                 Value<String?> securityScopedBookmark = const Value.absent(),
+                Value<bool> isPrivate = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
                 path: path,
                 alias: alias,
                 securityScopedBookmark: securityScopedBookmark,
+                isPrivate: isPrivate,
                 addedAt: addedAt,
               ),
           createCompanionCallback:
@@ -2899,12 +2964,14 @@ class $$FoldersTableTableManager
                 required String path,
                 Value<String?> alias = const Value.absent(),
                 Value<String?> securityScopedBookmark = const Value.absent(),
+                Value<bool> isPrivate = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
                 path: path,
                 alias: alias,
                 securityScopedBookmark: securityScopedBookmark,
+                isPrivate: isPrivate,
                 addedAt: addedAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -5086,9 +5153,9 @@ mixin _$FoldersDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
 }
 mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
-  $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
+  $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
   $VideoTagsTable get videoTags => attachedDatabase.videoTags;
 }
 mixin _$VideoSummariesDaoMixin on DatabaseAccessor<AppDatabase> {

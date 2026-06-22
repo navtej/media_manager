@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/providers.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'private_library_controller.dart';
 
 part 'stats_provider.g.dart';
 
@@ -27,7 +28,9 @@ class LibraryStats {
   static String formatSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }
@@ -35,13 +38,16 @@ class LibraryStats {
 @riverpod
 Stream<LibraryStats> libraryStats(Ref ref) {
   final dao = ref.watch(videosDaoProvider);
-  return dao.watchAllVideos().map((videos) {
+  final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
+  return dao.watchAllVideos(folderIds: folderIds).map((videos) {
     final count = videos.length;
-    final duration = videos.fold<double>(0.0, (prev, v) => prev + v.duration).toInt();
+    final duration = videos
+        .fold<double>(0.0, (prev, v) => prev + v.duration)
+        .toInt();
     final size = videos.fold<double>(0.0, (prev, v) => prev + v.size).toInt();
-    
+
     print('DEBUG STATS: Count=$count, Size=$size bytes');
-    
+
     return LibraryStats(
       totalCount: count,
       totalDurationSeconds: duration,
@@ -56,7 +62,10 @@ Future<int> dataFolderSize(Ref ref) async {
   int totalSize = 0;
   try {
     if (await dir.exists()) {
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) {
           totalSize += await entity.length();
         }

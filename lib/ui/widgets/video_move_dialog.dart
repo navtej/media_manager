@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/library_name.dart';
 import '../../logic/video_move_controller.dart';
 
 const _dialogBorderRadius = BorderRadius.all(Radius.circular(12));
@@ -463,11 +464,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
   }
 
   String _folderLabel(Folder folder) {
-    final alias = folder.alias;
-    if (alias != null && alias.isNotEmpty) {
-      return '$alias (${folder.path})';
-    }
-    return folder.path;
+    return '${libraryDisplayName(folder)} (${folder.path})';
   }
 }
 

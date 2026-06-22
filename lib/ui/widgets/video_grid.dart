@@ -1286,7 +1286,7 @@ class _TagAutocompleteInputState extends ConsumerState<_TagAutocompleteInput> {
       return;
     }
 
-    final allTagsAsync = ref.read(allUniqueTagsProvider);
+    final allTagsAsync = ref.read(visibleUniqueTagsProvider);
     final allTags = allTagsAsync.value ?? [];
 
     final filtered = allTags
@@ -1432,7 +1432,7 @@ class _TagAutocompleteInputState extends ConsumerState<_TagAutocompleteInput> {
   @override
   Widget build(BuildContext context) {
     // Watch to keep the provider alive and ensure data is ready
-    ref.watch(allUniqueTagsProvider);
+    ref.watch(visibleUniqueTagsProvider);
 
     return CompositedTransformTarget(
       link: _layerLink,

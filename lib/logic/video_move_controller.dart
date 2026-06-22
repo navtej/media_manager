@@ -8,6 +8,7 @@ import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/folder_access_service.dart';
 import 'library_operation_controller.dart';
+import 'library_name.dart';
 import 'status_message_provider.dart';
 import 'stats_provider.dart';
 import 'video_selection_controller.dart';
@@ -449,9 +450,8 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     final bookmark = await ref
         .read(folderAccessServiceProvider)
         .createBookmark(path);
-    final existing = (await folderDao.getAllFolders())
-        .where((folder) => folder.path == path)
-        .firstOrNull;
+    final folders = await folderDao.getAllFolders();
+    final existing = folders.where((folder) => folder.path == path).firstOrNull;
     if (existing != null) {
       if (bookmark != null && bookmark.isNotEmpty) {
         await folderDao.updateFolderBookmark(existing.id, bookmark);
@@ -462,7 +462,7 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     final id = await folderDao.insertFolder(
       FoldersCompanion(
         path: drift.Value(path),
-        alias: drift.Value(p.basename(path)),
+        alias: drift.Value(uniqueLibraryNameForPath(path, folders)),
         securityScopedBookmark: drift.Value(bookmark),
       ),
     );

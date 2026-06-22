@@ -6,6 +6,7 @@ import 'package:macos_ui/macos_ui.dart';
 import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
+import '../../logic/private_library_controller.dart';
 
 enum TagSortOption { name, count }
 
@@ -39,7 +40,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   }
 
   Future<void> _loadStats() async {
-    final stats = await ref.read(tagsDaoProvider).getTagStatistics();
+    final folderIds = ref.read(effectiveLibraryFolderIdsProvider);
+    final stats = await ref
+        .read(tagsDaoProvider)
+        .getTagStatistics(folderIds: folderIds);
     if (mounted) {
       setState(() => _stats = stats);
     }
@@ -100,6 +104,11 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
+    ref.listen(effectiveLibraryFolderIdsProvider, (previous, next) {
+      if (previous != next) {
+        _loadStats();
+      }
+    });
 
     return MacosScaffold(
       backgroundColor: theme.canvasColor,
@@ -266,7 +275,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   // ... existing _TagChip and _ActionButton ...
 
   Widget _buildTagCloud(MacosThemeData theme) {
-    final tagsStream = ref.watch(tagsDaoProvider).watchAllTagsWithInfo();
+    final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
+    final tagsStream = ref
+        .watch(tagsDaoProvider)
+        .watchAllTagsWithInfo(folderIds: folderIds);
 
     return StreamBuilder<List<TagInfo>>(
       stream: tagsStream,

@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 import Foundation
 import FoundationModels
+import LocalAuthentication
 
 @available(macOS 15.0, *)
 actor AILanguageModelManager {
@@ -227,6 +228,29 @@ private func stopAccessingFolder(path: String) {
     url.stopAccessingSecurityScopedResource()
 }
 
+private func authenticatePrivateLibrary(result: @escaping FlutterResult) {
+    let context = LAContext()
+    let reason = "Authenticate to show private library videos."
+    var error: NSError?
+
+    guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+        if let error {
+            print("DEBUG SWIFT: Private library auth unavailable: \(error.localizedDescription)")
+        }
+        result(false)
+        return
+    }
+
+    context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
+        if let error {
+            print("DEBUG SWIFT: Private library auth failed: \(error.localizedDescription)")
+        }
+        DispatchQueue.main.async {
+            result(success)
+        }
+    }
+}
+
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     super.awakeFromNib()
@@ -257,10 +281,22 @@ class MainFlutterWindow: NSWindow {
       name: "com.example.moviemanager/app_lifecycle",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
 
+    let privateLibraryAuthChannel = FlutterMethodChannel(
+      name: "com.example.moviemanager/private_library_auth",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+
     appLifecycleChannel.setMethodCallHandler { (call, result) in
       if call.method == "terminateApplication" {
         NSApp.terminate(nil)
         result(nil)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    privateLibraryAuthChannel.setMethodCallHandler { (call, result) in
+      if call.method == "authenticatePrivateLibrary" {
+        authenticatePrivateLibrary(result: result)
       } else {
         result(FlutterMethodNotImplemented)
       }
