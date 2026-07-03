@@ -464,6 +464,10 @@ class LibraryController extends _$LibraryController {
 
       // 1. Metadata
       final meta = await mediaService.getMetadata(filePath);
+      if (!mediaService.shouldAcceptCandidateVideo(filePath, meta)) {
+        return null;
+      }
+
       final duration = (meta['duration'] as num?)?.toInt() ?? 0;
 
       // 2. Thumbnail

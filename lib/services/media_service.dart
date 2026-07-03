@@ -9,6 +9,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 class MediaService {
+  bool hasVideoStream(Map<String, dynamic> metadata) {
+    final raw = metadata['raw'];
+    if (raw is! Map) return false;
+
+    final streams = raw['streams'];
+    if (streams is! List) return false;
+
+    return streams.any((stream) {
+      if (stream is! Map) return false;
+      return stream['codec_type'] == 'video';
+    });
+  }
+
+  bool shouldAcceptCandidateVideo(String path, Map<String, dynamic> metadata) {
+    final extension = p.extension(path).toLowerCase();
+    if (extension != '.ts') return true;
+
+    return hasVideoStream(metadata);
+  }
+
   Future<Map<String, dynamic>> getMetadata(String path) async {
     final session = await FFprobeKit.getMediaInformation(path);
     final info = session.getMediaInformation();

@@ -13,6 +13,7 @@ class ScannerService {
     '.avi',
     '.webm',
     '.m4v',
+    '.ts',
   };
   static const Set<String> _ignoredExtensions = {'.part', '.ytdl'};
 
