@@ -20,6 +20,7 @@ import 'settings_screen.dart';
 import 'tag_management_screen.dart';
 import '../widgets/bulk_selection_toolbar.dart';
 import '../widgets/library_filter_menu.dart';
+import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -444,6 +445,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   ),
                                   const Spacer(),
                                   const LibraryFilterMenu(),
+                                  const SizedBox(width: 8),
+                                  const ShowOfflineMediaControl(),
                                   const SizedBox(width: 8),
                                   MacosTooltip(
                                     message: 'Add Folder',

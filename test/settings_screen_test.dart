@@ -55,6 +55,7 @@ void main() {
 
     expect(find.text('Libraries'), findsOneWidget);
     expect(find.text('Library Folders'), findsNothing);
+    expect(find.text('Show Offline Media'), findsNothing);
     expect(find.text('/Volumes/Media/Movies'), findsOneWidget);
     expect(
       (tester.getCenter(find.byKey(const ValueKey('library-name-field-1'))).dy -

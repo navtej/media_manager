@@ -213,38 +213,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildCustomCheckbox(
-    BuildContext context,
-    bool isChecked,
-    ValueChanged<bool> onChanged,
-  ) {
-    final theme = MacosTheme.of(context);
-    return GestureDetector(
-      onTap: () => onChanged(!isChecked),
-      child: Container(
-        width: 16,
-        height: 16,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          color: isChecked ? theme.primaryColor : Colors.transparent,
-          border: Border.all(
-            color: isChecked
-                ? theme.primaryColor
-                : MacosColors.systemGrayColor.withValues(alpha: 0.5),
-            width: 1.5,
-          ),
-        ),
-        child: isChecked
-            ? const Icon(
-                CupertinoIcons.checkmark,
-                size: 12,
-                color: MacosColors.white,
-              )
-            : null,
-      ),
-    );
-  }
-
   Widget _buildGeneralSettings(
     BuildContext context,
     AsyncValue<Map<String, dynamic>> settingsAsync,
@@ -296,21 +264,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 MacosPopupMenuItem(value: 'light', child: Text('Light')),
                 MacosPopupMenuItem(value: 'dark', child: Text('Dark')),
               ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const SizedBox(width: 200, child: Text('Show Offline Media')),
-            _buildCustomCheckbox(
-              context,
-              settingsAsync.value?['showOfflineMedia'] ?? true,
-              (bool value) {
-                ref
-                    .read(settingsProvider.notifier)
-                    .updateShowOfflineMedia(value);
-              },
             ),
           ],
         ),

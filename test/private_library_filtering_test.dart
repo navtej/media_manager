@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +9,8 @@ import 'package:movie_manager/logic/private_library_controller.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/provider_test_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,28 +37,28 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await _readAsyncValue(container, libraryFoldersProvider);
+      await readAsyncValue(container, libraryFoldersProvider);
 
       expect(container.read(effectiveLibraryFolderIdsProvider), [
         fixture.publicFolderId,
       ]);
       expect(
-        (await _readAsyncValue(
+        (await readAsyncValue(
           container,
           filteredVideosProvider,
         )).map((video) => video.title),
         ['Public Clip'],
       );
-      expect(await _readAsyncValue(container, selectedVideoCountProvider), 1);
+      expect(await readAsyncValue(container, selectedVideoCountProvider), 1);
       expect(
-        (await _readAsyncValue(
+        (await readAsyncValue(
           container,
           allTagsProvider,
         )).map((entry) => entry.key),
         ['public tag'],
       );
       expect(
-        (await _readAsyncValue(container, libraryStatsProvider)).totalCount,
+        (await readAsyncValue(container, libraryStatsProvider)).totalCount,
         1,
       );
     },
@@ -84,7 +84,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await _readAsyncValue(container, libraryFoldersProvider);
+      await readAsyncValue(container, libraryFoldersProvider);
       final unlocked = await container
           .read(privateLibraryAccessControllerProvider.notifier)
           .unlock();
@@ -103,7 +103,7 @@ void main() {
         fixture.privateFolderId,
       ]);
       expect(
-        (await _readAsyncValue(
+        (await readAsyncValue(
           container,
           filteredVideosProvider,
         )).map((video) => video.title),
@@ -132,7 +132,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await _readAsyncValue(container, libraryFoldersProvider);
+      await readAsyncValue(container, libraryFoldersProvider);
       await container
           .read(privateLibraryAccessControllerProvider.notifier)
           .unlock();
@@ -144,7 +144,7 @@ void main() {
         fixture.privateFolderId,
       ]);
       expect(
-        (await _readAsyncValue(
+        (await readAsyncValue(
           container,
           filteredVideosProvider,
         )).map((video) => video.title),
@@ -159,7 +159,7 @@ void main() {
         fixture.publicFolderId,
       ]);
       expect(
-        (await _readAsyncValue(
+        (await readAsyncValue(
           container,
           filteredVideosProvider,
         )).map((video) => video.title),
@@ -167,30 +167,6 @@ void main() {
       );
     },
   );
-}
-
-Future<T> _readAsyncValue<T>(
-  ProviderContainer container,
-  dynamic provider,
-) async {
-  final subscription = container.listen<AsyncValue<T>>(provider, (_, _) {});
-  try {
-    for (var attempt = 0; attempt < 50; attempt++) {
-      final asyncValue = container.read<AsyncValue<T>>(provider);
-      final value = asyncValue.when<T?>(
-        data: (value) => value,
-        loading: () => null,
-        error: (error, stackTrace) => throw error,
-      );
-      if (value != null) {
-        return value;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    throw TimeoutException('Timed out waiting for provider data.');
-  } finally {
-    subscription.close();
-  }
 }
 
 class _PrivateLibraryFixture {
