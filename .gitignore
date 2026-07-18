@@ -152,3 +152,4 @@ dist/
 third_party/whisper.cpp/
 macos/Runner/WhisperRuntime/whisper-cli
 *.md
+!AGENTS.md
