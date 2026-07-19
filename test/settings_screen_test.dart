@@ -11,10 +11,12 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
 import 'package:movie_manager/ui/widgets/private_library_auto_lock_control.dart';
+
+import 'support/library_access_test_adapter.dart';
 
 void main() {
   testWidgets('settings labels libraries and saves inline name edits', (
@@ -109,8 +111,8 @@ void main() {
           foldersDaoProvider.overrideWithValue(foldersDao),
           settingsProvider.overrideWith(_TestSettings.new),
           dataFolderSizeProvider.overrideWith((ref) async => 0),
-          folderAccessServiceProvider.overrideWithValue(
-            _AlwaysAllowedFolderAccessService(),
+          libraryAccessServiceProvider.overrideWithValue(
+            LibraryAccessService(adapter: AlwaysAllowedLibraryAccessAdapter()),
           ),
         ],
         child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
@@ -551,25 +553,6 @@ class _FakeFilePicker extends FilePicker {
     directoryPickCount += 1;
     return selectedDirectory;
   }
-}
-
-class _AlwaysAllowedFolderAccessService extends FolderAccessService {
-  @override
-  Future<String?> createBookmark(String path) async => 'bookmark:$path';
-
-  @override
-  Future<FolderAccessSession> startAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {
-    return FolderAccessSession(path: path, canAccess: true, needsRepair: false);
-  }
-
-  @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {}
 }
 
 Future<Folder> _waitForFolder(FoldersDao foldersDao, String path) async {

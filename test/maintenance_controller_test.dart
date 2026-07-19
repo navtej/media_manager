@@ -8,7 +8,7 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/maintenance_controller.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -22,7 +22,7 @@ void main() {
 
     expect(fixture.events, [
       'start:${fixture.root.path}:bookmark',
-      'stop:${fixture.root.path}:bookmark',
+      'stop:${fixture.root.path}',
     ]);
     expect(await fixture.videoFile.exists(), isFalse);
     expect(await fixture.subtitleFile.exists(), isFalse);
@@ -40,9 +40,9 @@ void main() {
 
     expect(fixture.events, [
       'start:${fixture.root.path}:bookmark',
-      'stop:${fixture.root.path}:bookmark',
+      'stop:${fixture.root.path}',
       'start:${fixture.root.path}:bookmark',
-      'stop:${fixture.root.path}:bookmark',
+      'stop:${fixture.root.path}',
     ]);
     expect(await fixture.videoFile.exists(), isFalse);
     expect(await fixture.subtitleFile.exists(), isFalse);
@@ -149,8 +149,13 @@ class _MaintenanceFixture {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        folderAccessServiceProvider.overrideWithValue(
-          _FakeFolderAccessService(canAccess: canAccessFolder, events: events),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(
+            adapter: _FakeLibraryAccessAdapter(
+              canAccess: canAccessFolder,
+              events: events,
+            ),
+          ),
         ),
       ],
     );
@@ -216,33 +221,26 @@ class _FixtureVideo {
   final Video video;
 }
 
-class _FakeFolderAccessService extends FolderAccessService {
-  _FakeFolderAccessService({required this.canAccess, required this.events});
+class _FakeLibraryAccessAdapter implements LibraryAccessAdapter {
+  _FakeLibraryAccessAdapter({required this.canAccess, required this.events});
 
   final bool canAccess;
   final List<String> events;
 
   @override
-  Future<FolderAccessSession> startAccessing({
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<bool> startAccessing({
     required String path,
-    required String? bookmark,
+    required String bookmark,
   }) async {
     events.add('start:$path:$bookmark');
-    return FolderAccessSession(
-      path: path,
-      canAccess: canAccess,
-      needsRepair: !canAccess,
-      message: canAccess
-          ? null
-          : 'Folder access needs repair. Reselect this folder in Settings.',
-    );
+    return canAccess;
   }
 
   @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {
-    events.add('stop:$path:$bookmark');
+  Future<void> stopAccessing(String path) async {
+    events.add('stop:$path');
   }
 }

@@ -13,11 +13,12 @@ import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/filter_controller.dart';
 import '../../logic/maintenance_controller.dart';
+import '../../logic/playback_controller.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/video_summary_controller.dart';
 import '../../logic/video_summary_models.dart';
 import '../../logic/video_selection_controller.dart';
-import '../../services/natural_language_service.dart';
+import '../../services/library_access_service.dart';
 import 'package:icon_craft/icon_craft.dart';
 
 class SliverVideoGrid extends ConsumerWidget {
@@ -330,8 +331,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
         MacosIconButton(
           padding: EdgeInsets.zero,
           icon: const Icon(CupertinoIcons.folder, size: 16),
-          onPressed: () =>
-              NaturalLanguageService().openInFinder(widget.video.absolutePath),
+          onPressed: () => _revealVideo(ref, widget.video),
         ),
         MacosTooltip(
           message: 'Video summary',
@@ -380,44 +380,49 @@ class _VideoGridItemState extends State<VideoGridItem> {
   // Removed _buildTagInput and replaced with _TagAutocompleteInput class below
 
   Future<void> _playVideo(WidgetRef ref, Video video) async {
-    final folder = await ref
-        .read(foldersDaoProvider)
-        .getFolderById(video.folderId);
-    if (!mounted) return;
-
-    final bookmark = folder?.securityScopedBookmark;
-    if (folder == null) {
-      _showPlaybackError('Library folder is missing.');
-      return;
-    }
-    if (bookmark == null || bookmark.isEmpty) {
-      _showPlaybackError(
-        'Folder access needs repair. Reselect this folder in Settings.',
-      );
-      return;
-    }
-
-    final opened = await ref
-        .read(naturalLanguageServiceProvider)
-        .playVideo(
-          video.absolutePath,
-          folderPath: folder.path,
-          folderBookmark: bookmark,
-        );
-    if (!mounted) return;
-    if (!opened) {
-      _showPlaybackError(
-        'Folder access needs repair. Reselect this folder in Settings.',
-      );
+    final opened = await _runVideoAccessAction(
+      () => ref.read(playbackControllerProvider).play(video),
+      errorTitle: 'Cannot Play Video',
+    );
+    if (mounted && opened == false) {
+      _showVideoAccessError(libraryAccessRepairMessage);
     }
   }
 
-  void _showPlaybackError(String message) {
+  Future<void> _revealVideo(WidgetRef ref, Video video) async {
+    await _runVideoAccessAction(
+      () => ref.read(playbackControllerProvider).revealInFinder(video),
+      errorTitle: 'Cannot Show Video in Finder',
+    );
+  }
+
+  Future<T?> _runVideoAccessAction<T>(
+    Future<T> Function() action, {
+    required String errorTitle,
+  }) async {
+    try {
+      return await action();
+    } on LibraryAccessNeedsRepairException catch (error) {
+      if (mounted) {
+        _showVideoAccessError(error.message, title: errorTitle);
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        _showVideoAccessError(error.message, title: errorTitle);
+      }
+    }
+    return null;
+  }
+
+  void _showVideoAccessError(
+    String message, {
+    String title = 'Cannot Play Video',
+  }) {
     showMacosAlertDialog(
       context: context,
       builder: (dialogContext) => MacosAlertDialog(
         appIcon: const MacosIcon(CupertinoIcons.exclamationmark_triangle),
-        title: const Text('Cannot Play Video'),
+        title: Text(title),
         message: Text(message),
         primaryButton: PushButton(
           controlSize: ControlSize.large,
@@ -602,7 +607,17 @@ class _VideoGridItemState extends State<VideoGridItem> {
                       },
                       loading: () =>
                           const Text('Subtitles: checking for .vtt file...'),
-                      error: (_, _) => const SizedBox.shrink(),
+                      error: (error, _) {
+                        if (error is LibraryAccessNeedsRepairException) {
+                          return Text(
+                            error.message,
+                            style: const TextStyle(
+                              color: MacosColors.systemRedColor,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
                     ),
                     if (vttAvailable) const SizedBox(height: 8),
                     if (isGenerating) ...[

@@ -62,19 +62,9 @@ class NaturalLanguageService {
     }
   }
 
-  Future<bool> playVideo(
-    String path, {
-    String? folderPath,
-    String? folderBookmark,
-  }) async {
+  Future<bool> playVideo(String path) async {
     try {
-      await _channel.invokeMethod('playVideo', {
-        'path': path,
-        if (folderPath != null && folderPath.isNotEmpty)
-          'folderPath': folderPath,
-        if (folderBookmark != null && folderBookmark.isNotEmpty)
-          'folderBookmark': folderBookmark,
-      });
+      await _channel.invokeMethod('playVideo', {'path': path});
       return true;
     } on PlatformException catch (e) {
       print("Failed to play video: '${e.message}'.");

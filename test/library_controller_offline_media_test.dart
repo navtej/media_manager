@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
@@ -8,7 +9,7 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/library_operation_controller.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -38,17 +39,19 @@ void main() {
     ))!;
     expect(video.isOffline, isFalse);
 
-    final folderAccessService = _DenyingFolderAccessService();
+    final libraryAccessAdapter = _DenyingLibraryAccessAdapter();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        folderAccessServiceProvider.overrideWithValue(folderAccessService),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: libraryAccessAdapter),
+        ),
       ],
     );
     addTearDown(container.dispose);
 
     await container.read(libraryControllerProvider.future);
-    await folderAccessService.started;
+    await libraryAccessAdapter.started;
     await _waitForScanIdle(container);
 
     final updated = (await db.videosDao.getVideoById(video.id))!;
@@ -86,34 +89,91 @@ void main() {
       '/Volumes/Mounted/Movies/clip.mp4',
     ]);
   });
+
+  test('syncAll runs scanning inside the Library access seam', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final root = await Directory.systemTemp.createTemp(
+      'library-access-scan-test',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: root.path,
+        securityScopedBookmark: const drift.Value('bookmark'),
+      ),
+    );
+    final adapter = _RecordingLibraryAccessAdapter();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: adapter),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(libraryControllerProvider.future);
+    await adapter.started;
+    await _waitForScanIdle(container);
+
+    expect(adapter.events, [
+      'start:${root.path}:bookmark',
+      'stop:${root.path}',
+    ]);
+  });
 }
 
-class _DenyingFolderAccessService extends FolderAccessService {
+class _DenyingLibraryAccessAdapter implements LibraryAccessAdapter {
   final Completer<void> _started = Completer<void>();
 
   Future<void> get started => _started.future;
 
   @override
-  Future<FolderAccessSession> startAccessing({
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<bool> startAccessing({
     required String path,
-    required String? bookmark,
+    required String bookmark,
   }) async {
     if (!_started.isCompleted) {
       _started.complete();
     }
-    return FolderAccessSession(
-      path: path,
-      canAccess: false,
-      needsRepair: true,
-      message: 'Folder access needs repair. Reselect this folder in Settings.',
-    );
+    return false;
   }
 
   @override
-  Future<void> stopAccessing({
+  Future<void> stopAccessing(String path) async {}
+}
+
+class _RecordingLibraryAccessAdapter implements LibraryAccessAdapter {
+  final Completer<void> _started = Completer<void>();
+  final List<String> events = [];
+
+  Future<void> get started => _started.future;
+
+  @override
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<bool> startAccessing({
     required String path,
-    required String? bookmark,
-  }) async {}
+    required String bookmark,
+  }) async {
+    events.add('start:$path:$bookmark');
+    if (!_started.isCompleted) {
+      _started.complete();
+    }
+    return true;
+  }
+
+  @override
+  Future<void> stopAccessing(String path) async {
+    events.add('stop:$path');
+  }
 }
 
 Future<void> _waitForScanIdle(ProviderContainer container) async {
