@@ -7,6 +7,7 @@ import 'ui/screens/home_screen.dart';
 import 'services/app_lifecycle_service.dart';
 import 'ui/screens/settings_screen.dart';
 import 'ui/widgets/about_dialog.dart';
+import 'ui/widgets/private_library_auto_lock_lifecycle.dart';
 
 import 'logic/settings_provider.dart';
 
@@ -77,7 +78,7 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
             darkTheme: MacosThemeData.dark(),
             themeMode: themeMode,
             debugShowCheckedModeBanner: false,
-            home: const HomeScreen(),
+            home: const PrivateLibraryAutoLockLifecycle(child: HomeScreen()),
           ),
         );
       },

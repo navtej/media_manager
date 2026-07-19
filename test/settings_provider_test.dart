@@ -8,6 +8,91 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('private-library auto-lock defaults to ten minutes', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final settings = await container.read(settingsProvider.future);
+
+    expect(
+      settings[privateLibraryAutoLockMinutesPreferenceKey],
+      defaultPrivateLibraryAutoLockMinutes,
+    );
+    expect(
+      container.read(privateLibraryAutoLockDurationProvider),
+      const Duration(minutes: 10),
+    );
+  });
+
+  test(
+    'private-library auto-lock falls back when persisted value is invalid',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        privateLibraryAutoLockMinutesPreferenceKey: 121,
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final settings = await container.read(settingsProvider.future);
+
+      expect(
+        settings[privateLibraryAutoLockMinutesPreferenceKey],
+        defaultPrivateLibraryAutoLockMinutes,
+      );
+    },
+  );
+
+  test('private-library auto-lock update persists across reloads', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+
+    await container
+        .read(settingsProvider.notifier)
+        .updatePrivateLibraryAutoLockMinutes(45);
+
+    expect(
+      (await container.read(
+        settingsProvider.future,
+      ))[privateLibraryAutoLockMinutesPreferenceKey],
+      45,
+    );
+
+    final reloaded = ProviderContainer();
+    addTearDown(reloaded.dispose);
+    final reloadedSettings = await reloaded.read(settingsProvider.future);
+    expect(reloadedSettings[privateLibraryAutoLockMinutesPreferenceKey], 45);
+  });
+
+  test(
+    'private-library auto-lock update rejects out-of-range values',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(settingsProvider.future);
+
+      expect(
+        () => container
+            .read(settingsProvider.notifier)
+            .updatePrivateLibraryAutoLockMinutes(0),
+        throwsRangeError,
+      );
+      expect(
+        () => container
+            .read(settingsProvider.notifier)
+            .updatePrivateLibraryAutoLockMinutes(121),
+        throwsRangeError,
+      );
+    },
+  );
+
   test(
     'summary subtitle preference defaults to enabled and persists',
     () async {

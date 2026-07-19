@@ -14,6 +14,7 @@ import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/services/folder_access_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
+import 'package:movie_manager/ui/widgets/private_library_auto_lock_control.dart';
 
 void main() {
   testWidgets('settings labels libraries and saves inline name edits', (
@@ -54,6 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libraries'), findsOneWidget);
+    expect(find.byType(PrivateLibraryAutoLockControl), findsOneWidget);
     expect(find.text('Library Folders'), findsNothing);
     expect(find.text('Show Offline Media'), findsNothing);
     expect(find.text('/Volumes/Media/Movies'), findsOneWidget);
@@ -511,6 +513,8 @@ class _TestSettings extends Settings {
       'paginationSize': 50,
       'themeMode': 'system',
       'showOfflineMedia': true,
+      privateLibraryAutoLockMinutesPreferenceKey:
+          defaultPrivateLibraryAutoLockMinutes,
       'summaryModelPath': '',
       'summaryPreferVttSubtitles': true,
       'summaryApiUrl': '',

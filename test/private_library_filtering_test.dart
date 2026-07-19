@@ -1,13 +1,18 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/filter_controller.dart';
 import 'package:movie_manager/logic/private_library_controller.dart';
+import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
+import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
+import 'package:movie_manager/ui/widgets/private_library_lock_selection_guard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/provider_test_utils.dart';
@@ -167,6 +172,106 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'auto-lock hides private media and removes only private selections',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'showOfflineMedia': true,
+        privateLibraryAutoLockMinutesPreferenceKey: 1,
+      });
+      final fixture = await _PrivateLibraryFixture.create();
+      addTearDown(fixture.db.close);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(fixture.db),
+          foldersDaoProvider.overrideWithValue(
+            _StaticFoldersDao(fixture.db, fixture.folders),
+          ),
+          privateLibraryAuthServiceProvider.overrideWithValue(
+            _FakePrivateLibraryAuthService(result: true),
+          ),
+        ],
+      );
+      final filteredVideosSubscription = container.listen(
+        filteredVideosProvider,
+        (_, _) {},
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MacosApp(
+            home: PrivateLibraryLockSelectionGuard(child: SizedBox.shrink()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await readAsyncValue(container, libraryFoldersProvider);
+
+      await container
+          .read(privateLibraryAccessControllerProvider.notifier)
+          .unlock();
+      final selectedFolders = container.read(
+        selectedLibraryFoldersControllerProvider.notifier,
+      );
+      selectedFolders.toggle(fixture.publicFolderId);
+      selectedFolders.toggle(fixture.privateFolderId);
+      await tester.pump();
+      expect(
+        (await tester.runAsync(
+          () => container.read(filteredVideosProvider.future),
+        ))!
+            .map((video) => video.title)
+            .toSet(),
+        {'Public Clip', 'Private Clip'},
+      );
+
+      final selectedVideos = container.read(
+        videoSelectionControllerProvider.notifier,
+      );
+      selectedVideos.toggle(fixture.publicVideoId);
+      selectedVideos.toggle(fixture.privateVideoId);
+      container.read(searchQueryProvider.notifier).set('Private Clip');
+      await tester.pump();
+      expect(
+        (await tester.runAsync(
+          () => container.read(filteredVideosProvider.future),
+        ))!
+            .map((video) => video.title),
+        ['Private Clip'],
+      );
+
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pump();
+
+      expect(
+        container.read(privateLibraryAccessControllerProvider).isUnlocked,
+        isFalse,
+      );
+      expect(container.read(selectedLibraryFoldersControllerProvider), {
+        fixture.publicFolderId,
+      });
+      expect(container.read(videoSelectionControllerProvider).selectedIds, {
+        fixture.publicVideoId,
+      });
+      container.read(searchQueryProvider.notifier).set('');
+      await tester.pump();
+      expect(
+        (await tester.runAsync(
+          () => container.read(filteredVideosProvider.future),
+        ))!
+            .map((video) => video.title),
+        ['Public Clip'],
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      filteredVideosSubscription.close();
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 1));
+    },
+  );
 }
 
 class _PrivateLibraryFixture {
@@ -174,12 +279,16 @@ class _PrivateLibraryFixture {
     required this.db,
     required this.publicFolderId,
     required this.privateFolderId,
+    required this.publicVideoId,
+    required this.privateVideoId,
     required this.folders,
   });
 
   final AppDatabase db;
   final int publicFolderId;
   final int privateFolderId;
+  final int publicVideoId;
+  final int privateVideoId;
   final List<Folder> folders;
 
   static Future<_PrivateLibraryFixture> create() async {
@@ -227,6 +336,8 @@ class _PrivateLibraryFixture {
       db: db,
       publicFolderId: publicFolderId,
       privateFolderId: privateFolderId,
+      publicVideoId: publicVideo.id,
+      privateVideoId: privateVideo.id,
       folders: [publicFolder, privateFolder],
     );
   }
