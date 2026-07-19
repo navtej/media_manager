@@ -197,7 +197,7 @@ void main() {
     },
   );
 
-  test('playVideo passes folder bookmark context to native playback', () async {
+  test('playVideo delegates opening the path to native playback', () async {
     MethodCall? receivedCall;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -207,15 +207,11 @@ void main() {
 
     await NaturalLanguageService().playVideo(
       '/Volumes/Media/Library/movie.mp4',
-      folderPath: '/Volumes/Media/Library',
-      folderBookmark: 'bookmark-data',
     );
 
     expect(receivedCall?.method, 'playVideo');
     expect(receivedCall?.arguments, {
       'path': '/Volumes/Media/Library/movie.mp4',
-      'folderPath': '/Volumes/Media/Library',
-      'folderBookmark': 'bookmark-data',
     });
   });
 
@@ -230,8 +226,6 @@ void main() {
 
     final opened = await NaturalLanguageService().playVideo(
       '/Volumes/Media/Library/movie.mp4',
-      folderPath: '/Volumes/Media/Library',
-      folderBookmark: 'stale-bookmark',
     );
 
     expect(opened, isFalse);

@@ -170,6 +170,14 @@ private func resolveWhisperCLIPath() -> String? {
 
 private var activeFolderAccess: [String: URL] = [:]
 
+func libraryAccessURL(_ resolvedURL: URL, matchesRequestedPath path: String) -> Bool {
+    let requestedURL = URL(fileURLWithPath: path)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
+    let canonicalResolvedURL = resolvedURL.standardizedFileURL.resolvingSymlinksInPath()
+    return canonicalResolvedURL.path == requestedURL.path
+}
+
 private func createFolderBookmark(path: String) throws -> String {
     let url = URL(fileURLWithPath: path)
     let didStartAccessing = url.startAccessingSecurityScopedResource()
@@ -205,6 +213,10 @@ private func startAccessingFolder(path: String, bookmark: String) throws -> Bool
     )
 
     if isStale {
+        return false
+    }
+
+    guard libraryAccessURL(url, matchesRequestedPath: path) else {
         return false
     }
 
@@ -407,34 +419,8 @@ class MainFlutterWindow: NSWindow {
           return
         }
 
-        let folderPath = args["folderPath"] as? String
-        let folderBookmark = args["folderBookmark"] as? String
-        var didStartPlaybackAccess = false
-
-        if let folderPath,
-           let folderBookmark,
-           !folderPath.isEmpty,
-           !folderBookmark.isEmpty,
-           activeFolderAccess[folderPath] == nil {
-          do {
-            didStartPlaybackAccess = try startAccessingFolder(path: folderPath, bookmark: folderBookmark)
-            if !didStartPlaybackAccess {
-              result(FlutterError(code: "BOOKMARK_ERROR", message: "Folder access needs repair. Reselect this folder in Settings.", details: nil))
-              return
-            }
-          } catch {
-            result(FlutterError(code: "BOOKMARK_ERROR", message: error.localizedDescription, details: nil))
-            return
-          }
-        }
-
         let url = URL(fileURLWithPath: path)
         let opened = NSWorkspace.shared.open(url)
-        if didStartPlaybackAccess, let folderPath {
-          DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            stopAccessingFolder(path: folderPath)
-          }
-        }
         guard opened else {
           result(FlutterError(code: "PLAYBACK_ERROR", message: "Unable to open video.", details: nil))
           return

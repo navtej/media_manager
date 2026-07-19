@@ -19,7 +19,7 @@ import '../../logic/whisper_model_catalog.dart';
 import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
-import '../../services/folder_access_service.dart';
+import '../../services/library_access_service.dart';
 import '../../services/private_library_auth_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
@@ -684,7 +684,7 @@ class _FolderList extends ConsumerWidget {
                           }
 
                           final bookmark = await ref
-                              .read(folderAccessServiceProvider)
+                              .read(libraryAccessServiceProvider)
                               .createBookmark(selectedDirectory);
                           if (bookmark == null || bookmark.isEmpty) {
                             ref

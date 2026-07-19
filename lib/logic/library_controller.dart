@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/scanner_service.dart';
-import '../services/folder_access_service.dart';
+import '../services/library_access_service.dart';
 import '../services/media_service.dart';
 import 'settings_provider.dart';
 import '../services/thumbnail_service.dart';
@@ -124,57 +124,59 @@ class LibraryController extends _$LibraryController {
 
       for (final f in folders) {
         final folderVideos = await videoDao.getVideosByFolder(f.id);
-        final access = await _startFolderAccess(f);
-        if (!access.canAccess) {
-          final message = access.message ?? 'Cannot access ${f.path}';
-          print('DEBUG: $message');
-          ref.read(scanStatusProvider.notifier).setStatus(message);
+        try {
+          await ref
+              .read(libraryAccessServiceProvider)
+              .withAccess(
+                library: LibraryAccessRequest(
+                  path: f.path,
+                  bookmark: f.securityScopedBookmark,
+                ),
+                action: () async {
+                  final folderDir = Directory(f.path);
+                  final folderExists = await folderDir.exists();
+
+                  if (!folderExists) {
+                    print('DEBUG: Folder ${f.path} is offline');
+                    for (final v in folderVideos) {
+                      if (!v.isOffline) toMarkOffline.add(v.id);
+                    }
+                    return;
+                  }
+
+                  // Folder exists - mark all as online (if they were offline)
+                  print('DEBUG: Folder ${f.path} is online');
+                  for (final v in folderVideos) {
+                    if (v.isOffline) toMarkOnline.add(v.id);
+
+                    final file = File(v.absolutePath);
+                    final fileExists = await file.exists();
+
+                    if (!fileExists) {
+                      toDelete.add(v.id);
+                      continue;
+                    }
+
+                    if (v.size == 0) {
+                      final size = await file.length();
+                      toUpdateSize[v.id] = size;
+                    }
+
+                    if (v.fileCreatedAt == null) {
+                      final stat = await file.stat();
+                      toUpdateDate[v.id] = stat.modified;
+                    }
+                  }
+
+                  await _scanFolderContents(f.path, f.id);
+                },
+              );
+        } on LibraryAccessNeedsRepairException catch (error) {
+          print('DEBUG: ${error.message}');
+          ref.read(scanStatusProvider.notifier).setStatus(error.message);
           for (final v in folderVideos) {
             if (!v.isOffline) toMarkOffline.add(v.id);
           }
-          continue;
-        }
-
-        try {
-          final folderDir = Directory(f.path);
-          final folderExists = await folderDir.exists();
-
-          if (!folderExists) {
-            print('DEBUG: Folder ${f.path} is offline');
-            for (final v in folderVideos) {
-              if (!v.isOffline) toMarkOffline.add(v.id);
-            }
-            continue; // Skip scanning and individual file checks for offline folders
-          }
-
-          // Folder exists - mark all as online (if they were offline)
-          print('DEBUG: Folder ${f.path} is online');
-          for (final v in folderVideos) {
-            if (v.isOffline) toMarkOnline.add(v.id);
-
-            final file = File(v.absolutePath);
-            final fileExists = await file.exists();
-
-            if (!fileExists) {
-              toDelete.add(v.id);
-              continue;
-            }
-
-            if (v.size == 0) {
-              final size = await file.length();
-              toUpdateSize[v.id] = size;
-            }
-
-            if (v.fileCreatedAt == null) {
-              final stat = await file.stat();
-              toUpdateDate[v.id] = stat.modified;
-            }
-          }
-
-          // Scan for new files only if folder is online
-          await scanFolder(f.path, f.id);
-        } finally {
-          await _stopFolderAccess(f);
         }
       }
 
@@ -255,7 +257,7 @@ class LibraryController extends _$LibraryController {
     try {
       final dao = ref.read(foldersDaoProvider);
       final bookmark = await ref
-          .read(folderAccessServiceProvider)
+          .read(libraryAccessServiceProvider)
           .createBookmark(path);
 
       // Check if exists first to get ID
@@ -289,18 +291,7 @@ class LibraryController extends _$LibraryController {
       final refetched = (await dao.getAllFolders()).firstWhere(
         (f) => f.id == id,
       );
-      final access = await _startFolderAccess(refetched);
-      if (!access.canAccess) {
-        ref
-            .read(scanStatusProvider.notifier)
-            .setStatus(access.message ?? 'Cannot access $path');
-        return;
-      }
-      try {
-        await scanFolder(path, id);
-      } finally {
-        await _stopFolderAccess(refetched);
-      }
+      await scanFolder(refetched.path, id);
     } finally {
       operation.endScan();
     }
@@ -336,18 +327,7 @@ class LibraryController extends _$LibraryController {
       final folderDao = ref.read(foldersDaoProvider);
       final folders = await folderDao.getAllFolders();
       for (final f in folders) {
-        final access = await _startFolderAccess(f);
-        if (!access.canAccess) {
-          ref
-              .read(scanStatusProvider.notifier)
-              .setStatus(access.message ?? 'Cannot access ${f.path}');
-          continue;
-        }
-        try {
-          await scanFolder(f.path, f.id);
-        } finally {
-          await _stopFolderAccess(f);
-        }
+        await scanFolder(f.path, f.id);
       }
 
       print('DEBUG: Rebuild completed successfully');
@@ -362,6 +342,30 @@ class LibraryController extends _$LibraryController {
   }
 
   Future<void> scanFolder(String rootPath, int folderId) async {
+    final folder = await ref.read(foldersDaoProvider).getFolderById(folderId);
+    if (folder == null) {
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus('Library folder is missing.');
+      return;
+    }
+
+    try {
+      await ref
+          .read(libraryAccessServiceProvider)
+          .withAccess(
+            library: LibraryAccessRequest(
+              path: folder.path,
+              bookmark: folder.securityScopedBookmark,
+            ),
+            action: () => _scanFolderContents(folder.path, folder.id),
+          );
+    } on LibraryAccessNeedsRepairException catch (error) {
+      ref.read(scanStatusProvider.notifier).setStatus(error.message);
+    }
+  }
+
+  Future<void> _scanFolderContents(String rootPath, int folderId) async {
     if (ref.read(libraryOperationControllerProvider).isMoving) {
       ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
       return;
@@ -430,24 +434,6 @@ class LibraryController extends _$LibraryController {
     } finally {
       ref.read(scanStatusProvider.notifier).setStatus('');
     }
-  }
-
-  Future<FolderAccessSession> _startFolderAccess(Folder folder) {
-    return ref
-        .read(folderAccessServiceProvider)
-        .startAccessing(
-          path: folder.path,
-          bookmark: folder.securityScopedBookmark,
-        );
-  }
-
-  Future<void> _stopFolderAccess(Folder folder) {
-    return ref
-        .read(folderAccessServiceProvider)
-        .stopAccessing(
-          path: folder.path,
-          bookmark: folder.securityScopedBookmark,
-        );
   }
 
   Future<VideosCompanion?> _prepareVideoCompanion(

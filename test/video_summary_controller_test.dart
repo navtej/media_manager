@@ -10,7 +10,7 @@ import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/video_summary_controller.dart';
 import 'package:movie_manager/logic/video_summary_models.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/media_service.dart';
 import 'package:movie_manager/services/natural_language_service.dart';
 import 'package:path/path.dart' as p;
@@ -41,6 +41,35 @@ void main() {
       expect(fixture.events, ['start:${fixture.root.path}']);
     },
   );
+
+  test('subtitle discovery surfaces the Library repair outcome', () async {
+    final fixture = await _SummaryControllerFixture.create(
+      canAccessFolder: false,
+    );
+    addTearDown(fixture.dispose);
+
+    final provider = videoSummarySubtitleAvailabilityProvider(fixture.video);
+    final errorCompleter = Completer<Object>();
+    final subscription = fixture.container.listen(
+      provider,
+      (_, next) {
+        if (next.hasError && !errorCompleter.isCompleted) {
+          errorCompleter.complete(next.error!);
+        }
+      },
+      fireImmediately: true,
+    );
+    addTearDown(subscription.close);
+
+    expect(
+      await errorCompleter.future,
+      isA<LibraryAccessNeedsRepairException>().having(
+        (error) => error.message,
+        'message',
+        libraryAccessRepairMessage,
+      ),
+    );
+  });
 
   test(
     'starts folder access before extraction and stops it afterward',
@@ -314,7 +343,6 @@ class _SummaryControllerFixture {
     required this.container,
     required this.root,
     required this.video,
-    required this.folderAccessService,
     required this.mediaService,
     required this.naturalLanguageService,
     required this.audioFile,
@@ -325,7 +353,6 @@ class _SummaryControllerFixture {
   final ProviderContainer container;
   final Directory root;
   final Video video;
-  final _FakeFolderAccessService folderAccessService;
   final _FakeMediaService mediaService;
   final _FakeNaturalLanguageService naturalLanguageService;
   final File audioFile;
@@ -372,9 +399,11 @@ class _SummaryControllerFixture {
     );
     final video = (await db.videosDao.getVideoByPath(videoFile.path))!;
     final events = <String>[];
-    final folderAccessService = _FakeFolderAccessService(
-      canAccess: canAccessFolder,
-      events: events,
+    final libraryAccessService = LibraryAccessService(
+      adapter: _FakeLibraryAccessAdapter(
+        canAccess: canAccessFolder,
+        events: events,
+      ),
     );
     final mediaService = _FakeMediaService(
       audioPath: audioFile.path,
@@ -399,7 +428,7 @@ class _SummaryControllerFixture {
         summaryModelValidationProvider.overrideWith(
           (_) async => modelValidation,
         ),
-        folderAccessServiceProvider.overrideWithValue(folderAccessService),
+        libraryAccessServiceProvider.overrideWithValue(libraryAccessService),
         mediaServiceProvider.overrideWithValue(mediaService),
         naturalLanguageServiceProvider.overrideWithValue(
           naturalLanguageService,
@@ -412,7 +441,6 @@ class _SummaryControllerFixture {
       container: container,
       root: root,
       video: video,
-      folderAccessService: folderAccessService,
       mediaService: mediaService,
       naturalLanguageService: naturalLanguageService,
       audioFile: audioFile,
@@ -472,33 +500,26 @@ class _FakeSettings extends Settings {
   }
 }
 
-class _FakeFolderAccessService extends FolderAccessService {
-  _FakeFolderAccessService({required this.canAccess, required this.events});
+class _FakeLibraryAccessAdapter implements LibraryAccessAdapter {
+  _FakeLibraryAccessAdapter({required this.canAccess, required this.events});
 
   final bool canAccess;
   final List<String> events;
 
   @override
-  Future<FolderAccessSession> startAccessing({
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<bool> startAccessing({
     required String path,
-    required String? bookmark,
+    required String bookmark,
   }) async {
     events.add('start:$path');
-    return FolderAccessSession(
-      path: path,
-      canAccess: canAccess,
-      needsRepair: !canAccess,
-      message: canAccess
-          ? null
-          : 'Folder access needs repair. Reselect this folder in Settings.',
-    );
+    return canAccess;
   }
 
   @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {
+  Future<void> stopAccessing(String path) async {
     events.add('stop:$path');
   }
 }

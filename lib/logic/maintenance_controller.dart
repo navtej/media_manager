@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path/path.dart' as p;
 import '../data/providers.dart';
-import '../services/folder_access_service.dart';
+import '../services/library_access_service.dart';
 import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
 import 'stats_provider.dart';
@@ -97,7 +97,7 @@ class MaintenanceController extends _$MaintenanceController {
   Future<void> deleteVideo(int videoId) async {
     final videoDao = ref.read(videosDaoProvider);
     final folderDao = ref.read(foldersDaoProvider);
-    final folderAccessService = ref.read(folderAccessServiceProvider);
+    final libraryAccessService = ref.read(libraryAccessServiceProvider);
 
     try {
       final video = await videoDao.getVideoById(videoId);
@@ -111,66 +111,65 @@ class MaintenanceController extends _$MaintenanceController {
         return;
       }
 
-      final access = await folderAccessService.startAccessing(
-        path: folder.path,
-        bookmark: folder.securityScopedBookmark,
-      );
-      if (!access.canAccess) {
-        ref
-            .read(scanStatusProvider.notifier)
-            .setStatus(
-              access.message ??
-                  'Folder access needs repair. Reselect this folder in Settings.',
-            );
-        return;
-      }
-
       try {
-        final file = File(video.absolutePath);
-        if (await file.exists()) {
-          await file.delete();
-          print('DEBUG: Deleted video file: ${video.absolutePath}');
+        await libraryAccessService.withAccess(
+          library: LibraryAccessRequest(
+            path: folder.path,
+            bookmark: folder.securityScopedBookmark,
+          ),
+          action: () async {
+            try {
+              final file = File(video.absolutePath);
+              if (await file.exists()) {
+                await file.delete();
+                print('DEBUG: Deleted video file: ${video.absolutePath}');
 
-          // Delete subtitle files with same basename
-          final dir = file.parent;
-          final basename = p.basenameWithoutExtension(video.absolutePath);
-          final extensionsToCheck = ['.vtt', '.srt', '.VTT', '.SRT'];
+                // Delete subtitle files with same basename
+                final dir = file.parent;
+                final basename = p.basenameWithoutExtension(video.absolutePath);
+                final extensionsToCheck = ['.vtt', '.srt', '.VTT', '.SRT'];
 
-          if (await dir.exists()) {
-            await for (final entity in dir.list(followLinks: false)) {
-              if (entity is File) {
-                final entityName = p.basename(entity.path);
-                if (entityName.startsWith(basename) &&
-                    extensionsToCheck.contains(p.extension(entity.path))) {
-                  try {
-                    await entity.delete();
-                    print('DEBUG: Deleted associated subtitle: ${entity.path}');
-                  } catch (e) {
-                    print('WARN: Failed to delete subtitle ${entity.path}: $e');
+                if (await dir.exists()) {
+                  await for (final entity in dir.list(followLinks: false)) {
+                    if (entity is File) {
+                      final entityName = p.basename(entity.path);
+                      if (entityName.startsWith(basename) &&
+                          extensionsToCheck.contains(
+                            p.extension(entity.path),
+                          )) {
+                        try {
+                          await entity.delete();
+                          print(
+                            'DEBUG: Deleted associated subtitle: ${entity.path}',
+                          );
+                        } catch (e) {
+                          print(
+                            'WARN: Failed to delete subtitle ${entity.path}: $e',
+                          );
+                        }
+                      }
+                    }
                   }
                 }
               }
+
+              await videoDao.deleteVideo(videoId, deleteFile: false);
+              print('DEBUG: Deleted video from DB');
+
+              // Update stats immediately
+              ref.invalidate(libraryStatsProvider);
+            } catch (e) {
+              print('ERROR: Failed to delete video file on disk: $e');
+              ref
+                  .read(scanStatusProvider.notifier)
+                  .setStatus(
+                    'Could not delete video file. Repair folder access in Settings.',
+                  );
             }
-          }
-        }
-
-        await videoDao.deleteVideo(videoId, deleteFile: false);
-        print('DEBUG: Deleted video from DB');
-
-        // Update stats immediately
-        ref.invalidate(libraryStatsProvider);
-      } catch (e) {
-        print('ERROR: Failed to delete video file on disk: $e');
-        ref
-            .read(scanStatusProvider.notifier)
-            .setStatus(
-              'Could not delete video file. Repair folder access in Settings.',
-            );
-      } finally {
-        await folderAccessService.stopAccessing(
-          path: folder.path,
-          bookmark: folder.securityScopedBookmark,
+          },
         );
+      } on LibraryAccessNeedsRepairException catch (error) {
+        ref.read(scanStatusProvider.notifier).setStatus(error.message);
       }
     } catch (e) {
       print('ERROR in deleteVideo: $e');

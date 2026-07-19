@@ -7,8 +7,10 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/video_move_controller.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/ui/widgets/video_move_dialog.dart';
+
+import 'support/library_access_test_adapter.dart';
 
 void main() {
   test('wide compact sizing scales from the window size', () {
@@ -73,8 +75,8 @@ void main() {
           foldersDaoProvider.overrideWithValue(
             _StaticFoldersDao(db, [sourceFolder, destinationFolder]),
           ),
-          folderAccessServiceProvider.overrideWithValue(
-            _AlwaysAllowedFolderAccessService(),
+          libraryAccessServiceProvider.overrideWithValue(
+            LibraryAccessService(adapter: AlwaysAllowedLibraryAccessAdapter()),
           ),
         ],
         child: MacosApp(
@@ -191,22 +193,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
-}
-
-class _AlwaysAllowedFolderAccessService extends FolderAccessService {
-  @override
-  Future<FolderAccessSession> startAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {
-    return FolderAccessSession(path: path, canAccess: true, needsRepair: false);
-  }
-
-  @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {}
 }
 
 class _StaticFoldersDao extends FoldersDao {

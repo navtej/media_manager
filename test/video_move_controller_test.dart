@@ -9,8 +9,10 @@ import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/library_operation_controller.dart';
 import 'package:movie_manager/logic/video_move_controller.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
-import 'package:movie_manager/services/folder_access_service.dart';
+import 'package:movie_manager/services/library_access_service.dart';
 import 'package:path/path.dart' as p;
+
+import 'support/library_access_test_adapter.dart';
 
 void main() {
   test('plans moves by preserving the source-relative path', () async {
@@ -308,16 +310,19 @@ class _MoveFixture {
     final destinationFolder = (await db.foldersDao.getFolderById(
       destinationFolderId,
     ))!;
-    final folderAccessService = restrictSourceListingUntilAccess
-        ? _UnlockingFolderAccessService(
+    final LibraryAccessAdapter libraryAccessAdapter =
+        restrictSourceListingUntilAccess
+        ? _UnlockingLibraryAccessAdapter(
             sourcePath: source.path,
             directoriesToUnlock: [nested],
           )
-        : _AlwaysAllowedFolderAccessService();
+        : AlwaysAllowedLibraryAccessAdapter();
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        folderAccessServiceProvider.overrideWithValue(folderAccessService),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: libraryAccessAdapter),
+        ),
       ],
     );
 
@@ -346,24 +351,8 @@ class _MoveFixture {
   }
 }
 
-class _AlwaysAllowedFolderAccessService extends FolderAccessService {
-  @override
-  Future<FolderAccessSession> startAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {
-    return FolderAccessSession(path: path, canAccess: true, needsRepair: false);
-  }
-
-  @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {}
-}
-
-class _UnlockingFolderAccessService extends FolderAccessService {
-  _UnlockingFolderAccessService({
+class _UnlockingLibraryAccessAdapter implements LibraryAccessAdapter {
+  _UnlockingLibraryAccessAdapter({
     required this.sourcePath,
     required this.directoriesToUnlock,
   });
@@ -372,23 +361,23 @@ class _UnlockingFolderAccessService extends FolderAccessService {
   final List<Directory> directoriesToUnlock;
 
   @override
-  Future<FolderAccessSession> startAccessing({
+  Future<String?> createBookmark(String path) async => 'bookmark:$path';
+
+  @override
+  Future<bool> startAccessing({
     required String path,
-    required String? bookmark,
+    required String bookmark,
   }) async {
     if (p.normalize(path) == p.normalize(sourcePath)) {
       for (final directory in directoriesToUnlock) {
         await _setDirectoryUserAccess(directory, canAccess: true);
       }
     }
-    return FolderAccessSession(path: path, canAccess: true, needsRepair: false);
+    return true;
   }
 
   @override
-  Future<void> stopAccessing({
-    required String path,
-    required String? bookmark,
-  }) async {}
+  Future<void> stopAccessing(String path) async {}
 }
 
 Future<void> _setDirectoryUserAccess(

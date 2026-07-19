@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../data/database.dart';
 import '../data/providers.dart';
-import '../services/folder_access_service.dart';
+import '../services/library_access_service.dart';
 import 'library_operation_controller.dart';
 import 'library_name.dart';
 import 'status_message_provider.dart';
@@ -249,21 +249,24 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     }
 
     var conflicts = <VideoMoveConflict>[];
-    var accessSessions = <_FolderAccessHandle>[];
     try {
-      accessSessions = await _startAccessForFolders(
-        _preflightFolders(items, destinationFolder),
-      );
-      items = await _attachSubtitleSidecars(items, errors);
-      conflicts = await _findConflicts(items, videoDao);
+      await ref
+          .read(libraryAccessServiceProvider)
+          .withAccessToAll(
+            libraries: _accessRequests(
+              _preflightFolders(items, destinationFolder),
+            ),
+            action: () async {
+              items = await _attachSubtitleSidecars(items, errors);
+              conflicts = await _findConflicts(items, videoDao);
+            },
+          );
     } on FileSystemException catch (error) {
       errors.add(
         _fileSystemErrorMessage('Could not inspect move paths', error),
       );
     } catch (error) {
       errors.add(_plainErrorMessage(error));
-    } finally {
-      await _stopAccessSessions(accessSessions);
     }
 
     return VideoMovePreflight(
@@ -332,113 +335,119 @@ class VideoMoveController extends Notifier<VideoMoveState> {
         return VideoMoveResult(failures: failures);
       }
 
-      final accessSessions = await _startAccessForMove(preflight.items);
-      final moved = <VideoMoveItemResult>[];
-      final skipped = <VideoMoveItemResult>[];
-      final failures = <VideoMoveItemResult>[];
-      final clearFromSelection = <int>[];
+      return await ref
+          .read(libraryAccessServiceProvider)
+          .withAccessToAll(
+            libraries: _accessRequestsForMove(preflight.items),
+            action: () async {
+              final moved = <VideoMoveItemResult>[];
+              final skipped = <VideoMoveItemResult>[];
+              final failures = <VideoMoveItemResult>[];
+              final clearFromSelection = <int>[];
 
-      try {
-        for (final item in preflight.items) {
-          if (item.isNoOp) {
-            skipped.add(
-              VideoMoveItemResult(
-                videoId: item.video.id,
-                title: item.video.title,
-                sourcePath: item.sourcePath,
-                destinationPath: item.destinationPath,
-                message: 'Already in destination folder.',
-              ),
-            );
-            clearFromSelection.add(item.video.id);
-            _markProgress(moved.length + skipped.length + failures.length);
-            continue;
-          }
+              for (final item in preflight.items) {
+                if (item.isNoOp) {
+                  skipped.add(
+                    VideoMoveItemResult(
+                      videoId: item.video.id,
+                      title: item.video.title,
+                      sourcePath: item.sourcePath,
+                      destinationPath: item.destinationPath,
+                      message: 'Already in destination folder.',
+                    ),
+                  );
+                  clearFromSelection.add(item.video.id);
+                  _markProgress(
+                    moved.length + skipped.length + failures.length,
+                  );
+                  continue;
+                }
 
-          try {
-            state = state.copyWith(
-              statusMessage: 'Moving ${item.video.title}...',
-            );
-            await _moveFile(
-              sourcePath: item.sourcePath,
-              destinationPath: item.destinationPath,
-            );
-            final sidecarFailures = <String>[];
-            for (final sidecar in item.sidecars) {
-              try {
-                await _moveFile(
-                  sourcePath: sidecar.sourcePath,
-                  destinationPath: sidecar.destinationPath,
-                );
-              } catch (error) {
-                sidecarFailures.add(
-                  '${p.basename(sidecar.sourcePath)}: $error',
-                );
+                try {
+                  state = state.copyWith(
+                    statusMessage: 'Moving ${item.video.title}...',
+                  );
+                  await _moveFile(
+                    sourcePath: item.sourcePath,
+                    destinationPath: item.destinationPath,
+                  );
+                  final sidecarFailures = <String>[];
+                  for (final sidecar in item.sidecars) {
+                    try {
+                      await _moveFile(
+                        sourcePath: sidecar.sourcePath,
+                        destinationPath: sidecar.destinationPath,
+                      );
+                    } catch (error) {
+                      sidecarFailures.add(
+                        '${p.basename(sidecar.sourcePath)}: $error',
+                      );
+                    }
+                  }
+
+                  await ref
+                      .read(videosDaoProvider)
+                      .updateVideoLocation(
+                        id: item.video.id,
+                        folderId: item.destinationFolder.id,
+                        absolutePath: item.destinationPath,
+                      );
+
+                  if (removeEmptySourceFolders) {
+                    await _removeEmptyParents(
+                      Directory(p.dirname(item.sourcePath)),
+                      Directory(item.sourceFolder.path),
+                    );
+                  }
+
+                  moved.add(
+                    VideoMoveItemResult(
+                      videoId: item.video.id,
+                      title: item.video.title,
+                      sourcePath: item.sourcePath,
+                      destinationPath: item.destinationPath,
+                      message: sidecarFailures.isEmpty
+                          ? 'Moved.'
+                          : 'Moved video, but some sidecars failed: ${sidecarFailures.join('; ')}',
+                    ),
+                  );
+                  clearFromSelection.add(item.video.id);
+                } catch (error) {
+                  failures.add(
+                    VideoMoveItemResult(
+                      videoId: item.video.id,
+                      title: item.video.title,
+                      sourcePath: item.sourcePath,
+                      destinationPath: item.destinationPath,
+                      message: error.toString(),
+                    ),
+                  );
+                } finally {
+                  _markProgress(
+                    moved.length + skipped.length + failures.length,
+                  );
+                }
               }
-            }
 
-            await ref
-                .read(videosDaoProvider)
-                .updateVideoLocation(
-                  id: item.video.id,
-                  folderId: item.destinationFolder.id,
-                  absolutePath: item.destinationPath,
-                );
+              ref
+                  .read(videoSelectionControllerProvider.notifier)
+                  .removeIds(clearFromSelection);
+              ref.invalidate(libraryStatsProvider);
 
-            if (removeEmptySourceFolders) {
-              await _removeEmptyParents(
-                Directory(p.dirname(item.sourcePath)),
-                Directory(item.sourceFolder.path),
+              final result = VideoMoveResult(
+                moved: moved,
+                skipped: skipped,
+                failures: failures,
               );
-            }
-
-            moved.add(
-              VideoMoveItemResult(
-                videoId: item.video.id,
-                title: item.video.title,
-                sourcePath: item.sourcePath,
-                destinationPath: item.destinationPath,
-                message: sidecarFailures.isEmpty
-                    ? 'Moved.'
-                    : 'Moved video, but some sidecars failed: ${sidecarFailures.join('; ')}',
-              ),
-            );
-            clearFromSelection.add(item.video.id);
-          } catch (error) {
-            failures.add(
-              VideoMoveItemResult(
-                videoId: item.video.id,
-                title: item.video.title,
-                sourcePath: item.sourcePath,
-                destinationPath: item.destinationPath,
-                message: error.toString(),
-              ),
-            );
-          } finally {
-            _markProgress(moved.length + skipped.length + failures.length);
-          }
-        }
-      } finally {
-        await _stopAccessSessions(accessSessions);
-      }
-
-      ref
-          .read(videoSelectionControllerProvider.notifier)
-          .removeIds(clearFromSelection);
-      ref.invalidate(libraryStatsProvider);
-
-      final result = VideoMoveResult(
-        moved: moved,
-        skipped: skipped,
-        failures: failures,
-      );
-      ref
-          .read(statusMessageProvider.notifier)
-          .set(
-            _completionMessage(result),
-            duration: const Duration(seconds: 5),
+              ref
+                  .read(statusMessageProvider.notifier)
+                  .set(
+                    _completionMessage(result),
+                    duration: const Duration(seconds: 5),
+                  );
+              return result;
+            },
           );
-      return result;
     } finally {
       operation.endMove();
       state = const VideoMoveState();
@@ -448,7 +457,7 @@ class VideoMoveController extends Notifier<VideoMoveState> {
   Future<Folder> addManagedDestinationFolder(String path) async {
     final folderDao = ref.read(foldersDaoProvider);
     final bookmark = await ref
-        .read(folderAccessServiceProvider)
+        .read(libraryAccessServiceProvider)
         .createBookmark(path);
     final folders = await folderDao.getAllFolders();
     final existing = folders.where((folder) => folder.path == path).firstOrNull;
@@ -533,51 +542,24 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     return updatedItems;
   }
 
-  Future<List<_FolderAccessHandle>> _startAccessForMove(
+  Iterable<LibraryAccessRequest> _accessRequestsForMove(
     List<VideoMovePlanItem> items,
-  ) async {
+  ) {
     final folders = <int, Folder>{};
     for (final item in items.where((item) => !item.isNoOp)) {
       folders[item.sourceFolder.id] = item.sourceFolder;
       folders[item.destinationFolder.id] = item.destinationFolder;
     }
-    return _startAccessForFolders(folders.values);
+    return _accessRequests(folders.values);
   }
 
-  Future<List<_FolderAccessHandle>> _startAccessForFolders(
-    Iterable<Folder> folders,
-  ) async {
-    final folderAccessService = ref.read(folderAccessServiceProvider);
-    final handles = <_FolderAccessHandle>[];
-    final seenFolderIds = <int>{};
-    for (final folder in folders) {
-      if (!seenFolderIds.add(folder.id)) {
-        continue;
-      }
-      final access = await folderAccessService.startAccessing(
+  Iterable<LibraryAccessRequest> _accessRequests(Iterable<Folder> folders) {
+    return folders.map(
+      (folder) => LibraryAccessRequest(
         path: folder.path,
         bookmark: folder.securityScopedBookmark,
-      );
-      if (!access.canAccess) {
-        await _stopAccessSessions(handles);
-        throw StateError(
-          access.message ??
-              'Folder access needs repair for ${folder.path}. Reselect it in Settings.',
-        );
-      }
-      handles.add(_FolderAccessHandle(folder: folder));
-    }
-    return handles;
-  }
-
-  Future<void> _stopAccessSessions(List<_FolderAccessHandle> handles) async {
-    final folderAccessService = ref.read(folderAccessServiceProvider);
-    for (final handle in handles.reversed) {
-      await folderAccessService.stopAccessing(
-        path: handle.folder.path,
-        bookmark: handle.folder.securityScopedBookmark,
-      );
-    }
+      ),
+    );
   }
 
   Future<List<VideoMoveConflict>> _findConflicts(
@@ -640,12 +622,6 @@ final videoMoveControllerProvider =
     NotifierProvider<VideoMoveController, VideoMoveState>(
       VideoMoveController.new,
     );
-
-class _FolderAccessHandle {
-  const _FolderAccessHandle({required this.folder});
-
-  final Folder folder;
-}
 
 String _relativeVideoPath(String absolutePath, Folder sourceFolder) {
   if (!_isWithinOrEqual(absolutePath, sourceFolder.path)) {
