@@ -15,6 +15,7 @@ import '../../logic/filter_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/playback_controller.dart';
 import '../../logic/settings_provider.dart';
+import '../../logic/status_message_provider.dart';
 import '../../logic/video_summary_controller.dart';
 import '../../logic/video_summary_models.dart';
 import '../../logic/video_selection_controller.dart';
@@ -451,9 +452,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
         primaryButton: PushButton(
           controlSize: ControlSize.large,
           child: const Text('Delete'),
-          onPressed: () {
-            maintenanceController.deleteVideo(videoId);
+          onPressed: () async {
+            final statusMessage = ref.read(statusMessageProvider.notifier);
             Navigator.of(dialogContext).pop();
+            final result = await maintenanceController.deleteVideo(videoId);
+            statusMessage.set(result.userMessage);
           },
         ),
         secondaryButton: PushButton(

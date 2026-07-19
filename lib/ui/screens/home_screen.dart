@@ -702,27 +702,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _deleteSelectedVideos(List<int> selectedVideoIds) async {
     await _runBulkAction(() async {
-      await ref
+      final result = await ref
           .read(maintenanceControllerProvider.notifier)
           .deleteVideos(selectedVideoIds);
 
-      final remainingVideos = await ref
-          .read(videosDaoProvider)
-          .getVideosByIds(selectedVideoIds);
-      final remainingIds = remainingVideos.map((video) => video.id).toSet();
-      final deletedIds = selectedVideoIds
-          .where((videoId) => !remainingIds.contains(videoId))
-          .toList(growable: false);
-
-      ref.read(videoSelectionControllerProvider.notifier).removeIds(deletedIds);
-      if (deletedIds.isNotEmpty) {
-        final suffix = deletedIds.length == selectedVideoIds.length
-            ? ''
-            : ' (${selectedVideoIds.length - deletedIds.length} not deleted)';
-        ref
-            .read(statusMessageProvider.notifier)
-            .set('Deleted ${_videoCountText(deletedIds.length)}$suffix.');
-      }
+      ref
+          .read(videoSelectionControllerProvider.notifier)
+          .removeIds(result.deletedVideoIds);
+      ref.read(statusMessageProvider.notifier).set(result.userMessage);
     });
   }
 

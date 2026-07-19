@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
-import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/maintenance_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
+import 'package:movie_manager/services/media_deletion_service.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
       final fixture = await _MaintenanceFixture.create(canAccessFolder: false);
       addTearDown(fixture.dispose);
 
-      await fixture.container
+      final result = await fixture.container
           .read(maintenanceControllerProvider.notifier)
           .deleteVideo(fixture.video.id);
 
@@ -68,10 +68,8 @@ void main() {
         await fixture.db.videosDao.getVideoById(fixture.video.id),
         isNotNull,
       );
-      expect(
-        fixture.container.read(scanStatusProvider),
-        'Folder access needs repair. Reselect this folder in Settings.',
-      );
+      expect(result.status, MediaDeletionStatus.needsRepair);
+      expect(result.userMessage, contains('Reselect this folder in Settings'));
     },
   );
 
@@ -81,7 +79,7 @@ void main() {
       final fixture = await _MaintenanceFixture.create(canAccessFolder: false);
       addTearDown(fixture.dispose);
 
-      await fixture.container
+      final result = await fixture.container
           .read(maintenanceControllerProvider.notifier)
           .deleteVideos([fixture.video.id]);
 
@@ -91,12 +89,27 @@ void main() {
         await fixture.db.videosDao.getVideoById(fixture.video.id),
         isNotNull,
       );
-      expect(
-        fixture.container.read(scanStatusProvider),
-        'Folder access needs repair. Reselect this folder in Settings.',
-      );
+      expect(result.results.single.status, MediaDeletionStatus.needsRepair);
+      expect(result.userMessage, contains('Reselect this folder in Settings'));
     },
   );
+
+  test('removeFolder deletes only catalog records and leaves files', () async {
+    final fixture = await _MaintenanceFixture.create();
+    addTearDown(fixture.dispose);
+
+    await fixture.container
+        .read(maintenanceControllerProvider.notifier)
+        .removeFolder(fixture.video.folderId);
+
+    expect(await fixture.videoFile.exists(), isTrue);
+    expect(await fixture.subtitleFile.exists(), isTrue);
+    expect(
+      await fixture.db.foldersDao.getFolderById(fixture.video.folderId),
+      isNull,
+    );
+    expect(await fixture.db.videosDao.getVideoById(fixture.video.id), isNull);
+  });
 }
 
 class _MaintenanceFixture {

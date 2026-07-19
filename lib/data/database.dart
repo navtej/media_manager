@@ -355,20 +355,8 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     );
   }
 
-  Future<void> deleteVideo(int id, {bool deleteFile = true}) async {
-    final video = await (select(
-      videos,
-    )..where((t) => t.id.equals(id))).getSingleOrNull();
-    if (video != null) {
-      if (deleteFile) {
-        final file = File(video.absolutePath);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      }
-      await (delete(videos)..where((t) => t.id.equals(id))).go();
-    }
-  }
+  Future<void> deleteVideo(int id) =>
+      (delete(videos)..where((t) => t.id.equals(id))).go();
 
   Future<void> deleteVideosByIds(List<int> ids) {
     return (delete(videos)..where((t) => t.id.isIn(ids))).go();

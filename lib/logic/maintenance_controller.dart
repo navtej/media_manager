@@ -1,25 +1,9 @@
-import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:path/path.dart' as p;
 import '../data/providers.dart';
-import '../services/library_access_service.dart';
+import '../services/media_deletion_service.dart';
 import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
 import 'stats_provider.dart';
-import 'library_controller.dart'; // Circular dependency risk? We need LibraryController for scanFolder.
-// Solution: We should NOT import LibraryController here.
-// Instead, MaintenanceController should expose methods that might trigger a scan,
-// or the caller should handle the re-scan.
-// Ideally, `rebuildLibrary` calls `scanFolder`. So LibraryController should likely keep `rebuildLibrary` OR MaintenanceController needs a way to call `scanFolder`.
-// Let's keep `rebuildLibrary` in LibraryController for now as it orchestrates everything?
-// OR simpler: LibraryController ref holds MaintenanceController ref?
-// No, Riverpod: ref.read(libraryControllerProvider) to trigger scan.
-
-// Let's proceed with MaintenanceController handling pure maintenance (delete, clean),
-// and LibraryController handling the high level "Rebuild" which is Delete All + Scan All.
-// Actually, `rebuildLibrary` clears DB then Re-Scans.
-// So `rebuildLibrary` belongs in LibraryController (Orchestrator).
-// `deleteVideo` and `removeFolder` are maintenance actions.
 
 part 'maintenance_controller.g.dart';
 
@@ -75,14 +59,7 @@ class MaintenanceController extends _$MaintenanceController {
     final videoDao = ref.read(videosDaoProvider);
 
     try {
-      // Delete all videos in this folder from DB (cascade should handle tags)
       final videos = await videoDao.getVideosByFolder(folderId);
-      for (final v in videos) {
-        // Only delete from DB, keep files
-        await videoDao.deleteVideo(v.id, deleteFile: false);
-      }
-
-      // Delete the folder entry
       await folderDao.deleteFolder(folderId);
 
       print('DEBUG: Removed folder $folderId and ${videos.length} videos');
@@ -94,95 +71,23 @@ class MaintenanceController extends _$MaintenanceController {
     }
   }
 
-  Future<void> deleteVideo(int videoId) async {
-    final videoDao = ref.read(videosDaoProvider);
-    final folderDao = ref.read(foldersDaoProvider);
-    final libraryAccessService = ref.read(libraryAccessServiceProvider);
-
-    try {
-      final video = await videoDao.getVideoById(videoId);
-      if (video == null) return;
-
-      final folder = await folderDao.getFolderById(video.folderId);
-      if (folder == null) {
-        ref
-            .read(scanStatusProvider.notifier)
-            .setStatus('Library folder is missing.');
-        return;
-      }
-
-      try {
-        await libraryAccessService.withAccess(
-          library: LibraryAccessRequest(
-            path: folder.path,
-            bookmark: folder.securityScopedBookmark,
-          ),
-          action: () async {
-            try {
-              final file = File(video.absolutePath);
-              if (await file.exists()) {
-                await file.delete();
-                print('DEBUG: Deleted video file: ${video.absolutePath}');
-
-                // Delete subtitle files with same basename
-                final dir = file.parent;
-                final basename = p.basenameWithoutExtension(video.absolutePath);
-                final extensionsToCheck = ['.vtt', '.srt', '.VTT', '.SRT'];
-
-                if (await dir.exists()) {
-                  await for (final entity in dir.list(followLinks: false)) {
-                    if (entity is File) {
-                      final entityName = p.basename(entity.path);
-                      if (entityName.startsWith(basename) &&
-                          extensionsToCheck.contains(
-                            p.extension(entity.path),
-                          )) {
-                        try {
-                          await entity.delete();
-                          print(
-                            'DEBUG: Deleted associated subtitle: ${entity.path}',
-                          );
-                        } catch (e) {
-                          print(
-                            'WARN: Failed to delete subtitle ${entity.path}: $e',
-                          );
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-
-              await videoDao.deleteVideo(videoId, deleteFile: false);
-              print('DEBUG: Deleted video from DB');
-
-              // Update stats immediately
-              ref.invalidate(libraryStatsProvider);
-            } catch (e) {
-              print('ERROR: Failed to delete video file on disk: $e');
-              ref
-                  .read(scanStatusProvider.notifier)
-                  .setStatus(
-                    'Could not delete video file. Repair folder access in Settings.',
-                  );
-            }
-          },
-        );
-      } on LibraryAccessNeedsRepairException catch (error) {
-        ref.read(scanStatusProvider.notifier).setStatus(error.message);
-      }
-    } catch (e) {
-      print('ERROR in deleteVideo: $e');
+  Future<MediaDeletionResult> deleteVideo(int videoId) async {
+    final result = await ref
+        .read(mediaDeletionServiceProvider)
+        .deleteVideo(videoId);
+    if (result.isDeleted) {
+      ref.invalidate(libraryStatsProvider);
     }
+    return result;
   }
 
-  Future<void> deleteVideos(List<int> videoIds) async {
-    if (videoIds.isEmpty) {
-      return;
+  Future<MediaDeletionBatchResult> deleteVideos(List<int> videoIds) async {
+    final result = await ref
+        .read(mediaDeletionServiceProvider)
+        .deleteVideos(videoIds);
+    if (result.deletedVideoIds.isNotEmpty) {
+      ref.invalidate(libraryStatsProvider);
     }
-
-    for (final videoId in videoIds) {
-      await deleteVideo(videoId);
-    }
+    return result;
   }
 }
