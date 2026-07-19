@@ -508,21 +508,7 @@ class _TestFoldersDao extends FoldersDao {
 
 class _TestSettings extends Settings {
   @override
-  Future<Map<String, dynamic>> build() async {
-    return <String, dynamic>{
-      'scanInterval': 5,
-      'batchSize': 4,
-      'paginationSize': 50,
-      'themeMode': 'system',
-      'showOfflineMedia': true,
-      privateLibraryAutoLockMinutesPreferenceKey:
-          defaultPrivateLibraryAutoLockMinutes,
-      'summaryModelPath': '',
-      'summaryPreferVttSubtitles': true,
-      'summaryApiUrl': '',
-      'summaryApiKey': '',
-    };
-  }
+  Future<AppSettings> build() async => AppSettings.defaults;
 }
 
 class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {

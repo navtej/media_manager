@@ -192,17 +192,18 @@ class VideoSummaryTasksController
       final foldersDao = ref.read(foldersDaoProvider);
       final dao = ref.read(videoSummariesDaoProvider);
       _setPhase(video.id, VideoSummaryTaskPhase.validating);
-      final settings = await ref.read(settingsProvider.future);
-      final modelPath = (settings['summaryModelPath'] as String? ?? '').trim();
-      final summaryApiUrl = (settings['summaryApiUrl'] as String? ?? '').trim();
+      final configuration = (await ref.read(
+        settingsProvider.future,
+      )).videoSummary;
+      final modelPath = configuration.modelPath.trim();
+      final summaryApiUrl = configuration.apiUrl.trim();
       if (summaryApiUrl.isEmpty) {
         throw StateError('Summarization API URL is not configured.');
       }
-      final summaryApiKey = (settings['summaryApiKey'] as String? ?? '').trim();
+      final summaryApiKey = configuration.apiKey.trim();
       final summaryModel = summaryModelNameFromApiUrl(summaryApiUrl);
       final preferVttSubtitles =
-          preferVttSubtitlesOverride ??
-          (settings['summaryPreferVttSubtitles'] as bool? ?? true);
+          preferVttSubtitlesOverride ?? configuration.preferVttSubtitles;
       final configuredTranscriptModel = transcriptModelNameFromPath(modelPath);
       final folder = await foldersDao.getFolderById(video.folderId);
       if (folder == null) {

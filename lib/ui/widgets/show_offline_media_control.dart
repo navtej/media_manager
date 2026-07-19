@@ -9,10 +9,9 @@ class ShowOfflineMediaControl extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
-    return settings.when(
-      data: (values) {
-        final showOfflineMedia = values['showOfflineMedia'] as bool? ?? true;
+    final configuration = ref.watch(catalogBrowsingConfigurationProvider);
+    return configuration.when(
+      data: (catalog) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -20,7 +19,7 @@ class ShowOfflineMediaControl extends ConsumerWidget {
             const SizedBox(width: 6),
             MacosPreferenceCheckbox(
               key: const ValueKey('show-offline-media-checkbox'),
-              value: showOfflineMedia,
+              value: catalog.showOfflineMedia,
               semanticLabel: 'Show Offline Media',
               onChanged: (value) => ref
                   .read(settingsProvider.notifier)

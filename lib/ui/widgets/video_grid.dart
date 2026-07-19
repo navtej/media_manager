@@ -284,12 +284,12 @@ class _VideoGridItemState extends State<VideoGridItem> {
         .watch(videoSummaryRecordProvider(widget.video.id))
         .asData
         ?.value;
-    final settings = ref.watch(settingsProvider);
+    final configuration = ref.watch(videoSummaryConfigurationProvider);
     final configuredModel = transcriptModelNameFromPath(
-      settings.value?['summaryModelPath']?.toString() ?? '',
+      configuration.asData?.value.modelPath ?? '',
     );
     final configuredSummaryModel = summaryModelNameFromApiUrl(
-      settings.value?['summaryApiUrl']?.toString() ?? '',
+      configuration.asData?.value.apiUrl ?? '',
     );
     final hasFreshSummary = _hasFreshSummary(
       video: widget.video,
@@ -528,18 +528,19 @@ class _VideoGridItemState extends State<VideoGridItem> {
               videoSummarySubtitleAvailabilityProvider(video),
             );
             final modelValidation = ref.watch(summaryModelValidationProvider);
-            final settings = ref.watch(settingsProvider);
+            final configuration = ref.watch(videoSummaryConfigurationProvider);
 
             final record = summaryRecord.asData?.value;
             final summary = _parseStructuredSummary(record?.summaryJson);
             final configuredModel = transcriptModelNameFromPath(
-              settings.value?['summaryModelPath']?.toString() ?? '',
+              configuration.asData?.value.modelPath ?? '',
             );
             final configuredSummaryModel = summaryModelNameFromApiUrl(
-              settings.value?['summaryApiUrl']?.toString() ?? '',
+              configuration.asData?.value.apiUrl ?? '',
             );
             final summaryPreferVttSubtitles =
-                settings.value?['summaryPreferVttSubtitles'] as bool? ?? true;
+                configuration.asData?.value.preferVttSubtitles ??
+                VideoSummaryConfiguration.defaults.preferVttSubtitles;
 
             final isStale =
                 record != null &&

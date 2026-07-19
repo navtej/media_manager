@@ -54,9 +54,9 @@ void main() {
 
       final settings = await container.read(settingsProvider.future);
       final expectedPath = '${supportDirectory.path}/models/ggml-base.en.bin';
-      expect(settings['summarySelectedModelId'], 'base.en');
-      expect(settings['summaryModelPath'], expectedPath);
-      expect(settings['summaryDownloadedManagedModels'], <String, String>{
+      expect(settings.videoSummary.selectedModelId, 'base.en');
+      expect(settings.videoSummary.modelPath, expectedPath);
+      expect(settings.videoSummary.downloadedManagedModels, <String, String>{
         'base.en': expectedPath,
       });
     },
@@ -121,10 +121,10 @@ void main() {
       expect(await partialFile.exists(), isFalse);
 
       final settings = await container.read(settingsProvider.future);
-      expect(settings['summaryModelPath'], '');
+      expect(settings.videoSummary.modelPath, '');
       expect(
-        settings['summaryModelSource'],
-        SummaryModelSourceMode.managedDownload.value,
+        settings.videoSummary.modelSource,
+        SummaryModelSourceMode.managedDownload,
       );
     },
   );

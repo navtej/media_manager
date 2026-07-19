@@ -6,7 +6,6 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/private_library_controller.dart';
-import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/widgets/library_filter_menu.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,7 +58,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 10,
+      'privateLibraryAutoLockMinutes': 10,
     });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -117,7 +116,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 1,
+      'privateLibraryAutoLockMinutes': 1,
     });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);

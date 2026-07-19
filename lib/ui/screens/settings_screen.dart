@@ -67,10 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
 
-    await ref
-        .read(settingsProvider.notifier)
-        .updateSummaryModelSource(SummaryModelSourceMode.localFile);
-    await ref.read(settingsProvider.notifier).updateSummaryModelPath(path);
+    await ref.read(settingsProvider.notifier).setLocalSummaryModelPath(path);
     ref.invalidate(summaryModelValidationProvider);
 
     if (!mounted) {
@@ -100,13 +97,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Update controllers when data is loaded
     settingsAsync.whenData((data) {
       if (_intervalController.text.isEmpty) {
-        _intervalController.text = data['scanInterval'].toString();
+        _intervalController.text = data
+            .librarySynchronization
+            .scanIntervalMinutes
+            .toString();
       }
       if (_batchSizeController.text.isEmpty) {
-        _batchSizeController.text = data['batchSize'].toString();
+        _batchSizeController.text = data.librarySynchronization.batchSize
+            .toString();
       }
       if (_paginationSizeController.text.isEmpty) {
-        _paginationSizeController.text = data['paginationSize'].toString();
+        _paginationSizeController.text = data.catalogBrowsing.paginationSize
+            .toString();
       }
     });
 
@@ -216,7 +218,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildGeneralSettings(
     BuildContext context,
-    AsyncValue<Map<String, dynamic>> settingsAsync,
+    AsyncValue<AppSettings> settingsAsync,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,17 +257,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Row(
           children: [
             const SizedBox(width: 200, child: Text('Theme')),
-            MacosPopupButton<String>(
-              value: settingsAsync.value?['themeMode']?.toString() ?? 'system',
-              onChanged: (String? mode) {
+            MacosPopupButton<AppearanceThemeMode>(
+              value:
+                  settingsAsync.value?.appearance.themeMode ??
+                  AppearanceConfiguration.defaults.themeMode,
+              onChanged: (AppearanceThemeMode? mode) {
                 if (mode != null) {
                   ref.read(settingsProvider.notifier).updateTheme(mode);
                 }
               },
               items: const [
-                MacosPopupMenuItem(value: 'system', child: Text('System')),
-                MacosPopupMenuItem(value: 'light', child: Text('Light')),
-                MacosPopupMenuItem(value: 'dark', child: Text('Dark')),
+                MacosPopupMenuItem(
+                  value: AppearanceThemeMode.system,
+                  child: Text('System'),
+                ),
+                MacosPopupMenuItem(
+                  value: AppearanceThemeMode.light,
+                  child: Text('Light'),
+                ),
+                MacosPopupMenuItem(
+                  value: AppearanceThemeMode.dark,
+                  child: Text('Dark'),
+                ),
               ],
             ),
           ],
@@ -283,10 +296,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             MacosIconButton(
               icon: const MacosIcon(CupertinoIcons.floppy_disk),
               onPressed: () {
-                final interval = int.tryParse(_intervalController.text) ?? 5;
-                final batch = int.tryParse(_batchSizeController.text) ?? 4;
+                final interval =
+                    int.tryParse(_intervalController.text) ??
+                    LibrarySynchronizationConfiguration
+                        .defaultScanIntervalMinutes;
+                final batch =
+                    int.tryParse(_batchSizeController.text) ??
+                    LibrarySynchronizationConfiguration.defaultBatchSize;
                 final pagination =
-                    int.tryParse(_paginationSizeController.text) ?? 50;
+                    int.tryParse(_paginationSizeController.text) ??
+                    CatalogBrowsingConfiguration.defaultPaginationSize;
 
                 ref
                     .read(settingsProvider.notifier)
@@ -335,27 +354,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildTranscribeSettings(
     BuildContext context,
-    AsyncValue<Map<String, dynamic>> settingsAsync,
+    AsyncValue<AppSettings> settingsAsync,
   ) {
-    final sourceMode = SummaryModelSourceMode.fromValue(
-      settingsAsync.value?['summaryModelSource']?.toString() ??
-          SummaryModelSourceMode.managedDownload.value,
-    );
-    final modelPath =
-        settingsAsync.value?['summaryModelPath']?.toString() ?? '';
-    final selectedModelId = settingsAsync.value?['summarySelectedModelId']
-        ?.toString();
-    final managedDirectoryPath =
-        settingsAsync.value?['summaryManagedModelDirectoryPath']?.toString() ??
-        '';
-    final downloadedManagedModels =
-        (settingsAsync.value?['summaryDownloadedManagedModels'] as Map?)
-            ?.map<String, String>(
-              (key, value) => MapEntry(key.toString(), value.toString()),
-            ) ??
-        <String, String>{};
-    final preferVttSubtitles =
-        settingsAsync.value?['summaryPreferVttSubtitles'] as bool? ?? true;
+    final configuration =
+        settingsAsync.value?.videoSummary ?? VideoSummaryConfiguration.defaults;
+    final sourceMode = configuration.modelSource;
+    final modelPath = configuration.modelPath;
+    final selectedModelId = configuration.selectedModelId;
+    final managedDirectoryPath = configuration.managedModelDirectoryPath;
+    final downloadedManagedModels = configuration.downloadedManagedModels;
+    final preferVttSubtitles = configuration.preferVttSubtitles;
     final validationAsync = ref.watch(summaryModelValidationProvider);
     final runtimeStatusAsync = ref.watch(whisperRuntimeStatusProvider);
     final catalogState = ref.watch(whisperModelCatalogControllerProvider);
@@ -476,12 +484,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSummarizationSettings(
-    AsyncValue<Map<String, dynamic>> settingsAsync,
-  ) {
+  Widget _buildSummarizationSettings(AsyncValue<AppSettings> settingsAsync) {
+    final configuration =
+        settingsAsync.value?.videoSummary ?? VideoSummaryConfiguration.defaults;
     return SummarizationApiSettingsPanel(
-      apiUrl: settingsAsync.value?['summaryApiUrl']?.toString() ?? '',
-      apiKey: settingsAsync.value?['summaryApiKey']?.toString() ?? '',
+      apiUrl: configuration.apiUrl,
+      apiKey: configuration.apiKey,
       statusMessage: _summarizationActionMessage,
       onSave: ({required apiUrl, required apiKey}) async {
         final notifier = ref.read(settingsProvider.notifier);

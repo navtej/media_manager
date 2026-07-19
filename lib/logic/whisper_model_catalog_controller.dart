@@ -14,15 +14,14 @@ const _whisperReadmeUrl =
 class WhisperModelCatalogController extends _$WhisperModelCatalogController {
   @override
   WhisperModelCatalogState build() {
-    final settings = ref.watch(settingsProvider).asData?.value;
-    final refreshedAtRaw =
-        settings?['summaryCatalogLastRefreshedAt'] as String?;
+    final configuration = ref
+        .watch(videoSummaryConfigurationProvider)
+        .asData
+        ?.value;
 
     return WhisperModelCatalogState(
       entries: builtInWhisperModelCatalog,
-      lastRefreshedAt: refreshedAtRaw == null
-          ? null
-          : DateTime.tryParse(refreshedAtRaw),
+      lastRefreshedAt: configuration?.catalogLastRefreshedAt,
       isRefreshing: false,
       refreshError: null,
     );

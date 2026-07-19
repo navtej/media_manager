@@ -120,8 +120,7 @@ final filteredVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
   final sort = ref.watch(selectedSortProvider);
   final direction = ref.watch(selectedSortDirectionProvider);
   final searchQuery = ref.watch(searchQueryProvider);
-  final settings = ref.watch(settingsProvider).value;
-  final showOffline = settings?['showOfflineMedia'] ?? true;
+  final showOffline = ref.watch(showOfflineMediaProvider);
   final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
   final dao = ref.watch(videosDaoProvider);
 
@@ -143,8 +142,7 @@ final selectedVideoCountProvider = StreamProvider.autoDispose<int>((ref) {
   final secondaryTags = ref.watch(secondarySelectedTagsProvider);
   final category = ref.watch(selectedCategoryProvider);
   final searchQuery = ref.watch(searchQueryProvider);
-  final settings = ref.watch(settingsProvider).value;
-  final showOffline = settings?['showOfflineMedia'] ?? true;
+  final showOffline = ref.watch(showOfflineMediaProvider);
   final folderIds = ref.watch(effectiveLibraryFolderIdsProvider);
   final dao = ref.watch(videosDaoProvider);
 
@@ -171,15 +169,11 @@ class VideoLimit extends _$VideoLimit {
     ref.watch(searchQueryProvider);
     ref.watch(effectiveLibraryFolderIdsProvider);
 
-    // Get page size from settings
-    final settings = ref.watch(settingsProvider).value;
-    return settings?['paginationSize'] ?? 50;
+    return ref.watch(catalogPageSizeProvider);
   }
 
   void loadMore() {
-    final settings = ref.read(settingsProvider).value;
-    final pageSize = settings?['paginationSize'] ?? 50;
-    state += pageSize as int;
+    state += ref.read(catalogPageSizeProvider);
   }
 }
 

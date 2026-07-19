@@ -108,7 +108,7 @@ void main() {
 
   testWidgets('changed duration restarts an active countdown', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 1,
+      'privateLibraryAutoLockMinutes': 1,
     });
     final container = ProviderContainer(
       overrides: [
@@ -147,7 +147,7 @@ void main() {
 
   testWidgets('manual lock cancels the previous countdown', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 1,
+      'privateLibraryAutoLockMinutes': 1,
     });
     final container = ProviderContainer(
       overrides: [
@@ -208,7 +208,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 1,
+      'privateLibraryAutoLockMinutes': 1,
     });
     var now = DateTime(2026, 7, 19, 10);
     final container = ProviderContainer(
@@ -242,7 +242,7 @@ void main() {
 
   testWidgets('provider disposal cancels an active countdown', (tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      privateLibraryAutoLockMinutesPreferenceKey: 1,
+      'privateLibraryAutoLockMinutes': 1,
     });
     final container = ProviderContainer(
       overrides: [

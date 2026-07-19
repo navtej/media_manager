@@ -1,85 +1,203 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'settings_configuration.dart';
 import 'video_summary_models.dart';
 import 'whisper_model_catalog.dart';
 
+export 'settings_configuration.dart';
+
 part 'settings_provider.g.dart';
 
-const privateLibraryAutoLockMinutesPreferenceKey =
-    'privateLibraryAutoLockMinutes';
-const defaultPrivateLibraryAutoLockMinutes = 10;
-const minimumPrivateLibraryAutoLockMinutes = 1;
-const maximumPrivateLibraryAutoLockMinutes = 120;
+const _scanIntervalKey = 'scanInterval';
+const _batchSizeKey = 'batchSize';
+const _themeModeKey = 'themeMode';
+const _paginationSizeKey = 'paginationSize';
+const _showOfflineMediaKey = 'showOfflineMedia';
+const _privateLibraryAutoLockMinutesKey = 'privateLibraryAutoLockMinutes';
+const _summaryModelSourceKey = 'summaryModelSource';
+const _summaryModelPathKey = 'summaryModelPath';
+const _summarySelectedModelIdKey = 'summarySelectedModelId';
+const _summaryCatalogLastRefreshedAtKey = 'summaryCatalogLastRefreshedAt';
+const _summaryManagedModelDirectoryPathKey = 'summaryManagedModelDirectoryPath';
+const _summaryDownloadedManagedModelsKey = 'summaryDownloadedManagedModels';
+const _summaryPreferVttSubtitlesKey = 'summaryPreferVttSubtitles';
+const _summaryApiUrlKey = 'summaryApiUrl';
+const _summaryApiKeyKey = 'summaryApiKey';
 
-bool isValidPrivateLibraryAutoLockMinutes(int? minutes) {
-  return minutes != null &&
-      minutes >= minimumPrivateLibraryAutoLockMinutes &&
-      minutes <= maximumPrivateLibraryAutoLockMinutes;
+abstract interface class SettingsPersistence {
+  int? getInt(String key);
+
+  bool? getBool(String key);
+
+  String? getString(String key);
+
+  Future<void> setInt(String key, int value);
+
+  Future<void> setBool(String key, bool value);
+
+  Future<void> setString(String key, String value);
+
+  Future<void> remove(String key);
 }
 
-int resolvePrivateLibraryAutoLockMinutes(int? minutes) {
-  return isValidPrivateLibraryAutoLockMinutes(minutes)
-      ? minutes!
-      : defaultPrivateLibraryAutoLockMinutes;
+final class SharedPreferencesSettingsPersistence
+    implements SettingsPersistence {
+  const SharedPreferencesSettingsPersistence(this._preferences);
+
+  final SharedPreferences _preferences;
+
+  @override
+  int? getInt(String key) => _preferences.getInt(key);
+
+  @override
+  bool? getBool(String key) => _preferences.getBool(key);
+
+  @override
+  String? getString(String key) => _preferences.getString(key);
+
+  @override
+  Future<void> setInt(String key, int value) async {
+    await _preferences.setInt(key, value);
+  }
+
+  @override
+  Future<void> setBool(String key, bool value) async {
+    await _preferences.setBool(key, value);
+  }
+
+  @override
+  Future<void> setString(String key, String value) async {
+    await _preferences.setString(key, value);
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    await _preferences.remove(key);
+  }
 }
+
+final settingsPersistenceProvider = FutureProvider<SettingsPersistence>((
+  ref,
+) async {
+  final preferences = await SharedPreferences.getInstance();
+  return SharedPreferencesSettingsPersistence(preferences);
+});
+
+final librarySynchronizationConfigurationProvider =
+    Provider<AsyncValue<LibrarySynchronizationConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.librarySynchronization);
+    });
+
+final privateLibraryAccessConfigurationProvider =
+    Provider<AsyncValue<PrivateLibraryAccessConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.privateLibraryAccess);
+    });
+
+final appearanceConfigurationProvider =
+    Provider<AsyncValue<AppearanceConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.appearance);
+    });
+
+final catalogBrowsingConfigurationProvider =
+    Provider<AsyncValue<CatalogBrowsingConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.catalogBrowsing);
+    });
+
+final showOfflineMediaProvider = Provider<bool>((ref) {
+  return ref
+          .watch(catalogBrowsingConfigurationProvider)
+          .asData
+          ?.value
+          .showOfflineMedia ??
+      CatalogBrowsingConfiguration.defaults.showOfflineMedia;
+});
+
+final catalogPageSizeProvider = Provider<int>((ref) {
+  return ref
+          .watch(catalogBrowsingConfigurationProvider)
+          .asData
+          ?.value
+          .paginationSize ??
+      CatalogBrowsingConfiguration.defaults.paginationSize;
+});
+
+final videoSummaryConfigurationProvider =
+    Provider<AsyncValue<VideoSummaryConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.videoSummary);
+    });
 
 final privateLibraryAutoLockDurationProvider = Provider<Duration>((ref) {
-  final minutes = resolvePrivateLibraryAutoLockMinutes(
-    ref
-        .watch(settingsProvider)
-        .value?[privateLibraryAutoLockMinutesPreferenceKey] as int?,
-  );
-  return Duration(minutes: minutes);
+  return ref
+          .watch(privateLibraryAccessConfigurationProvider)
+          .asData
+          ?.value
+          .autoLockDuration ??
+      PrivateLibraryAccessConfiguration.defaults.autoLockDuration;
 });
 
 @Riverpod(keepAlive: true)
 class Settings extends _$Settings {
-  @override
-  FutureOr<Map<String, dynamic>> build() async {
-    final prefs = await SharedPreferences.getInstance();
-    final summaryModelSource =
-        prefs.getString('summaryModelSource') ??
-        SummaryModelSourceMode.managedDownload.value;
-    final selectedModelId = prefs.getString('summarySelectedModelId');
-    final downloadedManagedModels = await _resolveDownloadedManagedModels(
-      prefs,
-    );
-    final summaryModelPath = _resolveSummaryModelPath(
-      sourceValue: summaryModelSource,
-      selectedModelId: selectedModelId,
-      downloadedManagedModels: downloadedManagedModels,
-      localModelPath: prefs.getString('summaryModelPath') ?? '',
-    );
-    final privateLibraryAutoLockMinutes = resolvePrivateLibraryAutoLockMinutes(
-      prefs.getInt(privateLibraryAutoLockMinutesPreferenceKey),
-    );
+  Future<AppSettings>? _loadingSettings;
 
-    return {
-      'scanInterval': prefs.getInt('scanInterval') ?? 5,
-      'batchSize': prefs.getInt('batchSize') ?? 4,
-      'themeMode': prefs.getString('themeMode') ?? 'system',
-      'paginationSize': prefs.getInt('paginationSize') ?? 50,
-      'showOfflineMedia': prefs.getBool('showOfflineMedia') ?? true,
-      privateLibraryAutoLockMinutesPreferenceKey: privateLibraryAutoLockMinutes,
-      'summaryModelSource': summaryModelSource,
-      'summaryModelPath': summaryModelPath,
-      'summarySelectedModelId': selectedModelId,
-      'summaryCatalogLastRefreshedAt': prefs.getString(
-        'summaryCatalogLastRefreshedAt',
+  @override
+  Future<AppSettings> build() {
+    return _loadingSettings = _loadSettings();
+  }
+
+  Future<AppSettings> _loadSettings() async {
+    final persistence = await ref.watch(settingsPersistenceProvider.future);
+    final downloadedManagedModels = await _resolveDownloadedManagedModels(
+      persistence,
+    );
+    final videoSummary = VideoSummaryConfiguration.resolve(
+      modelSourceValue: persistence.getString(_summaryModelSourceKey),
+      modelPath: persistence.getString(_summaryModelPathKey),
+      selectedModelId: persistence.getString(_summarySelectedModelIdKey),
+      catalogLastRefreshedAtValue: persistence.getString(
+        _summaryCatalogLastRefreshedAtKey,
       ),
-      'summaryManagedModelDirectoryPath': prefs.getString(
-        'summaryManagedModelDirectoryPath',
+      managedModelDirectoryPath: persistence.getString(
+        _summaryManagedModelDirectoryPathKey,
       ),
-      'summaryDownloadedManagedModels': downloadedManagedModels,
-      'summaryPreferVttSubtitles':
-          prefs.getBool('summaryPreferVttSubtitles') ?? true,
-      'summaryApiUrl': prefs.getString('summaryApiUrl') ?? '',
-      'summaryApiKey': prefs.getString('summaryApiKey') ?? '',
-    };
+      downloadedManagedModels: downloadedManagedModels,
+      preferVttSubtitles: persistence.getBool(_summaryPreferVttSubtitlesKey),
+      apiUrl: persistence.getString(_summaryApiUrlKey),
+      apiKey: persistence.getString(_summaryApiKeyKey),
+    );
+    await _persistResolvedModelPath(persistence, videoSummary.modelPath);
+
+    return AppSettings(
+      librarySynchronization: LibrarySynchronizationConfiguration.resolve(
+        scanIntervalMinutes: persistence.getInt(_scanIntervalKey),
+        batchSize: persistence.getInt(_batchSizeKey),
+      ),
+      privateLibraryAccess: PrivateLibraryAccessConfiguration.resolve(
+        autoLockMinutes: persistence.getInt(_privateLibraryAutoLockMinutesKey),
+      ),
+      appearance: AppearanceConfiguration.resolve(
+        themeMode: persistence.getString(_themeModeKey),
+      ),
+      catalogBrowsing: CatalogBrowsingConfiguration.resolve(
+        paginationSize: persistence.getInt(_paginationSizeKey),
+        showOfflineMedia: persistence.getBool(_showOfflineMediaKey),
+      ),
+      videoSummary: videoSummary,
+    );
   }
 
   Future<void> updateSettings(
@@ -87,235 +205,217 @@ class Settings extends _$Settings {
     int batchSize,
     int paginationSize,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('scanInterval', scanInterval);
-    await prefs.setInt('batchSize', batchSize);
-    await prefs.setInt('paginationSize', paginationSize);
-
-    state = AsyncData({
-      ...state.value ?? {},
-      'scanInterval': scanInterval,
-      'batchSize': batchSize,
-      'paginationSize': paginationSize,
-    });
+    final current = await _currentSettings();
+    final synchronization = LibrarySynchronizationConfiguration.resolve(
+      scanIntervalMinutes: scanInterval,
+      batchSize: batchSize,
+    );
+    final catalog = CatalogBrowsingConfiguration.resolve(
+      paginationSize: paginationSize,
+      showOfflineMedia: current.catalogBrowsing.showOfflineMedia,
+    );
+    final persistence = await _persistence();
+    await persistence.setInt(
+      _scanIntervalKey,
+      synchronization.scanIntervalMinutes,
+    );
+    await persistence.setInt(_batchSizeKey, synchronization.batchSize);
+    await persistence.setInt(_paginationSizeKey, catalog.paginationSize);
+    state = AsyncData(
+      current.copyWith(
+        librarySynchronization: synchronization,
+        catalogBrowsing: catalog,
+      ),
+    );
   }
 
   Future<void> updateShowOfflineMedia(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('showOfflineMedia', value);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'showOfflineMedia': value});
+    final current = await _currentSettings();
+    final catalog = CatalogBrowsingConfiguration.resolve(
+      paginationSize: current.catalogBrowsing.paginationSize,
+      showOfflineMedia: value,
+    );
+    final persistence = await _persistence();
+    await persistence.setBool(_showOfflineMediaKey, value);
+    state = AsyncData(current.copyWith(catalogBrowsing: catalog));
   }
 
   Future<void> updatePrivateLibraryAutoLockMinutes(int minutes) async {
-    if (!isValidPrivateLibraryAutoLockMinutes(minutes)) {
-      throw RangeError.range(
-        minutes,
-        minimumPrivateLibraryAutoLockMinutes,
-        maximumPrivateLibraryAutoLockMinutes,
-        'minutes',
-      );
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(privateLibraryAutoLockMinutesPreferenceKey, minutes);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      privateLibraryAutoLockMinutesPreferenceKey: minutes,
-    });
+    final validated =
+        PrivateLibraryAccessConfiguration.requireValidAutoLockMinutes(minutes);
+    final current = await _currentSettings();
+    final configuration = PrivateLibraryAccessConfiguration.resolve(
+      autoLockMinutes: validated,
+    );
+    final persistence = await _persistence();
+    await persistence.setInt(_privateLibraryAutoLockMinutesKey, validated);
+    state = AsyncData(current.copyWith(privateLibraryAccess: configuration));
   }
 
-  Future<void> updateTheme(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('themeMode', mode);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'themeMode': mode});
+  Future<void> updateTheme(AppearanceThemeMode mode) async {
+    final current = await _currentSettings();
+    final appearance = AppearanceConfiguration.resolve(themeMode: mode.value);
+    final persistence = await _persistence();
+    await persistence.setString(_themeModeKey, appearance.themeMode.value);
+    state = AsyncData(current.copyWith(appearance: appearance));
   }
 
   Future<void> updateSummaryModelSource(SummaryModelSourceMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('summaryModelSource', mode.value);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'summaryModelSource': mode.value});
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withModelSource(mode);
+    final persistence = await _persistence();
+    await persistence.setString(_summaryModelSourceKey, mode.value);
+    await _persistResolvedModelPath(persistence, summary.modelPath);
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
-  Future<void> updateSummaryModelPath(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('summaryModelPath', path);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'summaryModelPath': path});
+  Future<void> setLocalSummaryModelPath(String path) async {
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withLocalModelPath(path);
+    final persistence = await _persistence();
+    await persistence.setString(
+      _summaryModelSourceKey,
+      SummaryModelSourceMode.localFile.value,
+    );
+    await _persistResolvedModelPath(persistence, summary.modelPath);
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
-  Future<void> updateSummarySelectedModelId(String? modelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (modelId == null || modelId.isEmpty) {
-      await prefs.remove('summarySelectedModelId');
-    } else {
-      await prefs.setString('summarySelectedModelId', modelId);
-    }
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      'summarySelectedModelId': modelId,
-    });
-  }
-
-  Future<void> updateSummaryCatalogLastRefreshedAt(DateTime? timestamp) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (timestamp == null) {
-      await prefs.remove('summaryCatalogLastRefreshedAt');
-    } else {
-      await prefs.setString(
-        'summaryCatalogLastRefreshedAt',
-        timestamp.toIso8601String(),
-      );
-    }
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      'summaryCatalogLastRefreshedAt': timestamp?.toIso8601String(),
-    });
-  }
-
-  Future<void> updateSummaryManagedModelDirectoryPath(String? path) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (path == null || path.isEmpty) {
-      await prefs.remove('summaryManagedModelDirectoryPath');
-    } else {
-      await prefs.setString('summaryManagedModelDirectoryPath', path);
-    }
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      'summaryManagedModelDirectoryPath': path,
-    });
-  }
-
-  Future<void> registerDownloadedManagedModel({
+  Future<void> installManagedSummaryModel({
     required String modelId,
     required String path,
+    required String managedDirectoryPath,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final models = _coerceDownloadedManagedModels(state.value);
-    models[modelId] = path;
-    await prefs.setString('summaryDownloadedManagedModels', jsonEncode(models));
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      'summaryDownloadedManagedModels': models,
-    });
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withManagedModelInstalled(
+      modelId: modelId,
+      path: path,
+      managedDirectoryPath: managedDirectoryPath,
+    );
+    final persistence = await _persistence();
+    await persistence.setString(
+      _summaryModelSourceKey,
+      SummaryModelSourceMode.managedDownload.value,
+    );
+    await persistence.setString(
+      _summaryDownloadedManagedModelsKey,
+      jsonEncode(summary.downloadedManagedModels),
+    );
+    await persistence.setString(_summarySelectedModelIdKey, modelId);
+    await persistence.setString(_summaryModelPathKey, path);
+    await persistence.setString(
+      _summaryManagedModelDirectoryPathKey,
+      managedDirectoryPath,
+    );
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> removeDownloadedManagedModel(String modelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final models = _coerceDownloadedManagedModels(state.value);
-    models.remove(modelId);
-    await prefs.setString('summaryDownloadedManagedModels', jsonEncode(models));
-
-    final currentData = state.value ?? {};
-    final currentSelectedModelId = currentData['summarySelectedModelId']
-        ?.toString();
-    final nextModelPath = currentSelectedModelId == modelId
-        ? ''
-        : (currentData['summaryModelPath']?.toString() ?? '');
-    if (currentSelectedModelId == modelId) {
-      await prefs.remove('summaryModelPath');
-    }
-
-    state = AsyncValue.data({
-      ...currentData,
-      'summaryDownloadedManagedModels': models,
-      'summaryModelPath': nextModelPath,
-    });
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withoutDownloadedManagedModel(modelId);
+    final persistence = await _persistence();
+    await persistence.setString(
+      _summaryDownloadedManagedModelsKey,
+      jsonEncode(summary.downloadedManagedModels),
+    );
+    await _persistResolvedModelPath(persistence, summary.modelPath);
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> selectManagedSummaryModel(String? modelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentData = state.value ?? {};
-    final models = _coerceDownloadedManagedModels(currentData);
-    final nextModelPath = modelId == null || modelId.isEmpty
-        ? ''
-        : (models[modelId] ?? '');
-
-    if (modelId == null || modelId.isEmpty) {
-      await prefs.remove('summarySelectedModelId');
-      await prefs.remove('summaryModelPath');
-    } else {
-      await prefs.setString('summarySelectedModelId', modelId);
-      if (nextModelPath.isEmpty) {
-        await prefs.remove('summaryModelPath');
-      } else {
-        await prefs.setString('summaryModelPath', nextModelPath);
-      }
-    }
-
-    state = AsyncValue.data({
-      ...currentData,
-      'summarySelectedModelId': modelId,
-      'summaryModelPath': nextModelPath,
-    });
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withManagedSelection(modelId);
+    final persistence = await _persistence();
+    await persistence.setString(
+      _summaryModelSourceKey,
+      SummaryModelSourceMode.managedDownload.value,
+    );
+    await _persistNullableString(
+      persistence,
+      _summarySelectedModelIdKey,
+      summary.selectedModelId,
+    );
+    await _persistResolvedModelPath(persistence, summary.modelPath);
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> clearSummaryModelPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('summaryModelPath');
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withoutModelPath();
+    final persistence = await _persistence();
+    await persistence.remove(_summaryModelPathKey);
+    if (current.videoSummary.modelSource ==
+        SummaryModelSourceMode.managedDownload) {
+      await persistence.remove(_summarySelectedModelIdKey);
+    }
+    state = AsyncData(current.copyWith(videoSummary: summary));
+  }
 
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'summaryModelPath': ''});
+  Future<void> updateSummaryCatalogLastRefreshedAt(DateTime? timestamp) async {
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withCatalogLastRefreshedAt(timestamp);
+    final persistence = await _persistence();
+    await _persistNullableString(
+      persistence,
+      _summaryCatalogLastRefreshedAtKey,
+      timestamp?.toIso8601String(),
+    );
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> updateSummaryPreferVttSubtitles(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('summaryPreferVttSubtitles', value);
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({
-      ...currentData,
-      'summaryPreferVttSubtitles': value,
-    });
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withPreferVttSubtitles(value);
+    final persistence = await _persistence();
+    await persistence.setBool(_summaryPreferVttSubtitlesKey, value);
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> updateSummaryApiUrl(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      await prefs.remove('summaryApiUrl');
-    } else {
-      await prefs.setString('summaryApiUrl', trimmed);
-    }
-
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'summaryApiUrl': trimmed});
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withApiUrl(value);
+    final persistence = await _persistence();
+    await _persistNullableString(
+      persistence,
+      _summaryApiUrlKey,
+      summary.apiUrl.isEmpty ? null : summary.apiUrl,
+    );
+    state = AsyncData(current.copyWith(videoSummary: summary));
   }
 
   Future<void> updateSummaryApiKey(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      await prefs.remove('summaryApiKey');
-    } else {
-      await prefs.setString('summaryApiKey', trimmed);
-    }
+    final current = await _currentSettings();
+    final summary = current.videoSummary.withApiKey(value);
+    final persistence = await _persistence();
+    await _persistNullableString(
+      persistence,
+      _summaryApiKeyKey,
+      summary.apiKey.isEmpty ? null : summary.apiKey,
+    );
+    state = AsyncData(current.copyWith(videoSummary: summary));
+  }
 
-    final currentData = state.value ?? {};
-    state = AsyncValue.data({...currentData, 'summaryApiKey': trimmed});
+  Future<AppSettings> _currentSettings() async {
+    final current = state.value;
+    if (current != null) {
+      return current;
+    }
+    final loading = _loadingSettings;
+    if (loading != null) {
+      return loading;
+    }
+    throw StateError('Settings have not started loading.');
+  }
+
+  Future<SettingsPersistence> _persistence() {
+    return ref.read(settingsPersistenceProvider.future);
   }
 }
 
 @riverpod
 Future<SummaryModelValidationResult> summaryModelValidation(Ref ref) async {
-  final settings = await ref.watch(settingsProvider.future);
-  final modelPath = (settings['summaryModelPath'] as String? ?? '').trim();
+  final summary = (await ref.watch(settingsProvider.future)).videoSummary;
+  final modelPath = summary.modelPath.trim();
 
   if (modelPath.isEmpty) {
     return const SummaryModelValidationResult.invalid('Not configured');
@@ -342,8 +442,58 @@ Future<SummaryModelValidationResult> summaryModelValidation(Ref ref) async {
   return const SummaryModelValidationResult.valid('Ready');
 }
 
-Map<String, String> _readDownloadedManagedModels(SharedPreferences prefs) {
-  final raw = prefs.getString('summaryDownloadedManagedModels');
+Future<Map<String, String>> _resolveDownloadedManagedModels(
+  SettingsPersistence persistence,
+) async {
+  final managedDirectoryPath =
+      persistence.getString(_summaryManagedModelDirectoryPathKey) ?? '';
+  final persistedModels = _readDownloadedManagedModels(persistence);
+  final availableModelIds = builtInWhisperModelCatalog
+      .map((entry) => entry.id)
+      .toSet();
+
+  final resolvedModels = <String, String>{};
+  if (managedDirectoryPath.trim().isNotEmpty) {
+    final managedDirectory = Directory(managedDirectoryPath);
+    if (await managedDirectory.exists()) {
+      await for (final entity in managedDirectory.list(followLinks: false)) {
+        if (entity is! File) {
+          continue;
+        }
+
+        final normalizedPath = entity.path.replaceAll('\\', '/');
+        final fileName = normalizedPath.split('/').last;
+        final match = RegExp(r'^ggml-(.+)\.bin$').firstMatch(fileName);
+        final modelId = match?.group(1);
+        if (modelId == null || !availableModelIds.contains(modelId)) {
+          continue;
+        }
+
+        if (await entity.length() > 0) {
+          resolvedModels[modelId] = entity.path;
+        }
+      }
+    }
+  } else {
+    for (final entry in persistedModels.entries) {
+      final file = File(entry.value);
+      if (await file.exists() && await file.length() > 0) {
+        resolvedModels[entry.key] = entry.value;
+      }
+    }
+  }
+
+  await persistence.setString(
+    _summaryDownloadedManagedModelsKey,
+    jsonEncode(resolvedModels),
+  );
+  return resolvedModels;
+}
+
+Map<String, String> _readDownloadedManagedModels(
+  SettingsPersistence persistence,
+) {
+  final raw = persistence.getString(_summaryDownloadedManagedModelsKey);
   if (raw == null || raw.isEmpty) {
     return <String, String>{};
   }
@@ -362,100 +512,25 @@ Map<String, String> _readDownloadedManagedModels(SharedPreferences prefs) {
   }
 }
 
-Map<String, String> _coerceDownloadedManagedModels(
-  Map<String, dynamic>? state,
+Future<void> _persistResolvedModelPath(
+  SettingsPersistence persistence,
+  String modelPath,
 ) {
-  final raw = state?['summaryDownloadedManagedModels'];
-  if (raw is Map) {
-    return raw.map<String, String>((key, value) {
-      return MapEntry(key.toString(), value.toString());
-    });
-  }
-
-  return <String, String>{};
-}
-
-Future<Map<String, String>> _resolveDownloadedManagedModels(
-  SharedPreferences prefs,
-) async {
-  final managedDirectoryPath =
-      prefs.getString('summaryManagedModelDirectoryPath') ?? '';
-  final persistedModels = _readDownloadedManagedModels(prefs);
-  final availableModelIds = builtInWhisperModelCatalog
-      .map((entry) => entry.id)
-      .toSet();
-
-  Map<String, String> resolvedModels;
-  if (managedDirectoryPath.trim().isNotEmpty) {
-    final managedDirectory = Directory(managedDirectoryPath);
-    if (await managedDirectory.exists()) {
-      resolvedModels = <String, String>{};
-      await for (final entity in managedDirectory.list(followLinks: false)) {
-        if (entity is! File) {
-          continue;
-        }
-
-        final normalizedPath = entity.path.replaceAll('\\', '/');
-        final fileName = normalizedPath.split('/').last;
-        final match = RegExp(r'^ggml-(.+)\.bin$').firstMatch(fileName);
-        final modelId = match?.group(1);
-        if (modelId == null || !availableModelIds.contains(modelId)) {
-          continue;
-        }
-
-        if (await entity.length() > 0) {
-          resolvedModels[modelId] = entity.path;
-        }
-      }
-    } else {
-      resolvedModels = <String, String>{};
-    }
-  } else {
-    resolvedModels = <String, String>{};
-    for (final entry in persistedModels.entries) {
-      final file = File(entry.value);
-      if (await file.exists() && await file.length() > 0) {
-        resolvedModels[entry.key] = entry.value;
-      }
-    }
-  }
-
-  await prefs.setString(
-    'summaryDownloadedManagedModels',
-    jsonEncode(resolvedModels),
+  return _persistNullableString(
+    persistence,
+    _summaryModelPathKey,
+    modelPath.isEmpty ? null : modelPath,
   );
-
-  final sourceValue =
-      prefs.getString('summaryModelSource') ??
-      SummaryModelSourceMode.managedDownload.value;
-  if (sourceValue == SummaryModelSourceMode.managedDownload.value) {
-    final selectedModelId = prefs.getString('summarySelectedModelId');
-    final managedModelPath = selectedModelId == null
-        ? ''
-        : (resolvedModels[selectedModelId] ?? '');
-    if (managedModelPath.isEmpty) {
-      await prefs.remove('summaryModelPath');
-    } else {
-      await prefs.setString('summaryModelPath', managedModelPath);
-    }
-  }
-
-  return resolvedModels;
 }
 
-String _resolveSummaryModelPath({
-  required String sourceValue,
-  required String? selectedModelId,
-  required Map<String, String> downloadedManagedModels,
-  required String localModelPath,
-}) {
-  if (sourceValue == SummaryModelSourceMode.managedDownload.value) {
-    if (selectedModelId == null || selectedModelId.isEmpty) {
-      return '';
-    }
-
-    return downloadedManagedModels[selectedModelId] ?? '';
+Future<void> _persistNullableString(
+  SettingsPersistence persistence,
+  String key,
+  String? value,
+) async {
+  if (value == null || value.isEmpty) {
+    await persistence.remove(key);
+  } else {
+    await persistence.setString(key, value);
   }
-
-  return localModelPath;
 }

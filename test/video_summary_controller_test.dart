@@ -50,15 +50,11 @@ void main() {
 
     final provider = videoSummarySubtitleAvailabilityProvider(fixture.video);
     final errorCompleter = Completer<Object>();
-    final subscription = fixture.container.listen(
-      provider,
-      (_, next) {
-        if (next.hasError && !errorCompleter.isCompleted) {
-          errorCompleter.complete(next.error!);
-        }
-      },
-      fireImmediately: true,
-    );
+    final subscription = fixture.container.listen(provider, (_, next) {
+      if (next.hasError && !errorCompleter.isCompleted) {
+        errorCompleter.complete(next.error!);
+      }
+    }, fireImmediately: true);
     addTearDown(subscription.close);
 
     expect(
@@ -490,13 +486,16 @@ class _FakeSettings extends Settings {
   final String summaryApiKey;
 
   @override
-  Future<Map<String, dynamic>> build() async {
-    return <String, dynamic>{
-      'summaryModelPath': modelPath,
-      'summaryPreferVttSubtitles': preferVttSubtitles,
-      'summaryApiUrl': summaryApiUrl,
-      'summaryApiKey': summaryApiKey,
-    };
+  Future<AppSettings> build() async {
+    return AppSettings.defaults.copyWith(
+      videoSummary: VideoSummaryConfiguration.resolve(
+        modelSourceValue: SummaryModelSourceMode.localFile.value,
+        modelPath: modelPath,
+        preferVttSubtitles: preferVttSubtitles,
+        apiUrl: summaryApiUrl,
+        apiKey: summaryApiKey,
+      ),
+    );
   }
 }
 

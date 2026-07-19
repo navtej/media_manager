@@ -52,7 +52,7 @@ class _PrivateLibraryAutoLockControlState
     }
 
     final minutes = int.tryParse(_controller.text);
-    if (!isValidPrivateLibraryAutoLockMinutes(minutes)) {
+    if (!PrivateLibraryAccessConfiguration.isValidAutoLockMinutes(minutes)) {
       if (mounted) {
         setState(() {
           _errorMessage = privateLibraryAutoLockValidationMessage;
@@ -61,11 +61,11 @@ class _PrivateLibraryAutoLockControlState
       return;
     }
 
-    final currentMinutes = resolvePrivateLibraryAutoLockMinutes(
-      ref
-          .read(settingsProvider)
-          .value?[privateLibraryAutoLockMinutesPreferenceKey] as int?,
-    );
+    final currentMinutes = ref
+        .read(privateLibraryAccessConfigurationProvider)
+        .asData
+        ?.value
+        .autoLockMinutes;
     if (minutes == currentMinutes) {
       if (mounted && _errorMessage != null) {
         setState(() {
@@ -92,13 +92,10 @@ class _PrivateLibraryAutoLockControlState
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(settingsProvider);
-    settings.whenData((data) {
+    final configuration = ref.watch(privateLibraryAccessConfigurationProvider);
+    configuration.whenData((data) {
       if (_controller.text.isEmpty && !_focusNode.hasFocus) {
-        final minutes = resolvePrivateLibraryAutoLockMinutes(
-          data[privateLibraryAutoLockMinutesPreferenceKey] as int?,
-        );
-        _controller.text = minutes.toString();
+        _controller.text = data.autoLockMinutes.toString();
       }
     });
 
@@ -117,7 +114,7 @@ class _PrivateLibraryAutoLockControlState
                 key: const ValueKey('private-library-auto-lock-minutes-field'),
                 controller: _controller,
                 focusNode: _focusNode,
-                enabled: settings.hasValue && !_isCommitting,
+                enabled: configuration.hasValue && !_isCommitting,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],

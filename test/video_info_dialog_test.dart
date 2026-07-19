@@ -97,14 +97,7 @@ void main() {
 
 class _TestSettings extends Settings {
   @override
-  Future<Map<String, dynamic>> build() async {
-    return <String, dynamic>{
-      'summaryModelPath': '',
-      'summaryPreferVttSubtitles': true,
-      'summaryApiUrl': '',
-      'summaryApiKey': '',
-    };
-  }
+  Future<AppSettings> build() async => AppSettings.defaults;
 }
 
 class _TestFoldersDao extends FoldersDao {

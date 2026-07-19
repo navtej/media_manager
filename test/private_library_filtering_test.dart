@@ -8,7 +8,6 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/filter_controller.dart';
 import 'package:movie_manager/logic/private_library_controller.dart';
-import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
@@ -178,7 +177,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'showOfflineMedia': true,
-        privateLibraryAutoLockMinutesPreferenceKey: 1,
+        'privateLibraryAutoLockMinutes': 1,
       });
       final fixture = await _PrivateLibraryFixture.create();
       addTearDown(fixture.db.close);
@@ -220,9 +219,7 @@ void main() {
       expect(
         (await tester.runAsync(
           () => container.read(filteredVideosProvider.future),
-        ))!
-            .map((video) => video.title)
-            .toSet(),
+        ))!.map((video) => video.title).toSet(),
         {'Public Clip', 'Private Clip'},
       );
 
@@ -236,8 +233,7 @@ void main() {
       expect(
         (await tester.runAsync(
           () => container.read(filteredVideosProvider.future),
-        ))!
-            .map((video) => video.title),
+        ))!.map((video) => video.title),
         ['Private Clip'],
       );
 
@@ -259,8 +255,7 @@ void main() {
       expect(
         (await tester.runAsync(
           () => container.read(filteredVideosProvider.future),
-        ))!
-            .map((video) => video.title),
+        ))!.map((video) => video.title),
         ['Public Clip'],
       );
 

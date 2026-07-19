@@ -29,12 +29,14 @@ class _MovieManagerAppState extends State<MovieManagerApp> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final settings = ref.watch(settingsProvider);
-        final themeModeString = settings.value?['themeMode'] ?? 'system';
-        final themeMode = switch (themeModeString) {
-          'light' => ThemeMode.light,
-          'dark' => ThemeMode.dark,
-          _ => ThemeMode.system,
+        final appearance = ref.watch(appearanceConfigurationProvider);
+        final appearanceThemeMode =
+            appearance.asData?.value.themeMode ??
+            AppearanceConfiguration.defaults.themeMode;
+        final themeMode = switch (appearanceThemeMode) {
+          AppearanceThemeMode.light => ThemeMode.light,
+          AppearanceThemeMode.dark => ThemeMode.dark,
+          AppearanceThemeMode.system => ThemeMode.system,
         };
 
         return PlatformMenuBar(

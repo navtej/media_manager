@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'settings_provider.dart';
-import 'video_summary_models.dart';
 import 'whisper_model_catalog.dart';
 
 part 'model_download_controller.g.dart';
@@ -215,19 +214,11 @@ class ModelDownloadController extends _$ModelDownloadController {
 
       await ref
           .read(settingsProvider.notifier)
-          .updateSummaryModelSource(SummaryModelSourceMode.managedDownload);
-      await ref
-          .read(settingsProvider.notifier)
-          .registerDownloadedManagedModel(
+          .installManagedSummaryModel(
             modelId: entry.id,
             path: destination.path,
+            managedDirectoryPath: managedDirectory.path,
           );
-      await ref
-          .read(settingsProvider.notifier)
-          .selectManagedSummaryModel(entry.id);
-      await ref
-          .read(settingsProvider.notifier)
-          .updateSummaryManagedModelDirectoryPath(managedDirectory.path);
       ref.invalidate(summaryModelValidationProvider);
 
       state = state.copyWith(

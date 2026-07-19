@@ -117,14 +117,18 @@ MacosPreferenceCheckbox _checkbox(WidgetTester tester) {
 }
 
 class _DeferredSettings extends Settings {
-  final Completer<Map<String, dynamic>> _completer = Completer();
+  final Completer<AppSettings> _completer = Completer();
 
   @override
-  Future<Map<String, dynamic>> build() => _completer.future;
+  Future<AppSettings> build() => _completer.future;
 
   void complete({required bool showOfflineMedia}) {
-    _completer.complete(<String, dynamic>{
-      'showOfflineMedia': showOfflineMedia,
-    });
+    _completer.complete(
+      AppSettings.defaults.copyWith(
+        catalogBrowsing: CatalogBrowsingConfiguration.resolve(
+          showOfflineMedia: showOfflineMedia,
+        ),
+      ),
+    );
   }
 }

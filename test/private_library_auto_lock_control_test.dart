@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:macos_ui/macos_ui.dart';
-import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/ui/widgets/private_library_auto_lock_control.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,7 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getInt(privateLibraryAutoLockMinutesPreferenceKey), 25);
+    expect(preferences.getInt('privateLibraryAutoLockMinutes'), 25);
   });
 
   testWidgets('control commits a valid value when focus leaves the field', (
@@ -66,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getInt(privateLibraryAutoLockMinutesPreferenceKey), 30);
+    expect(preferences.getInt('privateLibraryAutoLockMinutes'), 30);
   });
 
   for (final invalidValue in <String>['', '0', '121']) {
@@ -74,7 +73,7 @@ void main() {
       'control rejects ${invalidValue.isEmpty ? 'an empty value' : invalidValue}',
       (tester) async {
         SharedPreferences.setMockInitialValues(<String, Object>{
-          privateLibraryAutoLockMinutesPreferenceKey: 20,
+          'privateLibraryAutoLockMinutes': 20,
         });
 
         await tester.pumpWidget(
@@ -100,10 +99,7 @@ void main() {
           findsOneWidget,
         );
         final preferences = await SharedPreferences.getInstance();
-        expect(
-          preferences.getInt(privateLibraryAutoLockMinutesPreferenceKey),
-          20,
-        );
+        expect(preferences.getInt('privateLibraryAutoLockMinutes'), 20);
       },
     );
   }

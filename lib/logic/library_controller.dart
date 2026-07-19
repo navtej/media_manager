@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path/path.dart' as p;
 import '../data/database.dart';
@@ -17,6 +18,13 @@ import 'library_operation_controller.dart';
 import 'library_name.dart';
 
 part 'library_controller.g.dart';
+
+typedef PeriodicScanTimerFactory =
+    Timer Function(Duration duration, void Function(Timer timer) callback);
+
+final periodicScanTimerFactoryProvider = Provider<PeriodicScanTimerFactory>(
+  (ref) => Timer.periodic,
+);
 
 @Riverpod(keepAlive: true)
 class ScanStatus extends _$ScanStatus {
@@ -38,15 +46,19 @@ class LibraryController extends _$LibraryController {
     print('DEBUG: LibraryController.build starting');
 
     // Get initial settings and setup timer
-    final settings = await ref.read(settingsProvider.future);
-    final initialInterval = settings['scanInterval'] ?? 5;
+    final synchronization = (await ref.read(
+      settingsProvider.future,
+    )).librarySynchronization;
+    final initialInterval = synchronization.scanIntervalMinutes;
     await ref.read(foldersDaoProvider).normalizeLibraryNames();
     _setupTimer(initialInterval);
 
     // Listen for settings changes to update the timer
     ref.listen(settingsProvider, (previous, next) {
-      final oldInterval = previous?.value?['scanInterval'];
-      final newInterval = next.value?['scanInterval'];
+      final oldInterval =
+          previous?.asData?.value.librarySynchronization.scanIntervalMinutes;
+      final newInterval =
+          next.asData?.value.librarySynchronization.scanIntervalMinutes;
 
       if (newInterval != null && oldInterval != newInterval) {
         print(
@@ -234,10 +246,13 @@ class LibraryController extends _$LibraryController {
     print(
       'DEBUG: Creating new periodic scan timer with interval: $interval minutes',
     );
-    _periodicTimer = Timer.periodic(Duration(minutes: interval), (_) {
-      print('DEBUG: Periodic scan timer triggered');
-      syncAll();
-    });
+    _periodicTimer = ref.read(periodicScanTimerFactoryProvider)(
+      Duration(minutes: interval),
+      (_) {
+        print('DEBUG: Periodic scan timer triggered');
+        syncAll();
+      },
+    );
   }
 
   Future<void> addFolder(String path) async {
@@ -382,8 +397,10 @@ class LibraryController extends _$LibraryController {
 
     int processedCount = 0;
     final List<VideosCompanion> batchCompanions = [];
-    final settings = await ref.read(settingsProvider.future);
-    final dbBatchSize = settings['batchSize'] ?? 4;
+    final synchronization = (await ref.read(
+      settingsProvider.future,
+    )).librarySynchronization;
+    final dbBatchSize = synchronization.batchSize;
 
     try {
       // 2. Consume Stream

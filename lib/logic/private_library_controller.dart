@@ -45,11 +45,14 @@ class PrivateLibraryAccessController
   @override
   PrivateLibraryAccessState build() {
     ref.onDispose(_cancelAutoLock);
-    ref.listen(settingsProvider, (previous, next) {
-      final previousMinutes = _autoLockMinutes(previous?.value);
-      final nextMinutes = _autoLockMinutes(next.value);
+    ref.listen(privateLibraryAccessConfigurationProvider, (previous, next) {
+      final previousMinutes = previous?.asData?.value.autoLockMinutes;
+      final nextMinutes = next.asData?.value.autoLockMinutes;
       if (state.isUnlocked && previousMinutes != nextMinutes) {
-        _startAutoLockCountdown(Duration(minutes: nextMinutes));
+        _startAutoLockCountdown(
+          next.asData?.value.autoLockDuration ??
+              PrivateLibraryAccessConfiguration.defaults.autoLockDuration,
+        );
       }
     });
     return const PrivateLibraryAccessState();
@@ -105,8 +108,9 @@ class PrivateLibraryAccessController
   }
 
   void _startAutoLockCountdown(Duration duration) {
-    _autoLockDeadline =
-        ref.read(privateLibraryAutoLockClockProvider)().add(duration);
+    _autoLockDeadline = ref
+        .read(privateLibraryAutoLockClockProvider)()
+        .add(duration);
     _armAutoLockTimer(duration);
   }
 
@@ -119,12 +123,6 @@ class PrivateLibraryAccessController
     _autoLockTimer?.cancel();
     _autoLockTimer = null;
     _autoLockDeadline = null;
-  }
-
-  int _autoLockMinutes(Map<String, dynamic>? settings) {
-    return resolvePrivateLibraryAutoLockMinutes(
-      settings?[privateLibraryAutoLockMinutesPreferenceKey] as int?,
-    );
   }
 }
 
@@ -191,8 +189,9 @@ final effectiveLibraryFolderIdsProvider = Provider<List<int>>((ref) {
 
   final selectedFolderIds = ref.watch(selectedLibraryFoldersControllerProvider);
   final privateAccess = ref.watch(privateLibraryAccessControllerProvider);
-  final publicFolderIds =
-      ref.watch(publicLibraryFolderIdsProvider).toList(growable: false);
+  final publicFolderIds = ref
+      .watch(publicLibraryFolderIdsProvider)
+      .toList(growable: false);
   final accessibleFolderIds = folders
       .where((folder) => !folder.isPrivate || privateAccess.isUnlocked)
       .map((folder) => folder.id)

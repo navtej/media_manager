@@ -16,10 +16,7 @@ void main() {
 
     final settings = await container.read(settingsProvider.future);
 
-    expect(
-      settings[privateLibraryAutoLockMinutesPreferenceKey],
-      defaultPrivateLibraryAutoLockMinutes,
-    );
+    expect(settings.privateLibraryAccess.autoLockMinutes, 10);
     expect(
       container.read(privateLibraryAutoLockDurationProvider),
       const Duration(minutes: 10),
@@ -30,7 +27,7 @@ void main() {
     'private-library auto-lock falls back when persisted value is invalid',
     () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
-        privateLibraryAutoLockMinutesPreferenceKey: 121,
+        'privateLibraryAutoLockMinutes': 121,
       });
 
       final container = ProviderContainer();
@@ -38,10 +35,7 @@ void main() {
 
       final settings = await container.read(settingsProvider.future);
 
-      expect(
-        settings[privateLibraryAutoLockMinutesPreferenceKey],
-        defaultPrivateLibraryAutoLockMinutes,
-      );
+      expect(settings.privateLibraryAccess.autoLockMinutes, 10);
     },
   );
 
@@ -59,14 +53,14 @@ void main() {
     expect(
       (await container.read(
         settingsProvider.future,
-      ))[privateLibraryAutoLockMinutesPreferenceKey],
+      )).privateLibraryAccess.autoLockMinutes,
       45,
     );
 
     final reloaded = ProviderContainer();
     addTearDown(reloaded.dispose);
     final reloadedSettings = await reloaded.read(settingsProvider.future);
-    expect(reloadedSettings[privateLibraryAutoLockMinutesPreferenceKey], 45);
+    expect(reloadedSettings.privateLibraryAccess.autoLockMinutes, 45);
   });
 
   test(
@@ -102,18 +96,18 @@ void main() {
       addTearDown(container.dispose);
 
       var settings = await container.read(settingsProvider.future);
-      expect(settings['summaryPreferVttSubtitles'], isTrue);
+      expect(settings.videoSummary.preferVttSubtitles, isTrue);
 
       await container
           .read(settingsProvider.notifier)
           .updateSummaryPreferVttSubtitles(false);
       settings = await container.read(settingsProvider.future);
-      expect(settings['summaryPreferVttSubtitles'], isFalse);
+      expect(settings.videoSummary.preferVttSubtitles, isFalse);
 
       final reloaded = ProviderContainer();
       addTearDown(reloaded.dispose);
       final reloadedSettings = await reloaded.read(settingsProvider.future);
-      expect(reloadedSettings['summaryPreferVttSubtitles'], isFalse);
+      expect(reloadedSettings.videoSummary.preferVttSubtitles, isFalse);
     },
   );
 
@@ -126,8 +120,8 @@ void main() {
       addTearDown(container.dispose);
 
       var settings = await container.read(settingsProvider.future);
-      expect(settings['summaryApiUrl'], '');
-      expect(settings['summaryApiKey'], '');
+      expect(settings.videoSummary.apiUrl, '');
+      expect(settings.videoSummary.apiKey, '');
 
       final notifier = container.read(settingsProvider.notifier);
       await notifier.updateSummaryApiUrl(
@@ -137,19 +131,19 @@ void main() {
 
       settings = await container.read(settingsProvider.future);
       expect(
-        settings['summaryApiUrl'],
+        settings.videoSummary.apiUrl,
         'https://summary.example.test/v1/chat/completions',
       );
-      expect(settings['summaryApiKey'], 'sk-test');
+      expect(settings.videoSummary.apiKey, 'sk-test');
 
       final reloaded = ProviderContainer();
       addTearDown(reloaded.dispose);
       final reloadedSettings = await reloaded.read(settingsProvider.future);
       expect(
-        reloadedSettings['summaryApiUrl'],
+        reloadedSettings.videoSummary.apiUrl,
         'https://summary.example.test/v1/chat/completions',
       );
-      expect(reloadedSettings['summaryApiKey'], 'sk-test');
+      expect(reloadedSettings.videoSummary.apiKey, 'sk-test');
     },
   );
 
@@ -175,36 +169,34 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(settingsProvider.notifier);
-      await notifier.registerDownloadedManagedModel(
+      await notifier.installManagedSummaryModel(
         modelId: 'base.en',
         path: baseModelPath,
+        managedDirectoryPath: managedDirectory.path,
       );
-      await notifier.registerDownloadedManagedModel(
+      await notifier.installManagedSummaryModel(
         modelId: 'medium',
         path: mediumModelPath,
+        managedDirectoryPath: managedDirectory.path,
       );
-      await notifier.updateSummaryManagedModelDirectoryPath(
-        managedDirectory.path,
-      );
-      await notifier.selectManagedSummaryModel('medium');
 
       final settings = await container.read(settingsProvider.future);
-      expect(settings['summaryDownloadedManagedModels'], <String, String>{
+      expect(settings.videoSummary.downloadedManagedModels, <String, String>{
         'base.en': baseModelPath,
         'medium': mediumModelPath,
       });
-      expect(settings['summarySelectedModelId'], 'medium');
-      expect(settings['summaryModelPath'], mediumModelPath);
+      expect(settings.videoSummary.selectedModelId, 'medium');
+      expect(settings.videoSummary.modelPath, mediumModelPath);
 
       final reloaded = ProviderContainer();
       addTearDown(reloaded.dispose);
       final reloadedSettings = await reloaded.read(settingsProvider.future);
       expect(
-        reloadedSettings['summaryDownloadedManagedModels'],
+        reloadedSettings.videoSummary.downloadedManagedModels,
         <String, String>{'base.en': baseModelPath, 'medium': mediumModelPath},
       );
-      expect(reloadedSettings['summarySelectedModelId'], 'medium');
-      expect(reloadedSettings['summaryModelPath'], mediumModelPath);
+      expect(reloadedSettings.videoSummary.selectedModelId, 'medium');
+      expect(reloadedSettings.videoSummary.modelPath, mediumModelPath);
     },
   );
 
@@ -217,17 +209,17 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(settingsProvider.notifier);
-      await notifier.registerDownloadedManagedModel(
+      await notifier.installManagedSummaryModel(
         modelId: 'base.en',
         path: '/tmp/models/ggml-base.en.bin',
+        managedDirectoryPath: '/tmp/models',
       );
-      await notifier.selectManagedSummaryModel('base.en');
       await notifier.removeDownloadedManagedModel('base.en');
 
       final settings = await container.read(settingsProvider.future);
-      expect(settings['summaryDownloadedManagedModels'], <String, String>{});
-      expect(settings['summarySelectedModelId'], 'base.en');
-      expect(settings['summaryModelPath'], '');
+      expect(settings.videoSummary.downloadedManagedModels, isEmpty);
+      expect(settings.videoSummary.selectedModelId, 'base.en');
+      expect(settings.videoSummary.modelPath, '');
     },
   );
 
@@ -260,12 +252,12 @@ void main() {
       addTearDown(container.dispose);
 
       final settings = await container.read(settingsProvider.future);
-      expect(settings['summaryDownloadedManagedModels'], <String, String>{
+      expect(settings.videoSummary.downloadedManagedModels, <String, String>{
         'base.en': baseModelPath,
         'medium': mediumModelPath,
       });
-      expect(settings['summarySelectedModelId'], 'medium');
-      expect(settings['summaryModelPath'], mediumModelPath);
+      expect(settings.videoSummary.selectedModelId, 'medium');
+      expect(settings.videoSummary.modelPath, mediumModelPath);
     },
   );
 }
