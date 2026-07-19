@@ -5,8 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
+import 'package:movie_manager/logic/private_library_controller.dart';
+import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/widgets/library_filter_menu.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('library filter toggles folders and resets to all visible', (
@@ -55,18 +58,23 @@ void main() {
   testWidgets('library filter unlocks private libraries before selection', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      privateLibraryAutoLockMinutesPreferenceKey: 10,
+    });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
     final auth = _FakePrivateLibraryAuthService(result: true);
+    final container = ProviderContainer(
+      overrides: [
+        foldersDaoProvider.overrideWithValue(_StaticFoldersDao(db, _folders())),
+        privateLibraryAuthServiceProvider.overrideWithValue(auth),
+      ],
+    );
+    addTearDown(container.dispose);
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          foldersDaoProvider.overrideWithValue(
-            _StaticFoldersDao(db, _folders()),
-          ),
-          privateLibraryAuthServiceProvider.overrideWithValue(auth),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: const MacosApp(
           home: MacosWindow(
             child: MacosScaffold(
@@ -81,16 +89,85 @@ void main() {
     await tester.tap(find.text('Libraries: All'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Unlock Private Libraries'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(auth.attempts, 1);
+    expect(
+      container.read(privateLibraryAccessControllerProvider).isUnlocked,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Libraries: All'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Private Movies').hitTestable().last);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Libraries: 1'), findsOneWidget);
+    expect(container.read(selectedLibraryFoldersControllerProvider), {2});
+
+    container.read(privateLibraryAccessControllerProvider.notifier).lock();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('library filter manually locks private libraries', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      privateLibraryAutoLockMinutesPreferenceKey: 1,
+    });
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        foldersDaoProvider.overrideWithValue(_StaticFoldersDao(db, _folders())),
+        privateLibraryAuthServiceProvider.overrideWithValue(
+          _FakePrivateLibraryAuthService(result: true),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MacosApp(
+          home: MacosWindow(
+            child: MacosScaffold(
+              children: [ContentArea(builder: _libraryFilterContentBuilder)],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Libraries: All'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Private Movies'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unlock Private Libraries'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      container.read(privateLibraryAccessControllerProvider).isUnlocked,
+      isTrue,
+    );
 
-    expect(find.text('Libraries: 1'), findsOneWidget);
+    await tester.tap(find.text('Libraries: All'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Lock Private Libraries').last);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      container.read(privateLibraryAccessControllerProvider).isUnlocked,
+      isFalse,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('library filter folder rows expose full path tooltips', (

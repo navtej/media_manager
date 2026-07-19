@@ -14,7 +14,6 @@ import '../../logic/filter_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
-import '../../logic/private_library_controller.dart';
 import '../../data/database.dart';
 import 'settings_screen.dart';
 import 'tag_management_screen.dart';
@@ -22,6 +21,7 @@ import '../widgets/bulk_selection_toolbar.dart';
 import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
+import '../widgets/private_library_lock_selection_guard.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -72,25 +72,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _searchController.text = next;
       }
     });
-    ref.listen(privateLibraryAccessControllerProvider, (previous, next) {
-      if (previous?.isUnlocked == true && !next.isUnlocked) {
-        final visibleVideoIds =
-            ref
-                .read(filteredVideosProvider)
-                .asData
-                ?.value
-                .map((video) => video.id)
-                .toList(growable: false) ??
-            const <int>[];
-        ref
-            .read(videoSelectionControllerProvider.notifier)
-            .retainIds(visibleVideoIds);
-        ref
-            .read(selectedLibraryFoldersControllerProvider.notifier)
-            .retainVisible(ref.read(effectiveLibraryFolderIdsProvider).toSet());
-      }
-    });
-
     final hasActiveFilters =
         ref.watch(searchQueryProvider).isNotEmpty ||
         ref.watch(combinedSelectedTagsProvider).isNotEmpty;
@@ -109,6 +90,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return MacosWindow(
       child: Row(
         children: [
+          const PrivateLibraryLockSelectionGuard(),
           // Custom Sidebar
           Container(
             width: 220,

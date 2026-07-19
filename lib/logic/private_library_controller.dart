@@ -1,8 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/private_library_auth_service.dart';
+import 'settings_provider.dart';
+
+typedef PrivateLibraryAutoLockClock = DateTime Function();
+
+final privateLibraryAutoLockClockProvider =
+    Provider<PrivateLibraryAutoLockClock>((ref) => DateTime.now);
 
 class PrivateLibraryAccessState {
   const PrivateLibraryAccessState({
@@ -31,8 +39,21 @@ class PrivateLibraryAccessState {
 
 class PrivateLibraryAccessController
     extends Notifier<PrivateLibraryAccessState> {
+  Timer? _autoLockTimer;
+  DateTime? _autoLockDeadline;
+
   @override
-  PrivateLibraryAccessState build() => const PrivateLibraryAccessState();
+  PrivateLibraryAccessState build() {
+    ref.onDispose(_cancelAutoLock);
+    ref.listen(settingsProvider, (previous, next) {
+      final previousMinutes = _autoLockMinutes(previous?.value);
+      final nextMinutes = _autoLockMinutes(next.value);
+      if (state.isUnlocked && previousMinutes != nextMinutes) {
+        _startAutoLockCountdown(Duration(minutes: nextMinutes));
+      }
+    });
+    return const PrivateLibraryAccessState();
+  }
 
   Future<bool> unlock() async {
     if (state.isUnlocked) {
@@ -43,7 +64,9 @@ class PrivateLibraryAccessController
         .read(privateLibraryAuthServiceProvider)
         .authenticate();
     if (authenticated) {
+      await ref.read(settingsProvider.future);
       state = const PrivateLibraryAccessState(isUnlocked: true);
+      _startAutoLockCountdown(ref.read(privateLibraryAutoLockDurationProvider));
       return true;
     }
 
@@ -54,7 +77,54 @@ class PrivateLibraryAccessController
   }
 
   void lock() {
+    _cancelAutoLock();
     state = const PrivateLibraryAccessState();
+    if (ref.read(selectedLibraryFoldersControllerProvider).isEmpty) {
+      return;
+    }
+    ref
+        .read(selectedLibraryFoldersControllerProvider.notifier)
+        .retainVisible(ref.read(publicLibraryFolderIdsProvider));
+  }
+
+  void enforceAutoLockDeadline() {
+    final deadline = _autoLockDeadline;
+    if (!state.isUnlocked || deadline == null) {
+      return;
+    }
+
+    final remaining = deadline.difference(
+      ref.read(privateLibraryAutoLockClockProvider)(),
+    );
+    if (remaining <= Duration.zero) {
+      lock();
+      return;
+    }
+
+    _armAutoLockTimer(remaining);
+  }
+
+  void _startAutoLockCountdown(Duration duration) {
+    _autoLockDeadline =
+        ref.read(privateLibraryAutoLockClockProvider)().add(duration);
+    _armAutoLockTimer(duration);
+  }
+
+  void _armAutoLockTimer(Duration duration) {
+    _autoLockTimer?.cancel();
+    _autoLockTimer = Timer(duration, lock);
+  }
+
+  void _cancelAutoLock() {
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
+    _autoLockDeadline = null;
+  }
+
+  int _autoLockMinutes(Map<String, dynamic>? settings) {
+    return resolvePrivateLibraryAutoLockMinutes(
+      settings?[privateLibraryAutoLockMinutesPreferenceKey] as int?,
+    );
   }
 }
 
@@ -102,6 +172,17 @@ final libraryFoldersProvider = StreamProvider<List<Folder>>((ref) {
   return ref.watch(foldersDaoProvider).watchAllFolders();
 });
 
+final publicLibraryFolderIdsProvider = Provider<Set<int>>((ref) {
+  final folders = ref.watch(libraryFoldersProvider).value;
+  if (folders == null) {
+    return const <int>{};
+  }
+  return folders
+      .where((folder) => !folder.isPrivate)
+      .map((folder) => folder.id)
+      .toSet();
+});
+
 final effectiveLibraryFolderIdsProvider = Provider<List<int>>((ref) {
   final folders = ref.watch(libraryFoldersProvider).value;
   if (folders == null) {
@@ -110,10 +191,8 @@ final effectiveLibraryFolderIdsProvider = Provider<List<int>>((ref) {
 
   final selectedFolderIds = ref.watch(selectedLibraryFoldersControllerProvider);
   final privateAccess = ref.watch(privateLibraryAccessControllerProvider);
-  final publicFolderIds = folders
-      .where((folder) => !folder.isPrivate)
-      .map((folder) => folder.id)
-      .toList(growable: false);
+  final publicFolderIds =
+      ref.watch(publicLibraryFolderIdsProvider).toList(growable: false);
   final accessibleFolderIds = folders
       .where((folder) => !folder.isPrivate || privateAccess.isUnlocked)
       .map((folder) => folder.id)

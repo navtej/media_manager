@@ -1,12 +1,40 @@
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'video_summary_models.dart';
 import 'whisper_model_catalog.dart';
 
 part 'settings_provider.g.dart';
+
+const privateLibraryAutoLockMinutesPreferenceKey =
+    'privateLibraryAutoLockMinutes';
+const defaultPrivateLibraryAutoLockMinutes = 10;
+const minimumPrivateLibraryAutoLockMinutes = 1;
+const maximumPrivateLibraryAutoLockMinutes = 120;
+
+bool isValidPrivateLibraryAutoLockMinutes(int? minutes) {
+  return minutes != null &&
+      minutes >= minimumPrivateLibraryAutoLockMinutes &&
+      minutes <= maximumPrivateLibraryAutoLockMinutes;
+}
+
+int resolvePrivateLibraryAutoLockMinutes(int? minutes) {
+  return isValidPrivateLibraryAutoLockMinutes(minutes)
+      ? minutes!
+      : defaultPrivateLibraryAutoLockMinutes;
+}
+
+final privateLibraryAutoLockDurationProvider = Provider<Duration>((ref) {
+  final minutes = resolvePrivateLibraryAutoLockMinutes(
+    ref
+        .watch(settingsProvider)
+        .value?[privateLibraryAutoLockMinutesPreferenceKey] as int?,
+  );
+  return Duration(minutes: minutes);
+});
 
 @Riverpod(keepAlive: true)
 class Settings extends _$Settings {
@@ -26,6 +54,9 @@ class Settings extends _$Settings {
       downloadedManagedModels: downloadedManagedModels,
       localModelPath: prefs.getString('summaryModelPath') ?? '',
     );
+    final privateLibraryAutoLockMinutes = resolvePrivateLibraryAutoLockMinutes(
+      prefs.getInt(privateLibraryAutoLockMinutesPreferenceKey),
+    );
 
     return {
       'scanInterval': prefs.getInt('scanInterval') ?? 5,
@@ -33,6 +64,7 @@ class Settings extends _$Settings {
       'themeMode': prefs.getString('themeMode') ?? 'system',
       'paginationSize': prefs.getInt('paginationSize') ?? 50,
       'showOfflineMedia': prefs.getBool('showOfflineMedia') ?? true,
+      privateLibraryAutoLockMinutesPreferenceKey: privateLibraryAutoLockMinutes,
       'summaryModelSource': summaryModelSource,
       'summaryModelPath': summaryModelPath,
       'summarySelectedModelId': selectedModelId,
@@ -74,6 +106,26 @@ class Settings extends _$Settings {
 
     final currentData = state.value ?? {};
     state = AsyncValue.data({...currentData, 'showOfflineMedia': value});
+  }
+
+  Future<void> updatePrivateLibraryAutoLockMinutes(int minutes) async {
+    if (!isValidPrivateLibraryAutoLockMinutes(minutes)) {
+      throw RangeError.range(
+        minutes,
+        minimumPrivateLibraryAutoLockMinutes,
+        maximumPrivateLibraryAutoLockMinutes,
+        'minutes',
+      );
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(privateLibraryAutoLockMinutesPreferenceKey, minutes);
+
+    final currentData = state.value ?? {};
+    state = AsyncValue.data({
+      ...currentData,
+      privateLibraryAutoLockMinutesPreferenceKey: minutes,
+    });
   }
 
   Future<void> updateTheme(String mode) async {

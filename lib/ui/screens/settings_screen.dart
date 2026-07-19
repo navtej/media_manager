@@ -25,6 +25,7 @@ import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../widgets/summary_model_settings_panel.dart';
 import '../widgets/summarization_api_settings_panel.dart';
+import '../widgets/private_library_auto_lock_control.dart';
 
 enum _SettingsTab { general, transcribe, summarization }
 
@@ -242,6 +243,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const SizedBox(height: 10),
         Expanded(child: _FolderList()),
+        const SizedBox(height: 12),
+        const PrivateLibraryAutoLockControl(),
         const SizedBox(height: 12),
         const _OpenDataFolderWidget(),
         const SizedBox(height: 20),
