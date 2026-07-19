@@ -15,12 +15,21 @@ import '../services/thumbnail_service.dart';
 import 'ai_controller.dart';
 import 'maintenance_controller.dart';
 import 'library_operation_controller.dart';
-import 'library_name.dart';
+import 'managed_library_service.dart';
 
 part 'library_controller.g.dart';
 
 typedef PeriodicScanTimerFactory =
     Timer Function(Duration duration, void Function(Timer timer) callback);
+
+enum LibraryAddFlowStatus { completed, scanInProgress, moveInProgress }
+
+class LibraryAddFlowResult {
+  const LibraryAddFlowResult({required this.status, this.managedLibraryResult});
+
+  final LibraryAddFlowStatus status;
+  final ManagedLibraryAddResult? managedLibraryResult;
+}
 
 final periodicScanTimerFactoryProvider = Provider<PeriodicScanTimerFactory>(
   (ref) => Timer.periodic,
@@ -50,7 +59,7 @@ class LibraryController extends _$LibraryController {
       settingsProvider.future,
     )).librarySynchronization;
     final initialInterval = synchronization.scanIntervalMinutes;
-    await ref.read(foldersDaoProvider).normalizeLibraryNames();
+    await ref.read(managedLibraryServiceProvider).normalizeNames();
     _setupTimer(initialInterval);
 
     // Listen for settings changes to update the timer
@@ -255,58 +264,41 @@ class LibraryController extends _$LibraryController {
     );
   }
 
-  Future<void> addFolder(String path) async {
+  Future<LibraryAddFlowResult> addFolder(String path) async {
     if (_isScanning) {
       print('DEBUG: addFolder ignored, scan already in progress');
       ref
           .read(scanStatusProvider.notifier)
           .setStatus('Scan already in progress');
-      return;
+      return const LibraryAddFlowResult(
+        status: LibraryAddFlowStatus.scanInProgress,
+      );
     }
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     if (!operation.beginScan()) {
       ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
-      return;
+      return const LibraryAddFlowResult(
+        status: LibraryAddFlowStatus.moveInProgress,
+      );
     }
     print('DEBUG: addFolder called with $path');
     try {
-      final dao = ref.read(foldersDaoProvider);
-      final bookmark = await ref
-          .read(libraryAccessServiceProvider)
-          .createBookmark(path);
-
-      // Check if exists first to get ID
-      final folders = await dao.getAllFolders();
-      final existing = folders.where((f) => f.path == path).toList();
-
-      int id;
-      if (existing.isNotEmpty) {
-        id = existing.first.id;
-        if (bookmark != null) {
-          await dao.updateFolderBookmark(id, bookmark);
-        }
-        print('DEBUG: Folder already exists with ID: $id');
-      } else {
-        id = await dao.insertFolder(
-          FoldersCompanion(
-            path: drift.Value(path),
-            alias: drift.Value(uniqueLibraryNameForPath(path, folders)),
-            securityScopedBookmark: drift.Value(bookmark),
-          ),
+      final result = await ref
+          .read(managedLibraryServiceProvider)
+          .addOrRefresh(path);
+      final folder = result.folder;
+      if (folder == null) {
+        return LibraryAddFlowResult(
+          status: LibraryAddFlowStatus.completed,
+          managedLibraryResult: result,
         );
-        if (id == 0) {
-          // Should not happen with the check above, but for safety:
-          final refetched = await dao.getAllFolders();
-          id = refetched.firstWhere((f) => f.path == path).id;
-        }
-        print('DEBUG: Folder inserted with ID: $id');
       }
-
-      // Start scan
-      final refetched = (await dao.getAllFolders()).firstWhere(
-        (f) => f.id == id,
+      print('DEBUG: Managed Library ready with ID: ${folder.id}');
+      await scanFolder(folder.path, folder.id);
+      return LibraryAddFlowResult(
+        status: LibraryAddFlowStatus.completed,
+        managedLibraryResult: result,
       );
-      await scanFolder(refetched.path, id);
     } finally {
       operation.endScan();
     }

@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
     show Colors, Dialog, RoundedRectangleBorder;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,7 +12,9 @@ import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/library_name.dart';
+import '../../logic/managed_library_service.dart';
 import '../../logic/video_move_controller.dart';
+import '../library_result_messages.dart';
 
 const _dialogBorderRadius = BorderRadius.all(Radius.circular(12));
 
@@ -220,6 +221,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
   int? _scanAfterMoveFolderId;
   bool _removeEmptySourceFolders = false;
   bool _isSubmitting = false;
+  String? _actionMessage;
   Object? _actionError;
   Future<VideoMovePreflight>? _preflightFuture;
   int? _preflightDestinationFolderId;
@@ -305,6 +307,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
                               if (value == null) return;
                               setState(() {
                                 _destinationFolderId = value;
+                                _actionMessage = null;
                                 _actionError = null;
                                 _clearPreflight();
                               });
@@ -333,6 +336,14 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
               ),
             ],
           ),
+          if (_actionMessage != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _actionMessage!,
+              key: const ValueKey('move-library-action-message'),
+              style: MacosTheme.of(context).typography.caption1,
+            ),
+          ],
           const SizedBox(height: 12),
           _CleanupOption(
             value: _removeEmptySourceFolders,
@@ -398,15 +409,20 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
     }
 
     try {
-      final folder = await ref
-          .read(videoMoveControllerProvider.notifier)
-          .addManagedDestinationFolder(selectedDirectory);
+      final result = await ref
+          .read(managedLibraryServiceProvider)
+          .addOrRefresh(selectedDirectory);
+      final folder = result.folder;
+      if (folder == null) {
+        throw StateError('Could not add destination folder.');
+      }
       if (!mounted) {
         return;
       }
       setState(() {
         _destinationFolderId = folder.id;
         _scanAfterMoveFolderId = folder.id;
+        _actionMessage = managedLibraryAddResultMessage(result);
         _actionError = null;
         _clearPreflight();
       });
@@ -415,6 +431,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
         return;
       }
       setState(() {
+        _actionMessage = null;
         _actionError = error;
       });
     }

@@ -12,6 +12,7 @@ import '../../logic/maintenance_controller.dart';
 import '../../logic/folder_storage_status.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/library_name.dart';
+import '../../logic/managed_library_service.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_summary_models.dart';
@@ -19,10 +20,9 @@ import '../../logic/whisper_model_catalog.dart';
 import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
-import '../../services/library_access_service.dart';
-import '../../services/private_library_auth_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
+import '../library_result_messages.dart';
 import '../widgets/summary_model_settings_panel.dart';
 import '../widgets/summarization_api_settings_panel.dart';
 import '../widgets/private_library_auto_lock_control.dart';
@@ -43,6 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   _SettingsTab _selectedTab = _SettingsTab.general;
   String? _summaryActionMessage;
   String? _summarizationActionMessage;
+  String? _libraryActionMessage;
 
   @override
   void initState() {
@@ -85,9 +86,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
 
-    await ref
+    final result = await ref
         .read(libraryControllerProvider.notifier)
         .addFolder(selectedDirectory);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _libraryActionMessage = libraryAddFlowResultMessage(result);
+    });
   }
 
   @override
@@ -245,6 +252,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
         const SizedBox(height: 10),
         Expanded(child: _FolderList()),
+        if (_libraryActionMessage != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _libraryActionMessage!,
+            key: const ValueKey('settings-library-action-message'),
+            style: MacosTheme.of(context).typography.caption1,
+          ),
+        ],
         const SizedBox(height: 12),
         const PrivateLibraryAutoLockControl(),
         const SizedBox(height: 12),
@@ -588,10 +603,7 @@ class _FolderList extends ConsumerWidget {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _LibraryNameField(
-                                folder: folder,
-                                folders: folders,
-                              ),
+                              _LibraryNameField(folder: folder),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Padding(
@@ -637,30 +649,26 @@ class _FolderList extends ConsumerWidget {
                         ),
                         onPressed: () async {
                           final nextIsPrivate = !folder.isPrivate;
-                          if (!nextIsPrivate) {
-                            final authenticated = await ref
-                                .read(privateLibraryAuthServiceProvider)
-                                .authenticate();
-                            if (!authenticated) {
-                              ref
-                                  .read(statusMessageProvider.notifier)
-                                  .set(
-                                    'Authentication cancelled. Library remains private.',
-                                  );
-                              return;
-                            }
-                          }
-
-                          await ref
-                              .read(foldersDaoProvider)
-                              .updateFolderPrivacy(folder.id, nextIsPrivate);
-                          ref
-                              .read(statusMessageProvider.notifier)
-                              .set(
-                                nextIsPrivate
-                                    ? 'Library is now private.'
-                                    : 'Library is now visible by default.',
-                              );
+                          final result = await ref
+                              .read(managedLibraryServiceProvider)
+                              .setPrivacy(folder.id, isPrivate: nextIsPrivate);
+                          ref.read(statusMessageProvider.notifier).set(
+                            switch (result.status) {
+                              ManagedLibraryPrivacyStatus.madePrivate =>
+                                'Library is now private.',
+                              ManagedLibraryPrivacyStatus.madePublic =>
+                                'Library is now visible by default.',
+                              ManagedLibraryPrivacyStatus
+                                  .authenticationCancelled =>
+                                'Authentication cancelled. Library remains private.',
+                              ManagedLibraryPrivacyStatus.notFound =>
+                                'Library no longer exists.',
+                              ManagedLibraryPrivacyStatus.unchanged =>
+                                folder.isPrivate
+                                    ? 'Library remains private.'
+                                    : 'Library remains visible by default.',
+                            },
+                          );
                         },
                       ),
                     ),
@@ -682,31 +690,21 @@ class _FolderList extends ConsumerWidget {
                           if (selectedDirectory == null) {
                             return;
                           }
-                          if (selectedDirectory != folder.path) {
-                            ref
-                                .read(statusMessageProvider.notifier)
-                                .set(
-                                  'Select the same folder to repair access.',
-                                );
-                            return;
-                          }
-
-                          final bookmark = await ref
-                              .read(libraryAccessServiceProvider)
-                              .createBookmark(selectedDirectory);
-                          if (bookmark == null || bookmark.isEmpty) {
-                            ref
-                                .read(statusMessageProvider.notifier)
-                                .set('Could not repair folder access.');
-                            return;
-                          }
-
-                          await ref
-                              .read(foldersDaoProvider)
-                              .updateFolderBookmark(folder.id, bookmark);
-                          ref
-                              .read(statusMessageProvider.notifier)
-                              .set('Folder access repaired.');
+                          final result = await ref
+                              .read(managedLibraryServiceProvider)
+                              .repairAccess(folder.id, selectedDirectory);
+                          ref.read(statusMessageProvider.notifier).set(
+                            switch (result.status) {
+                              ManagedLibraryRepairStatus.repaired =>
+                                'Folder access repaired.',
+                              ManagedLibraryRepairStatus.pathMismatch =>
+                                'Select the same folder to repair access.',
+                              ManagedLibraryRepairStatus.bookmarkUnavailable =>
+                                'Could not repair folder access.',
+                              ManagedLibraryRepairStatus.notFound =>
+                                'Library no longer exists.',
+                            },
+                          );
                         },
                       ),
                     ),
@@ -719,10 +717,18 @@ class _FolderList extends ConsumerWidget {
                           color: MacosColors.appleRed,
                           size: 16,
                         ),
-                        onPressed: () {
-                          ref
+                        onPressed: () async {
+                          final result = await ref
                               .read(maintenanceControllerProvider.notifier)
                               .removeFolder(folder.id);
+                          ref
+                              .read(statusMessageProvider.notifier)
+                              .set(
+                                result.status ==
+                                        ManagedLibraryRemoveStatus.removed
+                                    ? 'Library removed. Files remain on disk.'
+                                    : 'Library no longer exists.',
+                              );
                         },
                       ),
                     ),
@@ -738,10 +744,9 @@ class _FolderList extends ConsumerWidget {
 }
 
 class _LibraryNameField extends ConsumerStatefulWidget {
-  const _LibraryNameField({required this.folder, required this.folders});
+  const _LibraryNameField({required this.folder});
 
   final Folder folder;
-  final List<Folder> folders;
 
   @override
   ConsumerState<_LibraryNameField> createState() => _LibraryNameFieldState();
@@ -791,45 +796,30 @@ class _LibraryNameFieldState extends ConsumerState<_LibraryNameField> {
       return;
     }
 
-    final name = _controller.text.trim();
-    final validationError = validateLibraryName(
-      folderId: widget.folder.id,
-      name: name,
-      folders: widget.folders,
-    );
-    if (validationError != null) {
-      if (mounted) {
-        setState(() {
-          _errorText = validationError;
-        });
-      }
-      return;
-    }
-
-    final currentName = libraryDisplayName(widget.folder);
-    if (name == currentName) {
-      if (mounted) {
-        setState(() {
-          _errorText = null;
-        });
-      }
-      if (_controller.text != name) {
-        _controller.text = name;
-      }
-      return;
-    }
-
     setState(() {
       _isSaving = true;
       _errorText = null;
     });
-    await ref.read(foldersDaoProvider).updateFolderName(widget.folder.id, name);
+    final result = await ref
+        .read(managedLibraryServiceProvider)
+        .rename(widget.folder.id, _controller.text);
     if (!mounted) {
       return;
     }
-    _controller.text = name;
+    final errorText = switch (result.status) {
+      ManagedLibraryRenameStatus.blankName => libraryNameRequiredMessage,
+      ManagedLibraryRenameStatus.duplicateName => libraryNameUniqueMessage,
+      ManagedLibraryRenameStatus.notFound => 'Library no longer exists.',
+      ManagedLibraryRenameStatus.renamed ||
+      ManagedLibraryRenameStatus.unchanged => null,
+    };
+    final updatedFolder = result.folder;
+    if (errorText == null && updatedFolder != null) {
+      _controller.text = libraryDisplayName(updatedFolder);
+    }
     setState(() {
       _isSaving = false;
+      _errorText = errorText;
     });
   }
 

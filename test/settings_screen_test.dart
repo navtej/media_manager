@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
+import 'package:movie_manager/logic/library_controller.dart';
+import 'package:movie_manager/logic/managed_library_service.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/services/library_access_service.dart';
@@ -137,12 +139,47 @@ void main() {
     final folder = await tester.runAsync(
       () => _waitForFolder(foldersDao, selectedDirectory.path),
     );
+    await tester.pump();
 
     expect(filePicker.directoryPickCount, 1);
     expect(folder, isNotNull);
     expect(folder!.path, selectedDirectory.path);
     expect(folder.alias, 'Settings Library');
     expect(folder.securityScopedBookmark, 'bookmark:${selectedDirectory.path}');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('settings presents the managed Library add outcome', (
+    tester,
+  ) async {
+    final filePicker = _FakeFilePicker('/Volumes/Selected Library');
+    FilePicker.platform = filePicker;
+    addTearDown(FilePickerIO.registerWith);
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(_TestFoldersDao(db, [])),
+          libraryControllerProvider.overrideWith(_ResultLibraryController.new),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('settings-add-library-folder-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Library added.'), findsOneWidget);
+    expect(filePicker.directoryPickCount, 1);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -509,6 +546,21 @@ class _TestFoldersDao extends FoldersDao {
 class _TestSettings extends Settings {
   @override
   Future<AppSettings> build() async => AppSettings.defaults;
+}
+
+class _ResultLibraryController extends LibraryController {
+  @override
+  Future<void> build() async {}
+
+  @override
+  Future<LibraryAddFlowResult> addFolder(String path) async {
+    return const LibraryAddFlowResult(
+      status: LibraryAddFlowStatus.completed,
+      managedLibraryResult: ManagedLibraryAddResult(
+        status: ManagedLibraryAddStatus.created,
+      ),
+    );
+  }
 }
 
 class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {

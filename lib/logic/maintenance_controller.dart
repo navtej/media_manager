@@ -3,6 +3,7 @@ import '../data/providers.dart';
 import '../services/media_deletion_service.dart';
 import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
+import 'managed_library_service.dart';
 import 'stats_provider.dart';
 
 part 'maintenance_controller.g.dart';
@@ -54,21 +55,18 @@ class MaintenanceController extends _$MaintenanceController {
     }
   }
 
-  Future<void> removeFolder(int folderId) async {
-    final folderDao = ref.read(foldersDaoProvider);
-    final videoDao = ref.read(videosDaoProvider);
-
-    try {
-      final videos = await videoDao.getVideosByFolder(folderId);
-      await folderDao.deleteFolder(folderId);
-
-      print('DEBUG: Removed folder $folderId and ${videos.length} videos');
-
-      // Update stats
+  Future<ManagedLibraryRemoveResult> removeFolder(int folderId) async {
+    final result = await ref
+        .read(managedLibraryServiceProvider)
+        .remove(folderId);
+    if (result.status == ManagedLibraryRemoveStatus.removed) {
+      print(
+        'DEBUG: Removed folder $folderId and '
+        '${result.removedVideoCount} videos',
+      );
       ref.invalidate(libraryStatsProvider);
-    } catch (e) {
-      print('ERROR in removeFolder: $e');
     }
+    return result;
   }
 
   Future<MediaDeletionResult> deleteVideo(int videoId) async {

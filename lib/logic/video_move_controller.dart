@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' as drift;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -8,7 +7,6 @@ import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/library_access_service.dart';
 import 'library_operation_controller.dart';
-import 'library_name.dart';
 import 'status_message_provider.dart';
 import 'stats_provider.dart';
 import 'video_selection_controller.dart';
@@ -452,34 +450,6 @@ class VideoMoveController extends Notifier<VideoMoveState> {
       operation.endMove();
       state = const VideoMoveState();
     }
-  }
-
-  Future<Folder> addManagedDestinationFolder(String path) async {
-    final folderDao = ref.read(foldersDaoProvider);
-    final bookmark = await ref
-        .read(libraryAccessServiceProvider)
-        .createBookmark(path);
-    final folders = await folderDao.getAllFolders();
-    final existing = folders.where((folder) => folder.path == path).firstOrNull;
-    if (existing != null) {
-      if (bookmark != null && bookmark.isNotEmpty) {
-        await folderDao.updateFolderBookmark(existing.id, bookmark);
-      }
-      return (await folderDao.getFolderById(existing.id)) ?? existing;
-    }
-
-    final id = await folderDao.insertFolder(
-      FoldersCompanion(
-        path: drift.Value(path),
-        alias: drift.Value(uniqueLibraryNameForPath(path, folders)),
-        securityScopedBookmark: drift.Value(bookmark),
-      ),
-    );
-    final folder = await folderDao.getFolderById(id);
-    if (folder == null) {
-      throw StateError('Could not add destination folder.');
-    }
-    return folder;
   }
 
   void _markProgress(int completed) {

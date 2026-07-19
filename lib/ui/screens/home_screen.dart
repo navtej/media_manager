@@ -22,6 +22,7 @@ import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
 import '../widgets/private_library_lock_selection_guard.dart';
+import '../library_result_messages.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -764,7 +765,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .getDirectoryPath();
     print('DEBUG: FilePicker returned: $selectedDirectory');
     if (selectedDirectory != null) {
-      ref.read(libraryControllerProvider.notifier).addFolder(selectedDirectory);
+      final result = await ref
+          .read(libraryControllerProvider.notifier)
+          .addFolder(selectedDirectory);
+      if (!mounted) {
+        return;
+      }
+      ref
+          .read(statusMessageProvider.notifier)
+          .set(libraryAddFlowResultMessage(result));
     }
   }
 }
