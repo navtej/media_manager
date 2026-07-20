@@ -25,12 +25,29 @@ void main() {
     expect(settings.appearance.themeMode, AppearanceThemeMode.system);
     expect(settings.catalogBrowsing.paginationSize, 50);
     expect(settings.catalogBrowsing.showOfflineMedia, isTrue);
+    expect(settings.emptyFolderCleanup.enabled, isTrue);
+    expect(settings.emptyFolderCleanup.intervalDays, 7);
     expect(
       settings.videoSummary.modelSource,
       SummaryModelSourceMode.managedDownload,
     );
     expect(settings.videoSummary.modelPath, isEmpty);
     expect(settings.videoSummary.preferVttSubtitles, isTrue);
+  });
+
+  test('empty-folder cleanup validates its interval boundaries', () {
+    expect(EmptyFolderCleanupConfiguration.isValidIntervalDays(1), isTrue);
+    expect(EmptyFolderCleanupConfiguration.isValidIntervalDays(90), isTrue);
+    expect(EmptyFolderCleanupConfiguration.isValidIntervalDays(0), isFalse);
+    expect(EmptyFolderCleanupConfiguration.isValidIntervalDays(91), isFalse);
+    expect(
+      () => EmptyFolderCleanupConfiguration.requireValidIntervalDays(0),
+      throwsRangeError,
+    );
+    expect(
+      () => EmptyFolderCleanupConfiguration.requireValidIntervalDays(91),
+      throwsRangeError,
+    );
   });
 
   test(

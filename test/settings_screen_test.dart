@@ -60,6 +60,14 @@ void main() {
 
     expect(find.text('Libraries'), findsOneWidget);
     expect(find.byType(PrivateLibraryAutoLockControl), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('empty-folder-cleanup-checkbox')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('empty-folder-cleanup-interval-days-field')),
+      findsOneWidget,
+    );
     expect(find.text('Library Folders'), findsNothing);
     expect(find.text('Show Offline Media'), findsNothing);
     expect(find.text('/Volumes/Media/Movies'), findsOneWidget);

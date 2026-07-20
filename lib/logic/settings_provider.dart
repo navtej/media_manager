@@ -18,6 +18,8 @@ const _batchSizeKey = 'batchSize';
 const _themeModeKey = 'themeMode';
 const _paginationSizeKey = 'paginationSize';
 const _showOfflineMediaKey = 'showOfflineMedia';
+const _emptyFolderCleanupEnabledKey = 'emptyFolderCleanupEnabled';
+const _emptyFolderCleanupIntervalDaysKey = 'emptyFolderCleanupIntervalDays';
 const _privateLibraryAutoLockMinutesKey = 'privateLibraryAutoLockMinutes';
 const _summaryModelSourceKey = 'summaryModelSource';
 const _summaryModelPathKey = 'summaryModelPath';
@@ -100,6 +102,13 @@ final privateLibraryAccessConfigurationProvider =
       return ref
           .watch(settingsProvider)
           .whenData((settings) => settings.privateLibraryAccess);
+    });
+
+final emptyFolderCleanupConfigurationProvider =
+    Provider<AsyncValue<EmptyFolderCleanupConfiguration>>((ref) {
+      return ref
+          .watch(settingsProvider)
+          .whenData((settings) => settings.emptyFolderCleanup);
     });
 
 final appearanceConfigurationProvider =
@@ -186,6 +195,10 @@ class Settings extends _$Settings {
         scanIntervalMinutes: persistence.getInt(_scanIntervalKey),
         batchSize: persistence.getInt(_batchSizeKey),
       ),
+      emptyFolderCleanup: EmptyFolderCleanupConfiguration.resolve(
+        enabled: persistence.getBool(_emptyFolderCleanupEnabledKey),
+        intervalDays: persistence.getInt(_emptyFolderCleanupIntervalDaysKey),
+      ),
       privateLibraryAccess: PrivateLibraryAccessConfiguration.resolve(
         autoLockMinutes: persistence.getInt(_privateLibraryAutoLockMinutesKey),
       ),
@@ -238,6 +251,24 @@ class Settings extends _$Settings {
     final persistence = await _persistence();
     await persistence.setBool(_showOfflineMediaKey, value);
     state = AsyncData(current.copyWith(catalogBrowsing: catalog));
+  }
+
+  Future<void> updateEmptyFolderCleanup({
+    required bool enabled,
+    required int intervalDays,
+  }) async {
+    final validated = EmptyFolderCleanupConfiguration.requireValidIntervalDays(
+      intervalDays,
+    );
+    final current = await _currentSettings();
+    final configuration = EmptyFolderCleanupConfiguration.resolve(
+      enabled: enabled,
+      intervalDays: validated,
+    );
+    final persistence = await _persistence();
+    await persistence.setBool(_emptyFolderCleanupEnabledKey, enabled);
+    await persistence.setInt(_emptyFolderCleanupIntervalDaysKey, validated);
+    state = AsyncData(current.copyWith(emptyFolderCleanup: configuration));
   }
 
   Future<void> updatePrivateLibraryAutoLockMinutes(int minutes) async {

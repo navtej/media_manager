@@ -23,6 +23,54 @@ void main() {
     );
   });
 
+  test('empty-folder cleanup defaults persist across reloads', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    var settings = await container.read(settingsProvider.future);
+    expect(settings.emptyFolderCleanup.enabled, isTrue);
+    expect(settings.emptyFolderCleanup.intervalDays, 7);
+
+    await container
+        .read(settingsProvider.notifier)
+        .updateEmptyFolderCleanup(enabled: false, intervalDays: 30);
+    settings = await container.read(settingsProvider.future);
+    expect(settings.emptyFolderCleanup.enabled, isFalse);
+    expect(settings.emptyFolderCleanup.intervalDays, 30);
+
+    final reloaded = ProviderContainer();
+    addTearDown(reloaded.dispose);
+    final reloadedSettings = await reloaded.read(settingsProvider.future);
+    expect(reloadedSettings.emptyFolderCleanup.enabled, isFalse);
+    expect(reloadedSettings.emptyFolderCleanup.intervalDays, 30);
+  });
+
+  test(
+    'empty-folder cleanup rejects invalid intervals without persisting',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'emptyFolderCleanupEnabled': true,
+        'emptyFolderCleanupIntervalDays': 14,
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(settingsProvider.future);
+
+      await expectLater(
+        container
+            .read(settingsProvider.notifier)
+            .updateEmptyFolderCleanup(enabled: false, intervalDays: 0),
+        throwsRangeError,
+      );
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getBool('emptyFolderCleanupEnabled'), isTrue);
+      expect(preferences.getInt('emptyFolderCleanupIntervalDays'), 14);
+    },
+  );
+
   test(
     'private-library auto-lock falls back when persisted value is invalid',
     () async {

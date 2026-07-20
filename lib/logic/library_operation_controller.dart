@@ -1,19 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+enum LibraryOperation { idle, scanning, moving, cleaning }
+
 class LibraryOperationState {
-  const LibraryOperationState({this.isScanning = false, this.isMoving = false});
+  const LibraryOperationState([this.operation = LibraryOperation.idle]);
 
-  final bool isScanning;
-  final bool isMoving;
+  final LibraryOperation operation;
 
-  bool get isBusy => isScanning || isMoving;
-
-  LibraryOperationState copyWith({bool? isScanning, bool? isMoving}) {
-    return LibraryOperationState(
-      isScanning: isScanning ?? this.isScanning,
-      isMoving: isMoving ?? this.isMoving,
-    );
-  }
+  bool get isScanning => operation == LibraryOperation.scanning;
+  bool get isMoving => operation == LibraryOperation.moving;
+  bool get isCleaning => operation == LibraryOperation.cleaning;
+  bool get isBusy => operation != LibraryOperation.idle;
 }
 
 class LibraryOperationController extends Notifier<LibraryOperationState> {
@@ -21,27 +18,45 @@ class LibraryOperationController extends Notifier<LibraryOperationState> {
   LibraryOperationState build() => const LibraryOperationState();
 
   bool beginScan() {
-    if (state.isMoving) {
+    if (state.isBusy) {
       return false;
     }
-    state = state.copyWith(isScanning: true);
+    state = const LibraryOperationState(LibraryOperation.scanning);
     return true;
   }
 
   void endScan() {
-    state = state.copyWith(isScanning: false);
+    if (state.isScanning) {
+      state = const LibraryOperationState();
+    }
   }
 
   bool beginMove() {
-    if (state.isScanning || state.isMoving) {
+    if (state.isBusy) {
       return false;
     }
-    state = state.copyWith(isMoving: true);
+    state = const LibraryOperationState(LibraryOperation.moving);
     return true;
   }
 
   void endMove() {
-    state = state.copyWith(isMoving: false);
+    if (state.isMoving) {
+      state = const LibraryOperationState();
+    }
+  }
+
+  bool beginCleanup() {
+    if (state.isBusy) {
+      return false;
+    }
+    state = const LibraryOperationState(LibraryOperation.cleaning);
+    return true;
+  }
+
+  void endCleanup() {
+    if (state.isCleaning) {
+      state = const LibraryOperationState();
+    }
   }
 }
 

@@ -30,6 +30,57 @@ final class LibrarySynchronizationConfiguration {
   final int batchSize;
 }
 
+final class EmptyFolderCleanupConfiguration {
+  const EmptyFolderCleanupConfiguration._({
+    required this.enabled,
+    required this.intervalDays,
+  });
+
+  static const defaultEnabled = true;
+  static const defaultIntervalDays = 7;
+  static const minimumIntervalDays = 1;
+  static const maximumIntervalDays = 90;
+  static const defaults = EmptyFolderCleanupConfiguration._(
+    enabled: defaultEnabled,
+    intervalDays: defaultIntervalDays,
+  );
+
+  factory EmptyFolderCleanupConfiguration.resolve({
+    bool? enabled,
+    int? intervalDays,
+  }) {
+    return EmptyFolderCleanupConfiguration._(
+      enabled: enabled ?? defaultEnabled,
+      intervalDays: isValidIntervalDays(intervalDays)
+          ? intervalDays!
+          : defaultIntervalDays,
+    );
+  }
+
+  final bool enabled;
+  final int intervalDays;
+
+  Duration get interval => Duration(days: intervalDays);
+
+  static bool isValidIntervalDays(int? days) {
+    return days != null &&
+        days >= minimumIntervalDays &&
+        days <= maximumIntervalDays;
+  }
+
+  static int requireValidIntervalDays(int days) {
+    if (!isValidIntervalDays(days)) {
+      throw RangeError.range(
+        days,
+        minimumIntervalDays,
+        maximumIntervalDays,
+        'days',
+      );
+    }
+    return days;
+  }
+}
+
 final class PrivateLibraryAccessConfiguration {
   const PrivateLibraryAccessConfiguration._({required this.autoLockMinutes});
 
@@ -336,6 +387,7 @@ final class VideoSummaryConfiguration {
 final class AppSettings {
   const AppSettings({
     required this.librarySynchronization,
+    required this.emptyFolderCleanup,
     required this.privateLibraryAccess,
     required this.appearance,
     required this.catalogBrowsing,
@@ -344,6 +396,7 @@ final class AppSettings {
 
   static const defaults = AppSettings(
     librarySynchronization: LibrarySynchronizationConfiguration.defaults,
+    emptyFolderCleanup: EmptyFolderCleanupConfiguration.defaults,
     privateLibraryAccess: PrivateLibraryAccessConfiguration.defaults,
     appearance: AppearanceConfiguration.defaults,
     catalogBrowsing: CatalogBrowsingConfiguration.defaults,
@@ -351,6 +404,7 @@ final class AppSettings {
   );
 
   final LibrarySynchronizationConfiguration librarySynchronization;
+  final EmptyFolderCleanupConfiguration emptyFolderCleanup;
   final PrivateLibraryAccessConfiguration privateLibraryAccess;
   final AppearanceConfiguration appearance;
   final CatalogBrowsingConfiguration catalogBrowsing;
@@ -358,6 +412,7 @@ final class AppSettings {
 
   AppSettings copyWith({
     LibrarySynchronizationConfiguration? librarySynchronization,
+    EmptyFolderCleanupConfiguration? emptyFolderCleanup,
     PrivateLibraryAccessConfiguration? privateLibraryAccess,
     AppearanceConfiguration? appearance,
     CatalogBrowsingConfiguration? catalogBrowsing,
@@ -366,6 +421,7 @@ final class AppSettings {
     return AppSettings(
       librarySynchronization:
           librarySynchronization ?? this.librarySynchronization,
+      emptyFolderCleanup: emptyFolderCleanup ?? this.emptyFolderCleanup,
       privateLibraryAccess: privateLibraryAccess ?? this.privateLibraryAccess,
       appearance: appearance ?? this.appearance,
       catalogBrowsing: catalogBrowsing ?? this.catalogBrowsing,

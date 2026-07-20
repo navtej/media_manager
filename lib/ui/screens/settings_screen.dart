@@ -27,6 +27,7 @@ import '../library_result_messages.dart';
 import '../widgets/summary_model_settings_panel.dart';
 import '../widgets/summarization_api_settings_panel.dart';
 import '../widgets/private_library_auto_lock_control.dart';
+import '../widgets/empty_folder_cleanup_control.dart';
 
 enum _SettingsTab { general, transcribe, summarization }
 
@@ -333,6 +334,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Navigator.pop(context);
               },
             ),
+            const Spacer(),
+            const EmptyFolderCleanupControl(),
           ],
         ),
         const SizedBox(height: 10),

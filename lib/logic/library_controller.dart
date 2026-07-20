@@ -22,7 +22,12 @@ part 'library_controller.g.dart';
 typedef PeriodicScanTimerFactory =
     Timer Function(Duration duration, void Function(Timer timer) callback);
 
-enum LibraryAddFlowStatus { completed, scanInProgress, moveInProgress }
+enum LibraryAddFlowStatus {
+  completed,
+  scanInProgress,
+  moveInProgress,
+  maintenanceInProgress,
+}
 
 class LibraryAddFlowResult {
   const LibraryAddFlowResult({required this.status, this.managedLibraryResult});
@@ -109,9 +114,12 @@ class LibraryController extends _$LibraryController {
 
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     if (!operation.beginScan()) {
-      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
+      final operationState = ref.read(libraryOperationControllerProvider);
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(_operationBlockedMessage(operationState));
       Future.delayed(const Duration(seconds: 2), () {
-        if (!ref.read(libraryOperationControllerProvider).isMoving) {
+        if (!ref.read(libraryOperationControllerProvider).isBusy) {
           ref.read(scanStatusProvider.notifier).setStatus('');
         }
       });
@@ -276,9 +284,16 @@ class LibraryController extends _$LibraryController {
     }
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     if (!operation.beginScan()) {
-      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
-      return const LibraryAddFlowResult(
-        status: LibraryAddFlowStatus.moveInProgress,
+      final operationState = ref.read(libraryOperationControllerProvider);
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(_operationBlockedMessage(operationState));
+      return LibraryAddFlowResult(
+        status: operationState.isCleaning
+            ? LibraryAddFlowStatus.maintenanceInProgress
+            : operationState.isScanning
+            ? LibraryAddFlowStatus.scanInProgress
+            : LibraryAddFlowStatus.moveInProgress,
       );
     }
     print('DEBUG: addFolder called with $path');
@@ -294,7 +309,7 @@ class LibraryController extends _$LibraryController {
         );
       }
       print('DEBUG: Managed Library ready with ID: ${folder.id}');
-      await scanFolder(folder.path, folder.id);
+      await _scanFolder(folder.path, folder.id);
       return LibraryAddFlowResult(
         status: LibraryAddFlowStatus.completed,
         managedLibraryResult: result,
@@ -317,7 +332,13 @@ class LibraryController extends _$LibraryController {
     }
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     if (!operation.beginScan()) {
-      ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(
+            _operationBlockedMessage(
+              ref.read(libraryOperationControllerProvider),
+            ),
+          );
       return;
     }
 
@@ -334,7 +355,7 @@ class LibraryController extends _$LibraryController {
       final folderDao = ref.read(foldersDaoProvider);
       final folders = await folderDao.getAllFolders();
       for (final f in folders) {
-        await scanFolder(f.path, f.id);
+        await _scanFolder(f.path, f.id);
       }
 
       print('DEBUG: Rebuild completed successfully');
@@ -349,6 +370,25 @@ class LibraryController extends _$LibraryController {
   }
 
   Future<void> scanFolder(String rootPath, int folderId) async {
+    final operation = ref.read(libraryOperationControllerProvider.notifier);
+    if (!operation.beginScan()) {
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(
+            _operationBlockedMessage(
+              ref.read(libraryOperationControllerProvider),
+            ),
+          );
+      return;
+    }
+    try {
+      await _scanFolder(rootPath, folderId);
+    } finally {
+      operation.endScan();
+    }
+  }
+
+  Future<void> _scanFolder(String rootPath, int folderId) async {
     final folder = await ref.read(foldersDaoProvider).getFolderById(folderId);
     if (folder == null) {
       ref
@@ -497,4 +537,14 @@ class LibraryController extends _$LibraryController {
   }
 
   // AI Logic moved to ai_controller.dart
+}
+
+String _operationBlockedMessage(LibraryOperationState state) {
+  if (state.isCleaning) {
+    return 'Library maintenance in progress';
+  }
+  if (state.isScanning) {
+    return 'Scan already in progress';
+  }
+  return 'Move in progress';
 }

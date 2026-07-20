@@ -191,10 +191,14 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     required int destinationFolderId,
   }) async {
     final operationState = ref.read(libraryOperationControllerProvider);
-    if (operationState.isScanning) {
-      return const VideoMovePreflight(
+    if (operationState.isScanning || operationState.isCleaning) {
+      return VideoMovePreflight(
         items: [],
-        errors: ['Cannot move videos while a scan is in progress.'],
+        errors: [
+          operationState.isCleaning
+              ? 'Cannot move videos while Library maintenance is in progress.'
+              : 'Cannot move videos while a scan is in progress.',
+        ],
       );
     }
 
@@ -302,6 +306,8 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     if (!operation.beginMove()) {
       final message = operationState.isScanning
           ? 'Cannot move videos while a scan is in progress.'
+          : operationState.isCleaning
+          ? 'Cannot move videos while Library maintenance is in progress.'
           : 'Another move is already in progress.';
       return VideoMoveResult(
         failures: [

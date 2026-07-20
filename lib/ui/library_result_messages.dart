@@ -13,6 +13,8 @@ String libraryAddFlowResultMessage(LibraryAddFlowResult result) {
   return switch (result.status) {
     LibraryAddFlowStatus.scanInProgress => 'Scan already in progress',
     LibraryAddFlowStatus.moveInProgress => 'Move in progress',
+    LibraryAddFlowStatus.maintenanceInProgress =>
+      'Library maintenance in progress',
     LibraryAddFlowStatus.completed => managedLibraryAddResultMessage(
       result.managedLibraryResult!,
     ),
