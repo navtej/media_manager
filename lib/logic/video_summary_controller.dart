@@ -13,7 +13,7 @@ import '../services/natural_language_service.dart';
 import 'settings_provider.dart';
 import 'video_summary_models.dart';
 
-const _vttTranscriptModelPrefix = 'vtt:';
+const _vttTranscriptIdentityPrefix = 'vtt:';
 
 final videoSummaryRecordProvider = StreamProvider.autoDispose
     .family<VideoSummary?, int>((ref, videoId) {
@@ -102,6 +102,170 @@ final videoSummaryStatusProvider = Provider<String>((ref) {
   return '';
 });
 
+enum VideoSummaryStatus {
+  missing,
+  fresh,
+  stale,
+  malformed,
+  generating,
+  completed,
+  failed,
+}
+
+class VideoSummaryState {
+  const VideoSummaryState._({
+    required this.status,
+    required this.storedStatus,
+    required this.configuredTranscriptModel,
+    required this.preferVttSubtitles,
+    this.summary,
+    this.task,
+    this.error,
+  });
+
+  factory VideoSummaryState.fresh({
+    required StructuredVideoSummary summary,
+    required String configuredTranscriptModel,
+    required bool preferVttSubtitles,
+  }) {
+    return VideoSummaryState._(
+      status: VideoSummaryStatus.fresh,
+      storedStatus: VideoSummaryStatus.fresh,
+      configuredTranscriptModel: configuredTranscriptModel,
+      preferVttSubtitles: preferVttSubtitles,
+      summary: summary,
+    );
+  }
+
+  factory VideoSummaryState._from({
+    required _StoredVideoSummaryState stored,
+    required VideoSummaryTaskState? task,
+    required String configuredTranscriptModel,
+    required bool preferVttSubtitles,
+  }) {
+    final VideoSummaryStatus status;
+    if (task?.phase == VideoSummaryTaskPhase.failed) {
+      status = VideoSummaryStatus.failed;
+    } else if (task?.isRunning == true) {
+      status = VideoSummaryStatus.generating;
+    } else if (task?.phase == VideoSummaryTaskPhase.completed &&
+        stored.status == VideoSummaryStatus.fresh) {
+      status = VideoSummaryStatus.completed;
+    } else {
+      status = stored.status;
+    }
+
+    return VideoSummaryState._(
+      status: status,
+      storedStatus: stored.status,
+      configuredTranscriptModel: configuredTranscriptModel,
+      preferVttSubtitles: preferVttSubtitles,
+      summary: stored.summary,
+      task: task,
+      error: task?.phase == VideoSummaryTaskPhase.failed
+          ? task?.error
+          : stored.error,
+    );
+  }
+
+  final VideoSummaryStatus status;
+  final VideoSummaryStatus storedStatus;
+  final String configuredTranscriptModel;
+  final bool preferVttSubtitles;
+  final StructuredVideoSummary? summary;
+  final VideoSummaryTaskState? task;
+  final Object? error;
+
+  bool get hasStoredSummary => storedStatus != VideoSummaryStatus.missing;
+
+  bool get hasFreshSummary => storedStatus == VideoSummaryStatus.fresh;
+
+  bool get isGenerating => status == VideoSummaryStatus.generating;
+}
+
+final videoSummaryStateProvider = FutureProvider.autoDispose
+    .family<VideoSummaryState, Video>((ref, video) async {
+      final record = await ref.watch(
+        videoSummaryRecordProvider(video.id).future,
+      );
+      final task = ref.watch(videoSummaryTaskProvider(video.id));
+      final configuration = (await ref.watch(
+        settingsProvider.future,
+      )).videoSummary;
+      final configuredTranscriptModel = transcriptModelNameFromPath(
+        configuration.modelPath,
+      );
+      final parsed = _parseStoredVideoSummary(record);
+      if (parsed.status == VideoSummaryStatus.missing ||
+          parsed.status == VideoSummaryStatus.malformed) {
+        return VideoSummaryState._from(
+          stored: parsed,
+          task: task,
+          configuredTranscriptModel: configuredTranscriptModel,
+          preferVttSubtitles: configuration.preferVttSubtitles,
+        );
+      }
+
+      final folder = await ref
+          .watch(foldersDaoProvider)
+          .getFolderById(video.folderId);
+      if (folder == null) {
+        return VideoSummaryState._from(
+          stored: parsed.asStale(StateError('Library folder is missing.')),
+          task: task,
+          configuredTranscriptModel: configuredTranscriptModel,
+          preferVttSubtitles: configuration.preferVttSubtitles,
+        );
+      }
+
+      try {
+        final stored = await ref
+            .watch(libraryAccessServiceProvider)
+            .withAccess(
+              library: LibraryAccessRequest(
+                path: folder.path,
+                bookmark: folder.securityScopedBookmark,
+              ),
+              action: () async {
+                final file = File(video.absolutePath);
+                if (!await file.exists()) {
+                  return parsed.asStale(StateError('Video file is missing.'));
+                }
+
+                final stat = await file.stat();
+                final transcriptIdentities =
+                    await _acceptedTranscriptIdentities(
+                      videoPath: video.absolutePath,
+                      storedTranscriptIdentity: record!.transcriptModel,
+                      configuredTranscriptIdentity: configuredTranscriptModel,
+                    );
+                return _applyFreshness(
+                  parsed,
+                  record: record,
+                  videoStat: stat,
+                  transcriptIdentities: transcriptIdentities,
+                  summaryModel: summaryModelNameFromApiUrl(
+                    configuration.apiUrl,
+                  ),
+                );
+              },
+            );
+        return VideoSummaryState._from(
+          stored: stored,
+          task: task,
+          configuredTranscriptModel: configuredTranscriptModel,
+          preferVttSubtitles: configuration.preferVttSubtitles,
+        );
+      } catch (error) {
+        return VideoSummaryState._from(
+          stored: parsed.asStale(error),
+          task: task,
+          configuredTranscriptModel: configuredTranscriptModel,
+          preferVttSubtitles: configuration.preferVttSubtitles,
+        );
+      }
+    });
+
 final videoSummarySubtitleAvailabilityProvider = FutureProvider.autoDispose
     .family<VideoSummarySubtitleAvailability, Video>((ref, video) async {
       final foldersDao = ref.watch(foldersDaoProvider);
@@ -153,6 +317,7 @@ class VideoSummarySubtitleAvailability {
 class VideoSummaryTasksController
     extends Notifier<Map<int, VideoSummaryTaskState>> {
   bool _isGenerating = false;
+  _VideoSummaryCancellation? _activeCancellation;
 
   @override
   Map<int, VideoSummaryTaskState> build() => const {};
@@ -175,7 +340,9 @@ class VideoSummaryTasksController
     }
 
     String? audioPath;
+    final cancellation = _VideoSummaryCancellation(video.id);
     _isGenerating = true;
+    _activeCancellation = cancellation;
 
     _setTask(
       VideoSummaryTaskState(
@@ -195,6 +362,7 @@ class VideoSummaryTasksController
       final configuration = (await ref.read(
         settingsProvider.future,
       )).videoSummary;
+      cancellation.throwIfCancelled();
       final modelPath = configuration.modelPath.trim();
       final summaryApiUrl = configuration.apiUrl.trim();
       if (summaryApiUrl.isEmpty) {
@@ -206,6 +374,7 @@ class VideoSummaryTasksController
           preferVttSubtitlesOverride ?? configuration.preferVttSubtitles;
       final configuredTranscriptModel = transcriptModelNameFromPath(modelPath);
       final folder = await foldersDao.getFolderById(video.folderId);
+      cancellation.throwIfCancelled();
       if (folder == null) {
         throw StateError('Library folder is missing.');
       }
@@ -223,41 +392,43 @@ class VideoSummaryTasksController
           }
 
           final stat = await file.stat();
-          final subtitleTranscript = preferVttSubtitles
-              ? await _readSiblingVttTranscript(video.absolutePath)
-              : null;
-          final transcriptModel =
-              subtitleTranscript?.freshnessModel ?? configuredTranscriptModel;
+          cancellation.throwIfCancelled();
           final existing = await dao.getSummaryForVideo(video.id);
+          cancellation.throwIfCancelled();
+          _VttTranscriptSource? currentVttSource;
 
           if (!forceRefresh && existing != null) {
-            final freshnessKey = VideoSummaryFreshnessKey(
-              sourceVideoSize: existing.sourceVideoSize,
-              sourceVideoModifiedAt: existing.sourceVideoModifiedAt,
-              transcriptModel: existing.transcriptModel,
+            final parsed = _parseStoredVideoSummary(existing);
+            final transcriptIdentities = await _acceptedTranscriptIdentities(
+              videoPath: video.absolutePath,
+              storedTranscriptIdentity: existing.transcriptModel,
+              configuredTranscriptIdentity: configuredTranscriptModel,
+              onVttSource: (source) => currentVttSource = source,
             );
-
-            final cachedSummary = StructuredVideoSummary.fromJson(
-              Map<String, dynamic>.from(
-                jsonDecode(existing.summaryJson) as Map<String, dynamic>,
-              ),
+            cancellation.throwIfCancelled();
+            final stored = _applyFreshness(
+              parsed,
+              record: existing,
+              videoStat: stat,
+              transcriptIdentities: transcriptIdentities,
+              summaryModel: summaryModel,
             );
-
-            if (freshnessKey.matches(
-                  fileSize: stat.size,
-                  fileModifiedAt: stat.modified,
-                  transcriptModel: transcriptModel,
-                ) &&
-                cachedSummary.synopsis.isNotEmpty) {
-              if (existing.summaryModel != summaryModel) {
-                // Continue generation when the summarization endpoint changed.
-              } else {
-                _setPhase(video.id, VideoSummaryTaskPhase.completed);
-                return;
-              }
+            if (stored.status == VideoSummaryStatus.fresh) {
+              cancellation.throwIfCancelled();
+              _setPhase(video.id, VideoSummaryTaskPhase.completed);
+              return;
             }
           }
 
+          final subtitleTranscript = preferVttSubtitles
+              ? await _readSiblingVttTranscript(
+                  video.absolutePath,
+                  source: currentVttSource,
+                )
+              : null;
+          cancellation.throwIfCancelled();
+          final transcriptModel =
+              subtitleTranscript?.freshnessModel ?? configuredTranscriptModel;
           final String transcript;
           if (subtitleTranscript != null) {
             transcript = subtitleTranscript.transcript;
@@ -265,6 +436,7 @@ class VideoSummaryTasksController
             final validation = await ref.read(
               summaryModelValidationProvider.future,
             );
+            cancellation.throwIfCancelled();
             if (!validation.isValid) {
               throw StateError(
                 'Summary model is not ready: ${validation.status}.',
@@ -275,6 +447,7 @@ class VideoSummaryTasksController
             audioPath = await mediaService.extractTranscriptionAudio(
               video.absolutePath,
             );
+            cancellation.throwIfCancelled();
             if (audioPath == null) {
               throw StateError('Audio extraction failed.');
             }
@@ -284,6 +457,7 @@ class VideoSummaryTasksController
               audioPath: audioPath!,
               modelPath: modelPath,
             );
+            cancellation.throwIfCancelled();
           }
 
           _setPhase(video.id, VideoSummaryTaskPhase.summarizing);
@@ -294,6 +468,7 @@ class VideoSummaryTasksController
             apiUrl: summaryApiUrl,
             apiKey: summaryApiKey,
           );
+          cancellation.throwIfCancelled();
 
           _setPhase(video.id, VideoSummaryTaskPhase.saving);
           final now = DateTime.now();
@@ -310,10 +485,13 @@ class VideoSummaryTasksController
               updatedAt: drift.Value(now),
             ),
           );
+          cancellation.throwIfCancelled();
 
           _setPhase(video.id, VideoSummaryTaskPhase.completed);
         },
       );
+    } on _VideoSummaryCancelled {
+      _removeTask(video.id);
     } catch (error) {
       _setTask(
         VideoSummaryTaskState(
@@ -325,6 +503,9 @@ class VideoSummaryTasksController
       );
     } finally {
       _isGenerating = false;
+      if (identical(_activeCancellation, cancellation)) {
+        _activeCancellation = null;
+      }
       if (audioPath != null) {
         final audioFile = File(audioPath!);
         if (await audioFile.exists()) {
@@ -332,6 +513,15 @@ class VideoSummaryTasksController
         }
       }
     }
+  }
+
+  void cancel(int videoId) {
+    final cancellation = _activeCancellation;
+    if (cancellation == null || cancellation.videoId != videoId) {
+      return;
+    }
+    cancellation.cancel();
+    _removeTask(videoId);
   }
 
   void _setPhase(int videoId, VideoSummaryTaskPhase phase) {
@@ -345,6 +535,149 @@ class VideoSummaryTasksController
   void _setTask(VideoSummaryTaskState task) {
     state = {...state, task.videoId: task};
   }
+
+  void _removeTask(int videoId) {
+    state = Map<int, VideoSummaryTaskState>.of(state)..remove(videoId);
+  }
+}
+
+class _VideoSummaryCancellation {
+  _VideoSummaryCancellation(this.videoId);
+
+  final int videoId;
+  bool _isCancelled = false;
+
+  void cancel() => _isCancelled = true;
+
+  void throwIfCancelled() {
+    if (_isCancelled) {
+      throw const _VideoSummaryCancelled();
+    }
+  }
+}
+
+class _VideoSummaryCancelled implements Exception {
+  const _VideoSummaryCancelled();
+}
+
+class _StoredVideoSummaryState {
+  const _StoredVideoSummaryState({
+    required this.status,
+    this.summary,
+    this.error,
+  });
+
+  final VideoSummaryStatus status;
+  final StructuredVideoSummary? summary;
+  final Object? error;
+
+  _StoredVideoSummaryState asStale([Object? error]) {
+    return _StoredVideoSummaryState(
+      status: VideoSummaryStatus.stale,
+      summary: summary,
+      error: error,
+    );
+  }
+}
+
+_StoredVideoSummaryState _parseStoredVideoSummary(VideoSummary? record) {
+  if (record == null) {
+    return const _StoredVideoSummaryState(status: VideoSummaryStatus.missing);
+  }
+
+  try {
+    final decoded = jsonDecode(record.summaryJson);
+    if (decoded is! Map) {
+      throw const FormatException('Stored summary must be a JSON object.');
+    }
+    final summary = StructuredVideoSummary.fromJson(
+      Map<String, dynamic>.from(decoded),
+    );
+    return _StoredVideoSummaryState(
+      status: VideoSummaryStatus.stale,
+      summary: summary,
+    );
+  } catch (error) {
+    return _StoredVideoSummaryState(
+      status: VideoSummaryStatus.malformed,
+      error: error is FormatException
+          ? error
+          : const FormatException('Stored summary is malformed.'),
+    );
+  }
+}
+
+_StoredVideoSummaryState _applyFreshness(
+  _StoredVideoSummaryState parsed, {
+  required VideoSummary record,
+  required FileStat videoStat,
+  required Set<String> transcriptIdentities,
+  required String summaryModel,
+}) {
+  if (parsed.status == VideoSummaryStatus.malformed ||
+      parsed.status == VideoSummaryStatus.missing) {
+    return parsed;
+  }
+
+  final isFresh =
+      videoStat.type == FileSystemEntityType.file &&
+      record.sourceVideoSize == videoStat.size &&
+      _samePersistedTimestamp(
+        record.sourceVideoModifiedAt,
+        videoStat.modified,
+      ) &&
+      transcriptIdentities.contains(record.transcriptModel) &&
+      record.summaryModel == summaryModel;
+  return _StoredVideoSummaryState(
+    status: isFresh ? VideoSummaryStatus.fresh : VideoSummaryStatus.stale,
+    summary: parsed.summary,
+  );
+}
+
+bool _samePersistedTimestamp(DateTime stored, DateTime current) {
+  return stored.millisecondsSinceEpoch ~/ 1000 ==
+      current.millisecondsSinceEpoch ~/ 1000;
+}
+
+Future<Set<String>> _acceptedTranscriptIdentities({
+  required String videoPath,
+  required String storedTranscriptIdentity,
+  required String configuredTranscriptIdentity,
+  void Function(_VttTranscriptSource source)? onVttSource,
+}) async {
+  if (!storedTranscriptIdentity.startsWith(_vttTranscriptIdentityPrefix)) {
+    return {configuredTranscriptIdentity};
+  }
+
+  final source = await _findSiblingVttSource(videoPath);
+  if (source == null) {
+    return const {};
+  }
+  onVttSource?.call(source);
+  return {source.identity};
+}
+
+class _VttTranscriptSource {
+  const _VttTranscriptSource({required this.file, required this.stat});
+
+  final File file;
+  final FileStat stat;
+
+  String get identity =>
+      '$_vttTranscriptIdentityPrefix${Uri.encodeComponent(file.absolute.path)}:'
+      '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+}
+
+Future<_VttTranscriptSource?> _findSiblingVttSource(String videoPath) async {
+  final file = await findSiblingVttFile(videoPath);
+  if (file == null) {
+    return null;
+  }
+  final stat = await file.stat();
+  if (stat.type != FileSystemEntityType.file || stat.size <= 0) {
+    return null;
+  }
+  return _VttTranscriptSource(file: file, stat: stat);
 }
 
 class _SubtitleTranscript {
@@ -357,18 +690,16 @@ class _SubtitleTranscript {
   final String freshnessModel;
 }
 
-Future<_SubtitleTranscript?> _readSiblingVttTranscript(String videoPath) async {
-  final subtitleFile = await findSiblingVttFile(videoPath);
-  if (subtitleFile == null) {
+Future<_SubtitleTranscript?> _readSiblingVttTranscript(
+  String videoPath, {
+  _VttTranscriptSource? source,
+}) async {
+  final subtitleSource = source ?? await _findSiblingVttSource(videoPath);
+  if (subtitleSource == null) {
     return null;
   }
 
-  final stat = await subtitleFile.stat();
-  if (stat.type != FileSystemEntityType.file || stat.size <= 0) {
-    return null;
-  }
-
-  final content = await subtitleFile.readAsString();
+  final content = await subtitleSource.file.readAsString();
   final transcript = await compute(parseVttTranscript, content);
   if (transcript.isEmpty) {
     return null;
@@ -376,8 +707,7 @@ Future<_SubtitleTranscript?> _readSiblingVttTranscript(String videoPath) async {
 
   return _SubtitleTranscript(
     transcript: transcript,
-    freshnessModel:
-        '$_vttTranscriptModelPrefix${stat.size}:${stat.modified.microsecondsSinceEpoch}',
+    freshnessModel: subtitleSource.identity,
   );
 }
 

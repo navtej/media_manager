@@ -92,6 +92,7 @@ void main() {
       );
       expect(summary, isNotNull);
       expect(summary!.transcriptText, 'transcript');
+      expect(await fixture.audioFile.exists(), isFalse);
       expect(
         fixture.naturalLanguageService.lastApiUrl,
         'https://summary.example.test/v1/chat/completions',
@@ -198,6 +199,197 @@ Localized subtitle line.
         fixture.naturalLanguageService.lastTranscript,
         contains('Localized subtitle line.'),
       );
+    },
+  );
+
+  test('module state and generator agree when a summary is reusable', () async {
+    final fixture = await _SummaryControllerFixture.create();
+    addTearDown(fixture.dispose);
+
+    await fixture.generate();
+    fixture.events.clear();
+
+    final state = await fixture.readState();
+    expect(state.storedStatus, VideoSummaryStatus.fresh);
+    expect(state.hasFreshSummary, isTrue);
+    fixture.events.clear();
+
+    await fixture.generate();
+
+    expect(fixture.events, [
+      'start:${fixture.root.path}',
+      'stop:${fixture.root.path}',
+    ]);
+    expect(
+      fixture.container.read(videoSummaryTaskProvider(fixture.video.id))?.phase,
+      VideoSummaryTaskPhase.completed,
+    );
+  });
+
+  test(
+    'module state detects video size, mtime, model, and summarizer changes',
+    () async {
+      final fixture = await _SummaryControllerFixture.create();
+      addTearDown(fixture.dispose);
+
+      await fixture.seedSummary();
+      expect(
+        (await fixture.readState()).storedStatus,
+        VideoSummaryStatus.fresh,
+      );
+
+      final originalStat = await fixture.videoFile.stat();
+      await fixture.videoFile.setLastModified(
+        originalStat.modified.add(const Duration(seconds: 2)),
+      );
+      fixture.invalidateState();
+      expect(
+        (await fixture.readState()).storedStatus,
+        VideoSummaryStatus.stale,
+      );
+
+      await fixture.seedSummary();
+      await fixture.videoFile.writeAsBytes(const [1, 2, 3, 4]);
+      fixture.invalidateState();
+      expect(
+        (await fixture.readState()).storedStatus,
+        VideoSummaryStatus.stale,
+      );
+
+      await fixture.seedSummary(transcriptModel: 'different-model.bin');
+      fixture.invalidateState();
+      expect(
+        (await fixture.readState()).storedStatus,
+        VideoSummaryStatus.stale,
+      );
+
+      await fixture.seedSummary(
+        summaryModel: summaryModelNameFromApiUrl(
+          'https://different.example.test/v1/chat/completions',
+        ),
+      );
+      fixture.invalidateState();
+      expect(
+        (await fixture.readState()).storedStatus,
+        VideoSummaryStatus.stale,
+      );
+    },
+  );
+
+  test('module state detects VTT modification and removal', () async {
+    final fixture = await _SummaryControllerFixture.create();
+    addTearDown(fixture.dispose);
+    var subtitle = File(p.join(fixture.root.path, 'video.vtt'));
+    await subtitle.writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Original subtitle.
+''');
+
+    await fixture.generate();
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.fresh);
+
+    final localizedSubtitle = await subtitle.rename(
+      p.join(fixture.root.path, 'video.en.vtt'),
+    );
+    fixture.invalidateState();
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.stale);
+
+    subtitle = await localizedSubtitle.rename(
+      p.join(fixture.root.path, 'video.vtt'),
+    );
+    await subtitle.writeAsString('''
+WEBVTT
+
+00:00:00.000 --> 00:00:03.000
+Changed subtitle content.
+''');
+    fixture.invalidateState();
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.stale);
+
+    await subtitle.delete();
+    fixture.invalidateState();
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.stale);
+  });
+
+  test('malformed stored summary is reported and regenerated', () async {
+    final fixture = await _SummaryControllerFixture.create();
+    addTearDown(fixture.dispose);
+    await fixture.seedSummary(summaryJson: '{not-json');
+
+    final state = await fixture.readState();
+    expect(state.status, VideoSummaryStatus.malformed);
+    expect(state.summary, isNull);
+    expect(state.error, isA<FormatException>());
+
+    await fixture.generate();
+
+    expect(
+      fixture.container.read(videoSummaryTaskProvider(fixture.video.id))?.phase,
+      VideoSummaryTaskPhase.completed,
+    );
+    expect(fixture.naturalLanguageService.summarizeCount, 1);
+    expect(
+      (await fixture.db.videoSummariesDao.getSummaryForVideo(
+        fixture.video.id,
+      ))?.summaryJson,
+      contains('synopsis'),
+    );
+  });
+
+  test('force refresh regenerates an otherwise fresh summary', () async {
+    final fixture = await _SummaryControllerFixture.create();
+    addTearDown(fixture.dispose);
+    await fixture.seedSummary();
+
+    await fixture.generate(forceRefresh: true);
+
+    expect(fixture.naturalLanguageService.summarizeCount, 1);
+    expect(fixture.events, contains('extract:${fixture.video.absolutePath}'));
+  });
+
+  test('failure releases Library access and deletes temporary audio', () async {
+    final fixture = await _SummaryControllerFixture.create(failSummary: true);
+    addTearDown(fixture.dispose);
+
+    await fixture.generate();
+
+    expect(
+      fixture.container.read(videoSummaryTaskProvider(fixture.video.id))?.phase,
+      VideoSummaryTaskPhase.failed,
+    );
+    expect(await fixture.audioFile.exists(), isFalse);
+    expect(fixture.events.last, 'stop:${fixture.root.path}');
+  });
+
+  test(
+    'cancellation prevents saving and releases temporary resources',
+    () async {
+      final transcriptCompleter = Completer<String>();
+      final fixture = await _SummaryControllerFixture.create(
+        transcriptCompleter: transcriptCompleter,
+      );
+      addTearDown(fixture.dispose);
+
+      final generation = fixture.generate();
+      await fixture.waitForEvent('transcribe');
+      fixture.container
+          .read(videoSummaryTasksProvider.notifier)
+          .cancel(fixture.video.id);
+      transcriptCompleter.complete('transcript');
+      await generation;
+
+      expect(
+        fixture.container.read(videoSummaryTaskProvider(fixture.video.id)),
+        isNull,
+      );
+      expect(
+        await fixture.db.videoSummariesDao.getSummaryForVideo(fixture.video.id),
+        isNull,
+      );
+      expect(await fixture.audioFile.exists(), isFalse);
+      expect(fixture.events.last, 'stop:${fixture.root.path}');
     },
   );
 
@@ -330,6 +522,18 @@ Override subtitle should be used.
       fixture.naturalLanguageService.lastTranscript,
       contains('Override subtitle should be used.'),
     );
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.fresh);
+
+    final otherModel = File(p.join(fixture.root.path, 'ggml-other.bin'));
+    await otherModel.writeAsBytes(const [9, 8, 7]);
+    await fixture.container
+        .read(settingsProvider.notifier)
+        .setLocalSummaryModelPath(otherModel.path);
+    fixture.invalidateState();
+
+    expect((await fixture.readState()).storedStatus, VideoSummaryStatus.fresh);
+    await fixture.generate();
+    expect(fixture.naturalLanguageService.summarizeCount, 1);
   });
 }
 
@@ -339,6 +543,7 @@ class _SummaryControllerFixture {
     required this.container,
     required this.root,
     required this.video,
+    required this.videoFile,
     required this.mediaService,
     required this.naturalLanguageService,
     required this.audioFile,
@@ -349,6 +554,7 @@ class _SummaryControllerFixture {
   final ProviderContainer container;
   final Directory root;
   final Video video;
+  final File videoFile;
   final _FakeMediaService mediaService;
   final _FakeNaturalLanguageService naturalLanguageService;
   final File audioFile;
@@ -360,6 +566,7 @@ class _SummaryControllerFixture {
     bool preferVttSubtitles = true,
     String summaryApiUrl = 'https://summary.example.test/v1/chat/completions',
     String summaryApiKey = 'sk-test',
+    bool failSummary = false,
     SummaryModelValidationResult modelValidation =
         const SummaryModelValidationResult.valid('Ready'),
   }) async {
@@ -408,6 +615,7 @@ class _SummaryControllerFixture {
     final naturalLanguageService = _FakeNaturalLanguageService(
       events: events,
       transcriptCompleter: transcriptCompleter,
+      failSummary: failSummary,
     );
 
     final container = ProviderContainer(
@@ -437,6 +645,7 @@ class _SummaryControllerFixture {
       container: container,
       root: root,
       video: video,
+      videoFile: videoFile,
       mediaService: mediaService,
       naturalLanguageService: naturalLanguageService,
       audioFile: audioFile,
@@ -444,13 +653,64 @@ class _SummaryControllerFixture {
     );
   }
 
-  Future<void> generate({bool? preferVttSubtitlesOverride}) {
+  Future<void> generate({
+    bool forceRefresh = false,
+    bool? preferVttSubtitlesOverride,
+  }) {
     return container
         .read(videoSummaryTasksProvider.notifier)
         .generate(
           video,
+          forceRefresh: forceRefresh,
           preferVttSubtitlesOverride: preferVttSubtitlesOverride,
         );
+  }
+
+  Future<VideoSummaryState> readState() async {
+    final provider = videoSummaryStateProvider(video);
+    final subscription = container.listen(
+      provider,
+      (_, _) {},
+      fireImmediately: true,
+    );
+    try {
+      return await container.read(provider.future);
+    } finally {
+      subscription.close();
+    }
+  }
+
+  void invalidateState() {
+    container.invalidate(videoSummaryStateProvider(video));
+  }
+
+  Future<void> seedSummary({
+    String summaryJson =
+        '{"synopsis":"synopsis","highlights":["highlight"],"keywords":["keyword"]}',
+    String? transcriptModel,
+    String? summaryModel,
+  }) async {
+    final stat = await videoFile.stat();
+    final now = DateTime.now();
+    await db.videoSummariesDao.upsertSummary(
+      VideoSummariesCompanion.insert(
+        videoId: drift.Value(video.id),
+        transcriptText: 'transcript',
+        summaryJson: summaryJson,
+        transcriptModel:
+            transcriptModel ??
+            transcriptModelNameFromPath(mediaService.modelPath),
+        summaryModel:
+            summaryModel ??
+            summaryModelNameFromApiUrl(
+              'https://summary.example.test/v1/chat/completions',
+            ),
+        sourceVideoSize: stat.size,
+        sourceVideoModifiedAt: stat.modified,
+        generatedAt: drift.Value(now),
+        updatedAt: drift.Value(now),
+      ),
+    );
   }
 
   Future<void> waitForEvent(String event) async {
@@ -524,9 +784,11 @@ class _FakeLibraryAccessAdapter implements LibraryAccessAdapter {
 }
 
 class _FakeMediaService extends MediaService {
-  _FakeMediaService({required this.audioPath, required this.events});
+  _FakeMediaService({required this.audioPath, required this.events})
+    : modelPath = p.join(File(audioPath).parent.path, 'ggml-test.bin');
 
   final String audioPath;
+  final String modelPath;
   final List<String> events;
   final extractedPaths = <String>[];
 
@@ -534,18 +796,28 @@ class _FakeMediaService extends MediaService {
   Future<String?> extractTranscriptionAudio(String path) async {
     events.add('extract:$path');
     extractedPaths.add(path);
+    final file = File(audioPath);
+    if (!await file.exists()) {
+      await file.writeAsBytes(const <int>[4, 5, 6]);
+    }
     return audioPath;
   }
 }
 
 class _FakeNaturalLanguageService extends NaturalLanguageService {
-  _FakeNaturalLanguageService({required this.events, this.transcriptCompleter});
+  _FakeNaturalLanguageService({
+    required this.events,
+    this.transcriptCompleter,
+    this.failSummary = false,
+  });
 
   final List<String> events;
   final Completer<String>? transcriptCompleter;
+  final bool failSummary;
   String? lastTranscript;
   String? lastApiUrl;
   String? lastApiKey;
+  int summarizeCount = 0;
 
   @override
   Future<String> transcribeAudio({
@@ -567,6 +839,10 @@ class _FakeNaturalLanguageService extends NaturalLanguageService {
     required String apiKey,
   }) async {
     events.add('summarize');
+    summarizeCount += 1;
+    if (failSummary) {
+      throw StateError('Summary failed.');
+    }
     lastTranscript = transcript;
     lastApiUrl = apiUrl;
     lastApiKey = apiKey;

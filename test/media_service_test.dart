@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:movie_manager/services/media_service.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   group('MediaService candidate validation', () {
@@ -57,5 +60,30 @@ void main() {
         isTrue,
       );
     });
+  });
+
+  test('deletes partial transcription audio when extraction throws', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'media-service-audio-cleanup-test',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    File? partialAudio;
+    final service = MediaService(
+      temporaryDirectory: () async => root,
+      transcriptionAudioExtractor:
+          ({required inputPath, required outputPath}) async {
+            partialAudio = File(outputPath);
+            await partialAudio!.writeAsBytes(const [1, 2, 3]);
+            throw StateError('FFmpeg failed after creating output.');
+          },
+    );
+
+    await expectLater(
+      service.extractTranscriptionAudio(p.join(root.path, 'video.mp4')),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(partialAudio, isNotNull);
+    expect(await partialAudio!.exists(), isFalse);
   });
 }

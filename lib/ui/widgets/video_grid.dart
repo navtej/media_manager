@@ -281,23 +281,13 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   Widget _buildActions(WidgetRef ref) {
-    final summaryRecord = ref
-        .watch(videoSummaryRecordProvider(widget.video.id))
-        .asData
-        ?.value;
-    final configuration = ref.watch(videoSummaryConfigurationProvider);
-    final configuredModel = transcriptModelNameFromPath(
-      configuration.asData?.value.modelPath ?? '',
-    );
-    final configuredSummaryModel = summaryModelNameFromApiUrl(
-      configuration.asData?.value.apiUrl ?? '',
-    );
-    final hasFreshSummary = _hasFreshSummary(
-      video: widget.video,
-      record: summaryRecord,
-      transcriptModel: configuredModel,
-      summaryModel: configuredSummaryModel,
-    );
+    final hasFreshSummary =
+        ref
+            .watch(videoSummaryStateProvider(widget.video))
+            .asData
+            ?.value
+            .hasFreshSummary ==
+        true;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -343,7 +333,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
               color: hasFreshSummary ? MacosColors.systemGreenColor : null,
               size: 16,
             ),
-            onPressed: () => _showSummaryDialog(context, widget.video),
+            onPressed: () => _showSummaryDialog(context, ref, widget.video),
           ),
         ),
         // Delete
@@ -516,57 +506,42 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  void _showSummaryDialog(BuildContext context, Video video) {
+  void _showSummaryDialog(BuildContext context, WidgetRef ref, Video video) {
+    ref.invalidate(videoSummaryStateProvider(video));
+    ref.invalidate(videoSummarySubtitleAvailabilityProvider(video));
     bool? useVttForThisSummary;
     showMacosAlertDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (_, setDialogState) => Consumer(
           builder: (context, ref, _) {
-            final summaryRecord = ref.watch(
-              videoSummaryRecordProvider(video.id),
-            );
-            final taskState = ref.watch(videoSummaryTaskProvider(video.id));
+            final summaryState = ref.watch(videoSummaryStateProvider(video));
             final subtitleAvailability = ref.watch(
               videoSummarySubtitleAvailabilityProvider(video),
             );
             final modelValidation = ref.watch(summaryModelValidationProvider);
-            final configuration = ref.watch(videoSummaryConfigurationProvider);
 
-            final record = summaryRecord.asData?.value;
-            final summary = _parseStructuredSummary(record?.summaryJson);
-            final configuredModel = transcriptModelNameFromPath(
-              configuration.asData?.value.modelPath ?? '',
-            );
-            final configuredSummaryModel = summaryModelNameFromApiUrl(
-              configuration.asData?.value.apiUrl ?? '',
-            );
-            final summaryPreferVttSubtitles =
-                configuration.asData?.value.preferVttSubtitles ??
-                VideoSummaryConfiguration.defaults.preferVttSubtitles;
+            final state = summaryState.asData?.value;
+            final taskState = state?.task;
+            final summary = state?.summary;
+            final configuredModel = state?.configuredTranscriptModel ?? '';
+            final summaryPreferVttSubtitles = state?.preferVttSubtitles;
 
-            final isStale =
-                record != null &&
-                video.fileCreatedAt != null &&
-                !_isFreshSummaryRecord(
-                  video: video,
-                  record: record,
-                  transcriptModel: configuredModel,
-                  summaryModel: configuredSummaryModel,
-                );
-
-            final actionLabel = record == null || isStale
-                ? 'Generate'
-                : 'Regenerate';
-            final isGenerating = taskState?.isRunning == true;
-            final errorText = taskState?.phase == VideoSummaryTaskPhase.failed
-                ? taskState?.error.toString()
+            final isStale = state?.storedStatus == VideoSummaryStatus.stale;
+            final isMalformed =
+                state?.storedStatus == VideoSummaryStatus.malformed;
+            final actionLabel = state?.hasStoredSummary == true
+                ? 'Regenerate'
+                : 'Generate';
+            final isGenerating = state?.isGenerating == true;
+            final errorText = state?.status == VideoSummaryStatus.failed
+                ? state?.error.toString()
                 : null;
             final vttAvailable =
                 subtitleAvailability.asData?.value.isFound == true;
             useVttForThisSummary ??= summaryPreferVttSubtitles;
             final effectiveUseVtt =
-                vttAvailable && (useVttForThisSummary ?? true);
+                vttAvailable && (useVttForThisSummary ?? false);
 
             return MacosAlertDialog(
               appIcon: const MacosIcon(CupertinoIcons.doc_text),
@@ -636,6 +611,12 @@ class _VideoGridItemState extends State<VideoGridItem> {
                       ),
                       const SizedBox(height: 12),
                     ],
+                    if (isMalformed) ...[
+                      const Text(
+                        'Stored summary is malformed and should be regenerated.',
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (errorText != null) ...[
                       SummaryErrorPanel(errorText: errorText),
                       const SizedBox(height: 12),
@@ -663,7 +644,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                               .read(videoSummaryTasksProvider.notifier)
                               .generate(
                                 video,
-                                forceRefresh: record != null,
+                                forceRefresh: state?.hasStoredSummary == true,
                                 preferVttSubtitlesOverride: vttAvailable
                                     ? effectiveUseVtt
                                     : null,
@@ -685,56 +666,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  bool _hasFreshSummary({
-    required Video video,
-    required VideoSummary? record,
-    required String transcriptModel,
-    required String summaryModel,
-  }) {
-    if (record == null) {
-      return false;
-    }
-
-    final modifiedAt = video.fileCreatedAt;
-    if (modifiedAt == null) {
-      return true;
-    }
-
-    return _isFreshSummaryRecord(
-      video: video,
-      record: record,
-      transcriptModel: transcriptModel,
-      summaryModel: summaryModel,
-    );
-  }
-
-  bool _isFreshSummaryRecord({
-    required Video video,
-    required VideoSummary record,
-    required String transcriptModel,
-    required String summaryModel,
-  }) {
-    final modifiedAt = video.fileCreatedAt;
-    if (modifiedAt == null) {
-      return true;
-    }
-
-    final expectedTranscriptModel = record.transcriptModel.startsWith('vtt:')
-        ? record.transcriptModel
-        : transcriptModel;
-
-    return record.summaryModel == summaryModel &&
-        VideoSummaryFreshnessKey(
-          sourceVideoSize: record.sourceVideoSize,
-          sourceVideoModifiedAt: record.sourceVideoModifiedAt,
-          transcriptModel: record.transcriptModel,
-        ).matches(
-          fileSize: video.size,
-          fileModifiedAt: modifiedAt,
-          transcriptModel: expectedTranscriptModel,
-        );
-  }
-
   String _getDriveName(String path) {
     if (path.startsWith('/Volumes/')) {
       final parts = path.split('/');
@@ -752,20 +683,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
       return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
     return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
-  StructuredVideoSummary? _parseStructuredSummary(String? rawJson) {
-    if (rawJson == null || rawJson.isEmpty) {
-      return null;
-    }
-
-    try {
-      return StructuredVideoSummary.fromJson(
-        Map<String, dynamic>.from(jsonDecode(rawJson) as Map<String, dynamic>),
-      );
-    } catch (_) {
-      return null;
-    }
   }
 }
 
