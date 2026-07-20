@@ -218,6 +218,8 @@ class _VideoMoveDialog extends ConsumerStatefulWidget {
 class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
   static const double _popupLabelReservedWidth = 40;
 
+  late final List<int> _uniqueSelectedVideoIds;
+  late final Future<VideoSelectionSizeSummary> _selectionSummaryFuture;
   int? _destinationFolderId;
   int? _scanAfterMoveFolderId;
   bool _removeEmptySourceFolders = false;
@@ -227,6 +229,15 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
   Future<VideoMovePreflight>? _preflightFuture;
   int? _preflightDestinationFolderId;
   String? _preflightSelectionKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _uniqueSelectedVideoIds = widget.selectedVideoIds.toSet().toList()..sort();
+    _selectionSummaryFuture = ref
+        .read(videoMoveControllerProvider.notifier)
+        .summarizeSelection(_uniqueSelectedVideoIds);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +290,10 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${widget.selectedVideoIds.length} selected'),
+          _SelectionSizeSummaryLabel(
+            selectedCount: _uniqueSelectedVideoIds.length,
+            summaryFuture: _selectionSummaryFuture,
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -491,6 +505,32 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
 
   String _folderLabel(Folder folder) {
     return '${libraryDisplayName(folder)} (${folder.path})';
+  }
+}
+
+class _SelectionSizeSummaryLabel extends StatelessWidget {
+  const _SelectionSizeSummaryLabel({
+    required this.selectedCount,
+    required this.summaryFuture,
+  });
+
+  final int selectedCount;
+  final Future<VideoSelectionSizeSummary> summaryFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<VideoSelectionSizeSummary>(
+      future: summaryFuture,
+      builder: (context, snapshot) {
+        final label = switch (snapshot) {
+          AsyncSnapshot(hasData: true, data: final summary?) => summary.label,
+          AsyncSnapshot(hasError: true) =>
+            '$selectedCount selected • total size unavailable',
+          _ => '$selectedCount selected • Calculating size…',
+        };
+        return Text(label, key: const ValueKey('move-selection-size-summary'));
+      },
+    );
   }
 }
 

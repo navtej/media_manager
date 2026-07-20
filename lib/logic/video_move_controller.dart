@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/library_access_service.dart';
+import 'catalog_controller.dart';
 import 'library_operation_controller.dart';
 import 'private_library_controller.dart';
 import 'status_message_provider.dart';
@@ -143,6 +144,53 @@ class VideoMoveResult {
   bool get hasFailuresOrSkips => failures.isNotEmpty || skipped.isNotEmpty;
 }
 
+final class VideoSelectionSizeSummary {
+  const VideoSelectionSizeSummary({
+    required this.selectedCount,
+    required this.knownBytes,
+    required this.unknownCount,
+  });
+
+  factory VideoSelectionSizeSummary.fromSelection({
+    required Iterable<int> selectedIds,
+    required Iterable<Video> videos,
+  }) {
+    final uniqueIds = selectedIds.toSet();
+    final videosById = {for (final video in videos) video.id: video};
+    var knownBytes = 0;
+    var unknownCount = 0;
+
+    for (final id in uniqueIds) {
+      final size = videosById[id]?.size;
+      if (size == null || size <= 0) {
+        unknownCount += 1;
+      } else {
+        knownBytes += size;
+      }
+    }
+
+    return VideoSelectionSizeSummary(
+      selectedCount: uniqueIds.length,
+      knownBytes: knownBytes,
+      unknownCount: unknownCount,
+    );
+  }
+
+  final int selectedCount;
+  final int knownBytes;
+  final int unknownCount;
+
+  String get label {
+    final total = LibraryStats.formatSize(knownBytes);
+    if (unknownCount == 0) {
+      return '$selectedCount selected • $total';
+    }
+    final unknownLabel = unknownCount == 1 ? 'size unknown' : 'sizes unknown';
+    return '$selectedCount selected • $total known • '
+        '$unknownCount $unknownLabel';
+  }
+}
+
 List<VideoMovePlanItem> buildVideoMovePlan({
   required List<Video> videos,
   required Map<int, Folder> foldersById,
@@ -185,6 +233,17 @@ List<VideoMovePlanItem> buildVideoMovePlan({
 class VideoMoveController extends Notifier<VideoMoveState> {
   @override
   VideoMoveState build() => const VideoMoveState();
+
+  Future<VideoSelectionSizeSummary> summarizeSelection(
+    Iterable<int> videoIds,
+  ) async {
+    final uniqueIds = videoIds.toSet().toList()..sort();
+    final videos = await ref.read(videosDaoProvider).getVideosByIds(uniqueIds);
+    return VideoSelectionSizeSummary.fromSelection(
+      selectedIds: uniqueIds,
+      videos: videos,
+    );
+  }
 
   Future<VideoMovePreflight> preflightMove({
     required List<int> videoIds,
