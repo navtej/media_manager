@@ -9,7 +9,6 @@ import '../services/library_access_service.dart';
 import 'library_operation_controller.dart';
 import 'private_library_controller.dart';
 import 'status_message_provider.dart';
-import 'stats_provider.dart';
 import 'video_selection_controller.dart';
 
 class VideoMoveState {
@@ -449,8 +448,6 @@ class VideoMoveController extends Notifier<VideoMoveState> {
               ref
                   .read(videoSelectionControllerProvider.notifier)
                   .removeIds(clearFromSelection);
-              ref.invalidate(libraryStatsProvider);
-
               final result = VideoMoveResult(
                 moved: moved,
                 skipped: skipped,

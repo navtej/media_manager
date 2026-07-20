@@ -9,6 +9,7 @@ import '../../data/providers.dart';
 
 import '../../logic/model_download_controller.dart';
 import '../../logic/maintenance_controller.dart';
+import '../../logic/catalog_controller.dart';
 import '../../logic/folder_storage_status.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/library_name.dart';

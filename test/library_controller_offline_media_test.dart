@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
+import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/library_operation_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
@@ -56,11 +57,11 @@ void main() {
 
     final updated = (await db.videosDao.getVideoById(video.id))!;
     expect(updated.isOffline, isTrue);
-    expect(
-      await db.videosDao.searchVideos(includeOffline: false).first,
-      isEmpty,
-    );
-    expect(await db.videosDao.countVideos(includeOffline: false).first, 0);
+    final catalog = await CatalogQueryModule(
+      db,
+    ).fetch(_criteria(folderId: folderId));
+    expect(catalog.loadedVideos, isEmpty);
+    expect(catalog.totalCount, 0);
   });
 
   test('online removable-folder videos remain visible', () async {
@@ -82,9 +83,9 @@ void main() {
       ),
     );
 
-    final visible = await db.videosDao
-        .searchVideos(includeOffline: false)
-        .first;
+    final visible = (await CatalogQueryModule(
+      db,
+    ).fetch(_criteria(folderId: folderId))).loadedVideos;
     expect(visible.map((video) => video.absolutePath), [
       '/Volumes/Mounted/Movies/clip.mp4',
     ]);
@@ -124,6 +125,20 @@ void main() {
       'stop:${root.path}',
     ]);
   });
+}
+
+CatalogCriteria _criteria({required int folderId}) {
+  return CatalogCriteria(
+    searchQuery: '',
+    primaryTags: const <String>[],
+    relatedTags: const <String>[],
+    favoritesOnly: false,
+    sortBy: SortOption.title,
+    sortDirection: SortDirection.asc,
+    pageLimit: 50,
+    includeOffline: false,
+    folderIds: <int>[folderId],
+  );
 }
 
 class _DenyingLibraryAccessAdapter implements LibraryAccessAdapter {

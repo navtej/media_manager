@@ -5,7 +5,6 @@ import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
 import 'managed_library_service.dart';
 import 'private_library_controller.dart';
-import 'stats_provider.dart';
 
 part 'maintenance_controller.g.dart';
 
@@ -65,7 +64,6 @@ class MaintenanceController extends _$MaintenanceController {
         'DEBUG: Removed folder $folderId and '
         '${result.removedVideoCount} videos',
       );
-      ref.invalidate(libraryStatsProvider);
     }
     return result;
   }
@@ -74,9 +72,6 @@ class MaintenanceController extends _$MaintenanceController {
     final result = await ref
         .read(mediaDeletionServiceProvider)
         .deleteVideo(videoId);
-    if (result.isDeleted) {
-      ref.invalidate(libraryStatsProvider);
-    }
     return result;
   }
 
@@ -89,9 +84,6 @@ class MaintenanceController extends _$MaintenanceController {
             final result = await ref
                 .read(mediaDeletionServiceProvider)
                 .deleteVideos(videoIds);
-            if (result.deletedVideoIds.isNotEmpty) {
-              ref.invalidate(libraryStatsProvider);
-            }
             return result;
           },
         );

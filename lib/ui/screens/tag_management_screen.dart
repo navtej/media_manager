@@ -5,7 +5,7 @@ import 'package:macos_ui/macos_ui.dart';
 
 import '../../data/database.dart';
 import '../../data/providers.dart';
-import '../../logic/filter_controller.dart';
+import '../../logic/catalog_controller.dart';
 import '../../logic/private_library_controller.dart';
 
 enum TagSortOption { name, count }
@@ -333,8 +333,8 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                 onViewVideos: () {
                   // Set the tag in the filter and navigate to home screen
                   ref
-                      .read(primarySelectedTagsProvider.notifier)
-                      .set(tag.tagText);
+                      .read(catalogControllerProvider.notifier)
+                      .setPrimaryTag(tag.tagText);
                   Navigator.of(context).pop();
                 },
               );

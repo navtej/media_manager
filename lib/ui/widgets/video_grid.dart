@@ -1,5 +1,4 @@
 import 'dart:convert';
-import '../../logic/stats_provider.dart';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:path/path.dart' as p;
 import '../../data/database.dart';
 import '../../data/providers.dart';
-import '../../logic/filter_controller.dart';
+import '../../logic/catalog_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/playback_controller.dart';
 import '../../logic/settings_provider.dart';
@@ -1028,8 +1027,8 @@ class _VideoTagList extends ConsumerWidget {
                   .contains(t.tagText);
               return GestureDetector(
                 onTap: () => ref
-                    .read(primarySelectedTagsProvider.notifier)
-                    .toggle(t.tagText),
+                    .read(catalogControllerProvider.notifier)
+                    .togglePrimaryTag(t.tagText),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
@@ -1118,8 +1117,9 @@ class _FolderPathWidget extends ConsumerWidget {
         return Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: GestureDetector(
-            onTap: () =>
-                ref.read(searchQueryProvider.notifier).set(relativePath),
+            onTap: () => ref
+                .read(catalogControllerProvider.notifier)
+                .setSearchQuery(relativePath),
             child: MacosTooltip(
               message: 'Click to filter by folder: $relativePath',
               child: Text(

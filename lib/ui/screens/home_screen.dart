@@ -3,14 +3,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import '../../data/database.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
 import '../widgets/video_grid.dart';
 import '../widgets/status_footer.dart';
 import '../widgets/filter_bar.dart';
-import '../../logic/stats_provider.dart';
-import '../../logic/filter_controller.dart';
+import '../../logic/catalog_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
@@ -53,11 +51,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _onSearchChanged() {
-    ref.read(searchQueryProvider.notifier).set(_searchController.text);
+    ref
+        .read(catalogControllerProvider.notifier)
+        .setSearchQuery(_searchController.text);
   }
 
   void _onTagFilterChanged() {
-    ref.read(tagFilterQueryProvider.notifier).set(_tagFilterController.text);
+    ref
+        .read(catalogControllerProvider.notifier)
+        .setTagFilterQuery(_tagFilterController.text);
   }
 
   @override
@@ -111,13 +113,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   selected:
                       ref.watch(selectedCategoryProvider) ==
                       LibraryCategory.all,
-                  onTap: () {
-                    ref
-                        .read(selectedCategoryProvider.notifier)
-                        .set(LibraryCategory.all);
-                    ref.read(searchQueryProvider.notifier).set('');
-                    ref.read(primarySelectedTagsProvider.notifier).clear();
-                  },
+                  onTap: () => ref
+                      .read(catalogControllerProvider.notifier)
+                      .showCategory(LibraryCategory.all),
                 ),
                 _SidebarNavItem(
                   label: 'Favorites',
@@ -125,13 +123,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   selected:
                       ref.watch(selectedCategoryProvider) ==
                       LibraryCategory.favorites,
-                  onTap: () {
-                    ref
-                        .read(selectedCategoryProvider.notifier)
-                        .set(LibraryCategory.favorites);
-                    ref.read(searchQueryProvider.notifier).set('');
-                    ref.read(primarySelectedTagsProvider.notifier).clear();
-                  },
+                  onTap: () => ref
+                      .read(catalogControllerProvider.notifier)
+                      .showCategory(LibraryCategory.favorites),
                 ),
                 const Divider(height: 8, indent: 16, endIndent: 16),
 
@@ -149,8 +143,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           size: 16,
                         ),
                         onPressed: () => ref
-                            .read(selectedSortDirectionProvider.notifier)
-                            .toggle(),
+                            .read(catalogControllerProvider.notifier)
+                            .toggleSortDirection(),
                       ),
                     ],
                   ),
@@ -168,8 +162,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         selected:
                             ref.watch(selectedSortProvider) == SortOption.title,
                         onTap: () => ref
-                            .read(selectedSortProvider.notifier)
-                            .set(SortOption.title),
+                            .read(catalogControllerProvider.notifier)
+                            .setSort(SortOption.title),
                       ),
                       _GridSortItem(
                         label: 'Date',
@@ -178,8 +172,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ref.watch(selectedSortProvider) ==
                             SortOption.addedAt,
                         onTap: () => ref
-                            .read(selectedSortProvider.notifier)
-                            .set(SortOption.addedAt),
+                            .read(catalogControllerProvider.notifier)
+                            .setSort(SortOption.addedAt),
                       ),
                       _GridSortItem(
                         label: 'Duration',
@@ -188,8 +182,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ref.watch(selectedSortProvider) ==
                             SortOption.duration,
                         onTap: () => ref
-                            .read(selectedSortProvider.notifier)
-                            .set(SortOption.duration),
+                            .read(catalogControllerProvider.notifier)
+                            .setSort(SortOption.duration),
                       ),
                       _GridSortItem(
                         label: 'Size',
@@ -197,8 +191,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         selected:
                             ref.watch(selectedSortProvider) == SortOption.size,
                         onTap: () => ref
-                            .read(selectedSortProvider.notifier)
-                            .set(SortOption.size),
+                            .read(catalogControllerProvider.notifier)
+                            .setSort(SortOption.size),
                       ),
                     ],
                   ),
@@ -223,10 +217,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             size: 14,
                           ),
                           onPressed: () {
-                            ref.read(searchQueryProvider.notifier).set('');
                             ref
-                                .read(primarySelectedTagsProvider.notifier)
-                                .clear();
+                                .read(catalogControllerProvider.notifier)
+                                .clearSearchAndTags();
                             _tagFilterController.clear();
                           },
                         ),
@@ -274,10 +267,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                   .toSet(),
                                               onTagSelected: (tag) => ref
                                                   .read(
-                                                    primarySelectedTagsProvider
+                                                    catalogControllerProvider
                                                         .notifier,
                                                   )
-                                                  .toggle(tag),
+                                                  .togglePrimaryTag(tag),
                                               enableDelete: true,
                                             ),
                                             loading: () => const Center(
@@ -329,10 +322,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                     .toSet(),
                                                 onTagSelected: (tag) => ref
                                                     .read(
-                                                      secondarySelectedTagsProvider
+                                                      catalogControllerProvider
                                                           .notifier,
                                                     )
-                                                    .toggle(tag),
+                                                    .toggleRelatedTag(tag),
                                                 enableDelete: false,
                                               );
                                             },
@@ -595,7 +588,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ?.value ??
                                 0;
                             if (currentCount < totalCount) {
-                              ref.read(videoLimitProvider.notifier).loadMore();
+                              ref
+                                  .read(catalogControllerProvider.notifier)
+                                  .loadMore();
                             }
                           }
                           return false;

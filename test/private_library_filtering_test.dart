@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
-import 'package:movie_manager/logic/filter_controller.dart';
+import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/private_library_controller.dart';
-import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -218,7 +217,9 @@ void main() {
       );
       selectedVideos.toggle(fixture.publicVideoId);
       selectedVideos.toggle(fixture.privateVideoId);
-      container.read(searchQueryProvider.notifier).set('Private Clip');
+      container
+          .read(catalogControllerProvider.notifier)
+          .setSearchQuery('Private Clip');
       await tester.pump();
       expect(
         (await tester.runAsync(
@@ -240,7 +241,7 @@ void main() {
       expect(container.read(videoSelectionControllerProvider).selectedIds, {
         fixture.publicVideoId,
       });
-      container.read(searchQueryProvider.notifier).set('');
+      container.read(catalogControllerProvider.notifier).setSearchQuery('');
       await tester.pump();
       expect(
         (await tester.runAsync(
