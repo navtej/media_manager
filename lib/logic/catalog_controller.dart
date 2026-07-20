@@ -325,16 +325,32 @@ final class _CatalogPredicate {
 
 final class CatalogControlState {
   CatalogControlState({
+    required LibraryCategory category,
+    required SortOption sortBy,
+    required SortDirection sortDirection,
+    required String searchQuery,
+    required String tagFilterQuery,
+    required List<String> primaryTags,
+    required List<String> relatedTags,
+  }) : this._(
+         category: category,
+         sortBy: sortBy,
+         sortDirection: sortDirection,
+         searchQuery: searchQuery,
+         tagFilterQuery: tagFilterQuery,
+         primaryTags: List<String>.unmodifiable(primaryTags),
+         relatedTags: List<String>.unmodifiable(relatedTags),
+       );
+
+  const CatalogControlState._({
     required this.category,
     required this.sortBy,
     required this.sortDirection,
     required this.searchQuery,
     required this.tagFilterQuery,
-    required List<String> primaryTags,
-    required List<String> relatedTags,
-    required this.loadedPages,
-  }) : primaryTags = List<String>.unmodifiable(primaryTags),
-       relatedTags = List<String>.unmodifiable(relatedTags);
+    required this.primaryTags,
+    required this.relatedTags,
+  });
 
   factory CatalogControlState.initial() => CatalogControlState(
     category: LibraryCategory.all,
@@ -344,7 +360,6 @@ final class CatalogControlState {
     tagFilterQuery: '',
     primaryTags: const <String>[],
     relatedTags: const <String>[],
-    loadedPages: 1,
   );
 
   final LibraryCategory category;
@@ -354,7 +369,6 @@ final class CatalogControlState {
   final String tagFilterQuery;
   final List<String> primaryTags;
   final List<String> relatedTags;
-  final int loadedPages;
 
   List<String> get combinedTags =>
       <String>{...primaryTags, ...relatedTags}.toList(growable: false);
@@ -367,17 +381,19 @@ final class CatalogControlState {
     String? tagFilterQuery,
     List<String>? primaryTags,
     List<String>? relatedTags,
-    int? loadedPages,
   }) {
-    return CatalogControlState(
+    return CatalogControlState._(
       category: category ?? this.category,
       sortBy: sortBy ?? this.sortBy,
       sortDirection: sortDirection ?? this.sortDirection,
       searchQuery: searchQuery ?? this.searchQuery,
       tagFilterQuery: tagFilterQuery ?? this.tagFilterQuery,
-      primaryTags: primaryTags ?? this.primaryTags,
-      relatedTags: relatedTags ?? this.relatedTags,
-      loadedPages: loadedPages ?? this.loadedPages,
+      primaryTags: primaryTags == null
+          ? this.primaryTags
+          : List<String>.unmodifiable(primaryTags),
+      relatedTags: relatedTags == null
+          ? this.relatedTags
+          : List<String>.unmodifiable(relatedTags),
     );
   }
 }
@@ -392,12 +408,11 @@ final class CatalogController extends Notifier<CatalogControlState> {
       searchQuery: '',
       primaryTags: const <String>[],
       relatedTags: const <String>[],
-      loadedPages: 1,
     );
   }
 
   void setSort(SortOption sortBy) {
-    state = state.copyWith(sortBy: sortBy, loadedPages: 1);
+    state = state.copyWith(sortBy: sortBy);
   }
 
   void toggleSortDirection() {
@@ -405,13 +420,12 @@ final class CatalogController extends Notifier<CatalogControlState> {
       sortDirection: state.sortDirection == SortDirection.asc
           ? SortDirection.desc
           : SortDirection.asc,
-      loadedPages: 1,
     );
   }
 
   void setSearchQuery(String searchQuery) {
     if (searchQuery == state.searchQuery) return;
-    state = state.copyWith(searchQuery: searchQuery, loadedPages: 1);
+    state = state.copyWith(searchQuery: searchQuery);
   }
 
   void setTagFilterQuery(String tagFilterQuery) {
@@ -426,7 +440,6 @@ final class CatalogController extends Notifier<CatalogControlState> {
     state = state.copyWith(
       primaryTags: primaryTags,
       relatedTags: primaryTags.isEmpty ? const <String>[] : state.relatedTags,
-      loadedPages: 1,
     );
   }
 
@@ -434,7 +447,6 @@ final class CatalogController extends Notifier<CatalogControlState> {
     state = state.copyWith(
       primaryTags: const <String>[],
       relatedTags: const <String>[],
-      loadedPages: 1,
     );
   }
 
@@ -442,7 +454,6 @@ final class CatalogController extends Notifier<CatalogControlState> {
     state = state.copyWith(
       primaryTags: <String>[tag],
       relatedTags: const <String>[],
-      loadedPages: 1,
     );
   }
 
@@ -455,7 +466,6 @@ final class CatalogController extends Notifier<CatalogControlState> {
     state = state.copyWith(
       primaryTags: primaryTags,
       relatedTags: primaryTags.isEmpty ? const <String>[] : state.relatedTags,
-      loadedPages: 1,
     );
   }
 
@@ -463,7 +473,7 @@ final class CatalogController extends Notifier<CatalogControlState> {
     final relatedTags = state.relatedTags.contains(tag)
         ? state.relatedTags.where((value) => value != tag).toList()
         : <String>[...state.relatedTags, tag];
-    state = state.copyWith(relatedTags: relatedTags, loadedPages: 1);
+    state = state.copyWith(relatedTags: relatedTags);
   }
 
   void clearSearchAndTags() {
@@ -471,12 +481,7 @@ final class CatalogController extends Notifier<CatalogControlState> {
       searchQuery: '',
       primaryTags: const <String>[],
       relatedTags: const <String>[],
-      loadedPages: 1,
     );
-  }
-
-  void loadMore() {
-    state = state.copyWith(loadedPages: state.loadedPages + 1);
   }
 }
 
@@ -485,8 +490,19 @@ final catalogControllerProvider =
       CatalogController.new,
     );
 
-final catalogCriteriaProvider = Provider<CatalogCriteria>((ref) {
-  final controls = ref.watch(catalogControllerProvider);
+final catalogBaseCriteriaProvider = Provider<CatalogCriteria>((ref) {
+  final controls = ref.watch(
+    catalogControllerProvider.select(
+      (state) => (
+        category: state.category,
+        sortBy: state.sortBy,
+        sortDirection: state.sortDirection,
+        searchQuery: state.searchQuery,
+        primaryTags: state.primaryTags,
+        relatedTags: state.relatedTags,
+      ),
+    ),
+  );
   final pageSize = ref.watch(catalogPageSizeProvider);
   return CatalogCriteria(
     searchQuery: controls.searchQuery,
@@ -495,7 +511,7 @@ final catalogCriteriaProvider = Provider<CatalogCriteria>((ref) {
     favoritesOnly: controls.category == LibraryCategory.favorites,
     sortBy: controls.sortBy,
     sortDirection: controls.sortDirection,
-    pageLimit: controls.loadedPages * pageSize,
+    pageLimit: pageSize,
     includeOffline: ref.watch(showOfflineMediaProvider),
     folderIds: List<int>.unmodifiable(
       ref.watch(effectiveLibraryFolderIdsProvider),
@@ -503,17 +519,213 @@ final catalogCriteriaProvider = Provider<CatalogCriteria>((ref) {
   );
 });
 
+final catalogCriteriaProvider = Provider<CatalogCriteria>((ref) {
+  final base = ref.watch(catalogBaseCriteriaProvider);
+  final loadedPages = ref.watch(
+    catalogPresentationProvider.select(
+      (state) => state is AsyncData<CatalogPresentationState>
+          ? state.value.loadedPages
+          : 1,
+    ),
+  );
+  return base.copyWith(pageLimit: base.pageLimit * loadedPages);
+});
+
 final catalogQueryModuleProvider = Provider<CatalogQueryModule>((ref) {
   return CatalogQueryModule(ref.watch(databaseProvider));
 });
 
-final catalogSnapshotProvider = StreamProvider.autoDispose<CatalogSnapshot>((
-  ref,
-) {
-  return ref
-      .watch(catalogQueryModuleProvider)
-      .watch(ref.watch(catalogCriteriaProvider));
-});
+final catalogWatchProvider =
+    Provider<Stream<CatalogSnapshot> Function(CatalogCriteria)>(
+      (ref) => ref.watch(catalogQueryModuleProvider).watch,
+    );
+
+final catalogFetchProvider =
+    Provider<Future<CatalogSnapshot> Function(CatalogCriteria)>(
+      (ref) => ref.watch(catalogQueryModuleProvider).fetch,
+    );
+
+enum CatalogAppendPhase { idle, loading, failed }
+
+final class CatalogAppendState {
+  const CatalogAppendState.idle()
+    : phase = CatalogAppendPhase.idle,
+      targetPage = null,
+      error = null;
+
+  const CatalogAppendState.loading(this.targetPage)
+    : phase = CatalogAppendPhase.loading,
+      error = null;
+
+  const CatalogAppendState.failed(this.targetPage, this.error)
+    : phase = CatalogAppendPhase.failed;
+
+  final CatalogAppendPhase phase;
+  final int? targetPage;
+  final Object? error;
+}
+
+final class CatalogPresentationState {
+  const CatalogPresentationState({
+    required this.snapshot,
+    required this.loadedPages,
+    this.append = const CatalogAppendState.idle(),
+  });
+
+  final CatalogSnapshot snapshot;
+  final int loadedPages;
+  final CatalogAppendState append;
+
+  bool get hasMore => snapshot.loadedVideos.length < snapshot.totalCount;
+  bool get isAppending => append.phase == CatalogAppendPhase.loading;
+  Object? get appendError => append.error;
+  int? get failedTargetPage =>
+      append.phase == CatalogAppendPhase.failed ? append.targetPage : null;
+
+  CatalogPresentationState copyWith({
+    CatalogSnapshot? snapshot,
+    int? loadedPages,
+    CatalogAppendState? append,
+  }) {
+    return CatalogPresentationState(
+      snapshot: snapshot ?? this.snapshot,
+      loadedPages: loadedPages ?? this.loadedPages,
+      append: append ?? this.append,
+    );
+  }
+}
+
+final class CatalogPresentationController
+    extends AsyncNotifier<CatalogPresentationState> {
+  StreamSubscription<CatalogSnapshot>? _subscription;
+  CatalogCriteria? _baseCriteria;
+  int _generation = 0;
+
+  @override
+  Future<CatalogPresentationState> build() async {
+    final criteria = ref.watch(catalogBaseCriteriaProvider);
+    final generation = ++_generation;
+    ref.onDispose(() {
+      if (generation != _generation) return;
+      _generation++;
+      _subscription?.cancel();
+    });
+    _baseCriteria = criteria;
+    final firstSnapshot = Completer<CatalogSnapshot>();
+    _replaceSubscription(
+      criteria: criteria,
+      generation: generation,
+      firstSnapshot: firstSnapshot,
+    );
+    final snapshot = await firstSnapshot.future;
+    return CatalogPresentationState(snapshot: snapshot, loadedPages: 1);
+  }
+
+  Future<void> loadMore() async {
+    final currentAsync = state;
+    if (currentAsync is! AsyncData<CatalogPresentationState>) return;
+    final current = currentAsync.value;
+    if (current.isAppending || !current.hasMore) return;
+
+    final generation = _generation;
+    final baseCriteria = _baseCriteria;
+    if (baseCriteria == null) return;
+    final targetPage = current.failedTargetPage ?? current.loadedPages + 1;
+    state = AsyncData(
+      current.copyWith(append: CatalogAppendState.loading(targetPage)),
+    );
+
+    try {
+      final expandedCriteria = baseCriteria.copyWith(
+        pageLimit: baseCriteria.pageLimit * targetPage,
+      );
+      final expanded = await ref.read(catalogFetchProvider)(expandedCriteria);
+      if (generation != _generation) return;
+
+      _validateExpandedPrefix(current.snapshot, expanded);
+      final next = CatalogPresentationState(
+        snapshot: expanded,
+        loadedPages: targetPage,
+      );
+      state = AsyncData(next);
+      _replaceSubscription(criteria: expandedCriteria, generation: generation);
+    } catch (error) {
+      if (generation != _generation) return;
+      final latest = state;
+      if (latest is! AsyncData<CatalogPresentationState>) return;
+      state = AsyncData(
+        latest.value.copyWith(
+          append: CatalogAppendState.failed(targetPage, error),
+        ),
+      );
+    }
+  }
+
+  void _replaceSubscription({
+    required CatalogCriteria criteria,
+    required int generation,
+    Completer<CatalogSnapshot>? firstSnapshot,
+  }) {
+    final previous = _subscription;
+    _subscription = null;
+    if (previous != null) unawaited(previous.cancel());
+    if (generation != _generation) return;
+
+    _subscription = ref
+        .read(catalogWatchProvider)(criteria)
+        .listen(
+          (snapshot) {
+            if (generation != _generation) return;
+            if (firstSnapshot != null && !firstSnapshot.isCompleted) {
+              firstSnapshot.complete(snapshot);
+              return;
+            }
+            final current = state;
+            if (current is AsyncData<CatalogPresentationState>) {
+              state = AsyncData(current.value.copyWith(snapshot: snapshot));
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (generation != _generation) return;
+            if (firstSnapshot != null && !firstSnapshot.isCompleted) {
+              firstSnapshot.completeError(error, stackTrace);
+              return;
+            }
+            state = AsyncError<CatalogPresentationState>(error, stackTrace);
+          },
+        );
+  }
+
+  void _validateExpandedPrefix(
+    CatalogSnapshot current,
+    CatalogSnapshot expanded,
+  ) {
+    final currentIds = current.loadedVideos.map((video) => video.id).toList();
+    final expandedIds = expanded.loadedVideos.map((video) => video.id).toList();
+    if (expandedIds.length < currentIds.length ||
+        expandedIds.toSet().length != expandedIds.length) {
+      throw StateError('Catalog append returned an invalid Video prefix.');
+    }
+    for (var index = 0; index < currentIds.length; index++) {
+      if (currentIds[index] != expandedIds[index]) {
+        throw StateError('Catalog append changed the existing Video order.');
+      }
+    }
+  }
+}
+
+final catalogPresentationProvider =
+    AsyncNotifierProvider<
+      CatalogPresentationController,
+      CatalogPresentationState
+    >(CatalogPresentationController.new);
+
+final catalogSnapshotProvider =
+    Provider.autoDispose<AsyncValue<CatalogSnapshot>>(
+      (ref) => ref
+          .watch(catalogPresentationProvider)
+          .whenData((presentation) => presentation.snapshot),
+    );
 
 final filteredVideosProvider = Provider.autoDispose<AsyncValue<List<Video>>>((
   ref,

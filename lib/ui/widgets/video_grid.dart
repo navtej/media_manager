@@ -21,6 +21,95 @@ import '../../logic/video_selection_controller.dart';
 import '../../services/library_access_service.dart';
 import 'package:icon_craft/icon_craft.dart';
 
+class CatalogScrollView extends ConsumerWidget {
+  const CatalogScrollView({super.key, required this.scrollController});
+
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.depth != 0 ||
+            notification is! ScrollUpdateNotification ||
+            (notification.scrollDelta ?? 0) <= 0) {
+          return false;
+        }
+        if (notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 500) {
+          ref.read(catalogPresentationProvider.notifier).loadMore();
+        }
+        return false;
+      },
+      child: CustomScrollView(
+        controller: scrollController,
+        slivers: const [
+          SliverVideoGrid(),
+          CatalogPaginationTail(),
+          SliverPadding(padding: EdgeInsets.only(bottom: 20)),
+        ],
+      ),
+    );
+  }
+}
+
+class CatalogPaginationTail extends ConsumerWidget {
+  const CatalogPaginationTail({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final presentationAsync = ref.watch(catalogPresentationProvider);
+    if (presentationAsync is! AsyncData<CatalogPresentationState>) {
+      return const SliverToBoxAdapter();
+    }
+    final presentation = presentationAsync.value;
+
+    if (presentation.isAppending) {
+      return const SliverToBoxAdapter(
+        child: SizedBox(
+          height: 48,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(width: 16, height: 16, child: ProgressCircle()),
+                SizedBox(width: 8),
+                Text('Loading more Videos…'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (presentation.appendError != null) {
+      return SliverToBoxAdapter(
+        child: SizedBox(
+          height: 48,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Couldn’t load more Videos.'),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.small,
+                  secondary: true,
+                  onPressed: () =>
+                      ref.read(catalogPresentationProvider.notifier).loadMore(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SliverToBoxAdapter();
+  }
+}
+
 class SliverVideoGrid extends ConsumerWidget {
   const SliverVideoGrid({super.key});
 

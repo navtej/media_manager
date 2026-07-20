@@ -558,50 +558,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     // Grid
                     Expanded(
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: (ScrollNotification notification) {
-                          // Only respond to the main scroll view (depth 0), not nested scrollables like tag lists
-                          if (notification.depth != 0) return false;
-
-                          // Only trigger on downward scroll, not upward
-                          if (notification is! ScrollUpdateNotification) {
-                            return false;
-                          }
-                          final delta = notification.scrollDelta ?? 0;
-                          if (delta <= 0) return false;
-
-                          // Check if near the end of the scroll view
-                          if (notification.metrics.pixels >=
-                              notification.metrics.maxScrollExtent - 500) {
-                            // Only load more if there are more videos to load
-                            final currentCount =
-                                ref
-                                    .read(filteredVideosProvider)
-                                    .asData
-                                    ?.value
-                                    .length ??
-                                0;
-                            final totalCount =
-                                ref
-                                    .read(selectedVideoCountProvider)
-                                    .asData
-                                    ?.value ??
-                                0;
-                            if (currentCount < totalCount) {
-                              ref
-                                  .read(catalogControllerProvider.notifier)
-                                  .loadMore();
-                            }
-                          }
-                          return false;
-                        },
-                        child: CustomScrollView(
-                          controller: scrollController,
-                          slivers: const [
-                            SliverVideoGrid(),
-                            SliverPadding(padding: EdgeInsets.only(bottom: 20)),
-                          ],
-                        ),
+                      child: CatalogScrollView(
+                        scrollController: scrollController,
                       ),
                     ),
                     // Footer (pinned)

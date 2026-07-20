@@ -192,7 +192,19 @@ void main() {
     final beforePaginationTags = snapshot.availableTags;
     final beforePaginationStats = snapshot.statistics;
 
-    container.read(catalogControllerProvider.notifier).loadMore();
+    await container.read(catalogPresentationProvider.notifier).loadMore();
+    expect(
+      container
+          .read(catalogPresentationProvider)
+          .requireValue
+          .snapshot
+          .loadedVideos,
+      hasLength(2),
+    );
+    expect(
+      container.read(catalogSnapshotProvider).requireValue.loadedVideos,
+      hasLength(2),
+    );
     snapshot = await _waitForSnapshot(
       container,
       (value) => value.totalCount == 2 && value.loadedVideos.length == 2,
