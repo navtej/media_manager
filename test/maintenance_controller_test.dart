@@ -9,6 +9,7 @@ import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/maintenance_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/media_deletion_service.dart';
+import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -89,7 +90,7 @@ void main() {
         await fixture.db.videosDao.getVideoById(fixture.video.id),
         isNotNull,
       );
-      expect(result.results.single.status, MediaDeletionStatus.needsRepair);
+      expect(result!.results.single.status, MediaDeletionStatus.needsRepair);
       expect(result.userMessage, contains('Reselect this folder in Settings'));
     },
   );
@@ -110,6 +111,43 @@ void main() {
     );
     expect(await fixture.db.videosDao.getVideoById(fixture.video.id), isNull);
   });
+
+  test('cancelled authentication blocks every private bulk action', () async {
+    final fixture = await _MaintenanceFixture.create(
+      isPrivate: true,
+      authenticationResult: false,
+    );
+    addTearDown(fixture.dispose);
+    await fixture.db.tagsDao.insertTag(
+      TagsCompanion.insert(videoId: fixture.video.id, tagText: 'private-tag'),
+    );
+    final controller = fixture.container.read(
+      maintenanceControllerProvider.notifier,
+    );
+
+    final favoriteRan = await controller.setFavoriteForVideos([
+      fixture.video.id,
+    ], true);
+    final clearTagsRan = await controller.clearTagsForVideos([
+      fixture.video.id,
+    ]);
+    final deletionResult = await controller.deleteVideos([fixture.video.id]);
+
+    expect(favoriteRan, isFalse);
+    expect(clearTagsRan, isFalse);
+    expect(deletionResult, isNull);
+    expect(fixture.auth.attempts, 3);
+    expect(
+      (await fixture.db.videosDao.getVideoById(fixture.video.id))!.isFavorite,
+      isFalse,
+    );
+    expect(
+      await fixture.db.tagsDao.getTagsForVideo(fixture.video.id),
+      hasLength(1),
+    );
+    expect(await fixture.videoFile.exists(), isTrue);
+    expect(fixture.events, isEmpty);
+  });
 }
 
 class _MaintenanceFixture {
@@ -121,6 +159,7 @@ class _MaintenanceFixture {
     required this.subtitleFile,
     required this.video,
     required this.events,
+    required this.auth,
   });
 
   final AppDatabase db;
@@ -130,9 +169,12 @@ class _MaintenanceFixture {
   final File subtitleFile;
   final Video video;
   final List<String> events;
+  final _FakePrivateLibraryAuthService auth;
 
   static Future<_MaintenanceFixture> create({
     bool canAccessFolder = true,
+    bool isPrivate = false,
+    bool authenticationResult = true,
   }) async {
     final root = await Directory.systemTemp.createTemp(
       'maintenance-controller-test',
@@ -147,6 +189,7 @@ class _MaintenanceFixture {
       FoldersCompanion.insert(
         path: root.path,
         securityScopedBookmark: const drift.Value('bookmark'),
+        isPrivate: drift.Value(isPrivate),
       ),
     );
     await db.videosDao.insertVideo(
@@ -158,10 +201,12 @@ class _MaintenanceFixture {
     );
     final video = (await db.videosDao.getVideoByPath(videoFile.path))!;
     final events = <String>[];
+    final auth = _FakePrivateLibraryAuthService(result: authenticationResult);
 
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        privateLibraryAuthServiceProvider.overrideWithValue(auth),
         libraryAccessServiceProvider.overrideWithValue(
           LibraryAccessService(
             adapter: _FakeLibraryAccessAdapter(
@@ -181,6 +226,7 @@ class _MaintenanceFixture {
       subtitleFile: subtitleFile,
       video: video,
       events: events,
+      auth: auth,
     );
   }
 
@@ -219,6 +265,19 @@ class _MaintenanceFixture {
     if (await root.exists()) {
       await root.delete(recursive: true);
     }
+  }
+}
+
+class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {
+  _FakePrivateLibraryAuthService({required this.result});
+
+  final bool result;
+  int attempts = 0;
+
+  @override
+  Future<bool> authenticate() async {
+    attempts += 1;
+    return result;
   }
 }
 

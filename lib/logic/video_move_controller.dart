@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/providers.dart';
 import '../services/library_access_service.dart';
 import 'library_operation_controller.dart';
+import 'private_library_controller.dart';
 import 'status_message_provider.dart';
 import 'stats_provider.dart';
 import 'video_selection_controller.dart';
@@ -274,10 +275,28 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     );
   }
 
-  Future<VideoMoveResult> moveVideos({
+  Future<VideoMoveResult?> moveVideos({
     required List<int> videoIds,
     required int destinationFolderId,
     bool removeEmptySourceFolders = false,
+  }) {
+    return ref
+        .read(privateLibraryAccessControllerProvider.notifier)
+        .runVideoAction<VideoMoveResult>(
+          videoIds: videoIds,
+          libraryIds: [destinationFolderId],
+          action: () => _moveVideos(
+            videoIds: videoIds,
+            destinationFolderId: destinationFolderId,
+            removeEmptySourceFolders: removeEmptySourceFolders,
+          ),
+        );
+  }
+
+  Future<VideoMoveResult> _moveVideos({
+    required List<int> videoIds,
+    required int destinationFolderId,
+    required bool removeEmptySourceFolders,
   }) async {
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     final operationState = ref.read(libraryOperationControllerProvider);

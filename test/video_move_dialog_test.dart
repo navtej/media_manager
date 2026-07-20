@@ -53,6 +53,13 @@ void main() {
         securityScopedBookmark: const drift.Value('destination-bookmark'),
       ),
     );
+    await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: '/Volumes/Private Destination',
+        alias: const drift.Value('Private Destination'),
+        isPrivate: const drift.Value(true),
+      ),
+    );
     await db.videosDao.insertVideo(
       VideosCompanion.insert(
         folderId: sourceFolderId,
@@ -119,6 +126,10 @@ void main() {
     expect(
       find.text('Source Library (/Volumes/Source Library)'),
       findsOneWidget,
+    );
+    expect(
+      find.text('Private Destination (/Volumes/Private Destination)'),
+      findsNothing,
     );
 
     await tester.tap(find.text('Cancel'));

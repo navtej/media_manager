@@ -90,7 +90,9 @@ class LibraryFilterMenu extends ConsumerWidget {
                   : 'Unlock Private Libraries',
               enabled: !privateAccess.isAuthenticating,
               onTap: () => privateAccess.isUnlocked
-                  ? _lockPrivateLibraries(ref)
+                  ? ref
+                        .read(privateLibraryAccessControllerProvider.notifier)
+                        .lock()
                   : ref
                         .read(privateLibraryAccessControllerProvider.notifier)
                         .unlock(),
@@ -119,10 +121,6 @@ Future<void> _toggleFolder(
   }
 
   ref.read(selectedLibraryFoldersControllerProvider.notifier).toggle(folder.id);
-}
-
-void _lockPrivateLibraries(WidgetRef ref) {
-  ref.read(privateLibraryAccessControllerProvider.notifier).lock();
 }
 
 class _LibraryMenuRow extends StatelessWidget {

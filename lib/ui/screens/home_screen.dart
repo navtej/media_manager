@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
-import '../../data/providers.dart';
+import '../../data/database.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
 import '../widgets/video_grid.dart';
@@ -14,14 +14,12 @@ import '../../logic/filter_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
-import '../../data/database.dart';
 import 'settings_screen.dart';
 import 'tag_management_screen.dart';
 import '../widgets/bulk_selection_toolbar.dart';
 import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
-import '../widgets/private_library_lock_selection_guard.dart';
 import '../library_result_messages.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -91,7 +89,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return MacosWindow(
       child: Row(
         children: [
-          const PrivateLibraryLockSelectionGuard(),
           // Custom Sidebar
           Container(
             width: 220,
@@ -656,9 +653,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     await _runBulkAction(() async {
-      await ref
-          .read(videosDaoProvider)
+      final actionCompleted = await ref
+          .read(maintenanceControllerProvider.notifier)
           .setFavoriteForVideos(selectedVideoIds, isFavorite);
+      if (!actionCompleted) {
+        ref
+            .read(statusMessageProvider.notifier)
+            .set('Authentication cancelled.');
+        return;
+      }
       ref
           .read(statusMessageProvider.notifier)
           .set(
@@ -706,6 +709,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final result = await ref
           .read(maintenanceControllerProvider.notifier)
           .deleteVideos(selectedVideoIds);
+      if (result == null) {
+        ref
+            .read(statusMessageProvider.notifier)
+            .set('Authentication cancelled.');
+        return;
+      }
 
       ref
           .read(videoSelectionControllerProvider.notifier)
@@ -748,7 +757,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _clearTagsForSelected(List<int> selectedVideoIds) async {
     await _runBulkAction(() async {
-      await ref.read(tagsDaoProvider).deleteAllTagsForVideos(selectedVideoIds);
+      final actionCompleted = await ref
+          .read(maintenanceControllerProvider.notifier)
+          .clearTagsForVideos(selectedVideoIds);
+      if (!actionCompleted) {
+        ref
+            .read(statusMessageProvider.notifier)
+            .set('Authentication cancelled.');
+        return;
+      }
       ref
           .read(statusMessageProvider.notifier)
           .set(

@@ -4,6 +4,7 @@ import '../services/media_deletion_service.dart';
 import '../services/thumbnail_service.dart';
 import 'library_controller.dart' show scanStatusProvider;
 import 'managed_library_service.dart';
+import 'private_library_controller.dart';
 import 'stats_provider.dart';
 
 part 'maintenance_controller.g.dart';
@@ -79,13 +80,48 @@ class MaintenanceController extends _$MaintenanceController {
     return result;
   }
 
-  Future<MediaDeletionBatchResult> deleteVideos(List<int> videoIds) async {
-    final result = await ref
-        .read(mediaDeletionServiceProvider)
-        .deleteVideos(videoIds);
-    if (result.deletedVideoIds.isNotEmpty) {
-      ref.invalidate(libraryStatsProvider);
-    }
-    return result;
+  Future<MediaDeletionBatchResult?> deleteVideos(List<int> videoIds) {
+    return ref
+        .read(privateLibraryAccessControllerProvider.notifier)
+        .runVideoAction<MediaDeletionBatchResult>(
+          videoIds: videoIds,
+          action: () async {
+            final result = await ref
+                .read(mediaDeletionServiceProvider)
+                .deleteVideos(videoIds);
+            if (result.deletedVideoIds.isNotEmpty) {
+              ref.invalidate(libraryStatsProvider);
+            }
+            return result;
+          },
+        );
+  }
+
+  Future<bool> setFavoriteForVideos(List<int> videoIds, bool isFavorite) async {
+    final actionCompleted = await ref
+        .read(privateLibraryAccessControllerProvider.notifier)
+        .runVideoAction<bool>(
+          videoIds: videoIds,
+          action: () async {
+            await ref
+                .read(videosDaoProvider)
+                .setFavoriteForVideos(videoIds, isFavorite);
+            return true;
+          },
+        );
+    return actionCompleted ?? false;
+  }
+
+  Future<bool> clearTagsForVideos(List<int> videoIds) async {
+    final actionCompleted = await ref
+        .read(privateLibraryAccessControllerProvider.notifier)
+        .runVideoAction<bool>(
+          videoIds: videoIds,
+          action: () async {
+            await ref.read(tagsDaoProvider).deleteAllTagsForVideos(videoIds);
+            return true;
+          },
+        );
+    return actionCompleted ?? false;
   }
 }

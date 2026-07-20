@@ -1,9 +1,7 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/filter_controller.dart';
@@ -11,7 +9,6 @@ import 'package:movie_manager/logic/private_library_controller.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
-import 'package:movie_manager/ui/widgets/private_library_lock_selection_guard.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/provider_test_utils.dart';
@@ -196,16 +193,9 @@ void main() {
         filteredVideosProvider,
         (_, _) {},
       );
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const MacosApp(
-            home: PrivateLibraryLockSelectionGuard(child: SizedBox.shrink()),
-          ),
-        ),
+      await tester.runAsync(
+        () => readAsyncValue<List<Folder>>(container, libraryFoldersProvider),
       );
-      await tester.pump();
-      await readAsyncValue(container, libraryFoldersProvider);
 
       await container
           .read(privateLibraryAccessControllerProvider.notifier)
@@ -218,7 +208,7 @@ void main() {
       await tester.pump();
       expect(
         (await tester.runAsync(
-          () => container.read(filteredVideosProvider.future),
+          () => readAsyncValue<List<Video>>(container, filteredVideosProvider),
         ))!.map((video) => video.title).toSet(),
         {'Public Clip', 'Private Clip'},
       );
@@ -232,7 +222,7 @@ void main() {
       await tester.pump();
       expect(
         (await tester.runAsync(
-          () => container.read(filteredVideosProvider.future),
+          () => readAsyncValue<List<Video>>(container, filteredVideosProvider),
         ))!.map((video) => video.title),
         ['Private Clip'],
       );
@@ -254,13 +244,11 @@ void main() {
       await tester.pump();
       expect(
         (await tester.runAsync(
-          () => container.read(filteredVideosProvider.future),
+          () => readAsyncValue<List<Video>>(container, filteredVideosProvider),
         ))!.map((video) => video.title),
         ['Public Clip'],
       );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
       filteredVideosSubscription.close();
       container.dispose();
       await tester.pump(const Duration(milliseconds: 1));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,9 +23,11 @@ class _PrivateLibraryAutoLockLifecycleState
   void initState() {
     super.initState();
     _listener = AppLifecycleListener(
-      onResume: () => ref
-          .read(privateLibraryAccessControllerProvider.notifier)
-          .enforceAutoLockDeadline(),
+      onResume: () => unawaited(
+        ref
+            .read(privateLibraryAccessControllerProvider.notifier)
+            .enforceAutoLockDeadline(),
+      ),
     );
   }
 

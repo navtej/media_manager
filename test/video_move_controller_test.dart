@@ -10,6 +10,7 @@ import 'package:movie_manager/logic/library_operation_controller.dart';
 import 'package:movie_manager/logic/video_move_controller.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
+import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/library_access_test_adapter.dart';
@@ -90,9 +91,10 @@ void main() {
             videoIds: [fixture.sourceVideo.id, fixture.secondVideo!.id],
             destinationFolderId: fixture.destinationFolder.id,
           );
+      final completed = result!;
 
-      expect(result.movedCount, 2);
-      expect(result.failedCount, 0);
+      expect(completed.movedCount, 2);
+      expect(completed.failedCount, 0);
       expect(await fixture.sourceVideoFile.exists(), isFalse);
       expect(await fixture.sourceSubtitleFile.exists(), isFalse);
       expect(
@@ -154,9 +156,10 @@ void main() {
             videoIds: [fixture.sourceVideo.id, fixture.secondVideo!.id],
             destinationFolderId: fixture.destinationFolder.id,
           );
+      final completed = result!;
 
-      expect(result.movedCount, 1);
-      expect(result.failedCount, 1);
+      expect(completed.movedCount, 1);
+      expect(completed.failedCount, 1);
       expect(
         await File(p.join(fixture.destination.path, 'flat.mov')).exists(),
         isTrue,
@@ -187,12 +190,62 @@ void main() {
           videoIds: [fixture.sourceVideo.id],
           destinationFolderId: fixture.destinationFolder.id,
         );
+    final completed = result!;
 
-    expect(result.movedCount, 0);
-    expect(result.failedCount, 1);
-    expect(result.failures.single.message, contains('scan'));
+    expect(completed.movedCount, 0);
+    expect(completed.failedCount, 1);
+    expect(completed.failures.single.message, contains('scan'));
     expect(await fixture.sourceVideoFile.exists(), isTrue);
   });
+
+  test('cancelled authentication blocks moving a private video', () async {
+    final fixture = await _MoveFixture.create(
+      sourceIsPrivate: true,
+      authenticationResult: false,
+    );
+    addTearDown(fixture.dispose);
+
+    final result = await fixture.container
+        .read(videoMoveControllerProvider.notifier)
+        .moveVideos(
+          videoIds: [fixture.sourceVideo.id],
+          destinationFolderId: fixture.destinationFolder.id,
+        );
+
+    expect(result, isNull);
+    expect(fixture.auth.attempts, 1);
+    expect(await fixture.sourceVideoFile.exists(), isTrue);
+    expect(
+      await fixture.db.videosDao.getVideoById(fixture.sourceVideo.id),
+      isNotNull,
+    );
+  });
+
+  test(
+    'cancelled authentication blocks moving into a private library',
+    () async {
+      final fixture = await _MoveFixture.create(
+        destinationIsPrivate: true,
+        authenticationResult: false,
+      );
+      addTearDown(fixture.dispose);
+
+      final result = await fixture.container
+          .read(videoMoveControllerProvider.notifier)
+          .moveVideos(
+            videoIds: [fixture.sourceVideo.id],
+            destinationFolderId: fixture.destinationFolder.id,
+          );
+
+      expect(result, isNull);
+      expect(fixture.auth.attempts, 1);
+      expect(await fixture.sourceVideoFile.exists(), isTrue);
+      expect(
+        await fixture.db.videosDao.getVideoById(fixture.sourceVideo.id),
+        isNotNull,
+      );
+    },
+  );
 }
 
 class _MoveFixture {
@@ -207,6 +260,7 @@ class _MoveFixture {
     required this.sourceSubtitleFile,
     required this.sourceVideo,
     required this.secondVideo,
+    required this.auth,
   });
 
   final AppDatabase db;
@@ -219,11 +273,15 @@ class _MoveFixture {
   final File sourceSubtitleFile;
   final Video sourceVideo;
   final Video? secondVideo;
+  final _FakePrivateLibraryAuthService auth;
 
   static Future<_MoveFixture> create({
     bool createDestinationConflict = false,
     bool addSecondVideo = false,
     bool restrictSourceListingUntilAccess = false,
+    bool sourceIsPrivate = false,
+    bool destinationIsPrivate = false,
+    bool authenticationResult = true,
   }) async {
     final root = await Directory.systemTemp.createTemp('video-move-test');
     final source = Directory(p.join(root.path, 'Source Library'));
@@ -250,6 +308,7 @@ class _MoveFixture {
         path: source.path,
         alias: const drift.Value('Source Library'),
         securityScopedBookmark: const drift.Value('source-bookmark'),
+        isPrivate: drift.Value(sourceIsPrivate),
       ),
     );
     final destinationFolderId = await db.foldersDao.insertFolder(
@@ -257,6 +316,7 @@ class _MoveFixture {
         path: destination.path,
         alias: const drift.Value('Destination Library'),
         securityScopedBookmark: const drift.Value('destination-bookmark'),
+        isPrivate: drift.Value(destinationIsPrivate),
       ),
     );
     await db.videosDao.insertVideo(
@@ -317,9 +377,11 @@ class _MoveFixture {
             directoriesToUnlock: [nested],
           )
         : AlwaysAllowedLibraryAccessAdapter();
+    final auth = _FakePrivateLibraryAuthService(result: authenticationResult);
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        privateLibraryAuthServiceProvider.overrideWithValue(auth),
         libraryAccessServiceProvider.overrideWithValue(
           LibraryAccessService(adapter: libraryAccessAdapter),
         ),
@@ -337,6 +399,7 @@ class _MoveFixture {
       sourceSubtitleFile: sourceSubtitleFile,
       sourceVideo: sourceVideo,
       secondVideo: secondVideo,
+      auth: auth,
     );
   }
 
@@ -348,6 +411,19 @@ class _MoveFixture {
       await _setDirectoryTreeUserAccess(root);
       await root.delete(recursive: true);
     }
+  }
+}
+
+class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {
+  _FakePrivateLibraryAuthService({required this.result});
+
+  final bool result;
+  int attempts = 0;
+
+  @override
+  Future<bool> authenticate() async {
+    attempts += 1;
+    return result;
   }
 }
 

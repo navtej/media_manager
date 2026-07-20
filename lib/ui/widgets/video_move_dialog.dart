@@ -13,6 +13,7 @@ import '../../data/providers.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/library_name.dart';
 import '../../logic/managed_library_service.dart';
+import '../../logic/private_library_controller.dart';
 import '../../logic/video_move_controller.dart';
 import '../library_result_messages.dart';
 
@@ -229,27 +230,25 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final foldersStream = ref.watch(foldersDaoProvider).watchAllFolders();
-    return StreamBuilder<List<Folder>>(
-      stream: foldersStream,
-      builder: (context, snapshot) {
-        final folders = snapshot.data ?? const <Folder>[];
-        final effectiveDestinationId =
-            _destinationFolderId ?? folders.firstOrNull?.id;
-        final preflightFuture = effectiveDestinationId == null
-            ? null
-            : _preflightFor(effectiveDestinationId);
+    final folders = ref.watch(accessibleLibraryFoldersProvider);
+    final selectedDestinationIsAccessible = folders.any(
+      (folder) => folder.id == _destinationFolderId,
+    );
+    final effectiveDestinationId = selectedDestinationIsAccessible
+        ? _destinationFolderId
+        : folders.firstOrNull?.id;
+    final preflightFuture = effectiveDestinationId == null
+        ? null
+        : _preflightFor(effectiveDestinationId);
 
-        return FutureBuilder<VideoMovePreflight>(
-          future: preflightFuture,
-          builder: (context, preflightSnapshot) {
-            return _buildDialog(
-              context: context,
-              folders: folders,
-              effectiveDestinationId: effectiveDestinationId,
-              preflightSnapshot: preflightSnapshot,
-            );
-          },
+    return FutureBuilder<VideoMovePreflight>(
+      future: preflightFuture,
+      builder: (context, preflightSnapshot) {
+        return _buildDialog(
+          context: context,
+          folders: folders,
+          effectiveDestinationId: effectiveDestinationId,
+          preflightSnapshot: preflightSnapshot,
         );
       },
     );
@@ -451,6 +450,16 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
             destinationFolderId: destinationFolderId,
             removeEmptySourceFolders: _removeEmptySourceFolders,
           );
+      if (result == null) {
+        if (mounted) {
+          setState(() {
+            _actionError = 'Authentication cancelled.';
+            _isSubmitting = false;
+            _clearPreflight();
+          });
+        }
+        return;
+      }
       if (!mounted) {
         return;
       }
