@@ -156,10 +156,27 @@ final class AppearanceConfiguration {
   final AppearanceThemeMode themeMode;
 }
 
+enum CatalogPresentation {
+  grid('grid'),
+  list('list');
+
+  const CatalogPresentation(this.value);
+
+  final String value;
+
+  static CatalogPresentation fromValue(String? value) {
+    return CatalogPresentation.values.firstWhere(
+      (presentation) => presentation.value == value,
+      orElse: () => CatalogPresentation.grid,
+    );
+  }
+}
+
 final class CatalogBrowsingConfiguration {
   const CatalogBrowsingConfiguration._({
     required this.paginationSize,
     required this.showOfflineMedia,
+    required this.presentation,
   });
 
   static const defaultPaginationSize = 50;
@@ -167,20 +184,36 @@ final class CatalogBrowsingConfiguration {
   static const defaults = CatalogBrowsingConfiguration._(
     paginationSize: defaultPaginationSize,
     showOfflineMedia: defaultShowOfflineMedia,
+    presentation: CatalogPresentation.grid,
   );
 
   factory CatalogBrowsingConfiguration.resolve({
     int? paginationSize,
     bool? showOfflineMedia,
+    String? presentationValue,
   }) {
     return CatalogBrowsingConfiguration._(
       paginationSize: _positiveOrDefault(paginationSize, defaultPaginationSize),
       showOfflineMedia: showOfflineMedia ?? defaultShowOfflineMedia,
+      presentation: CatalogPresentation.fromValue(presentationValue),
     );
   }
 
   final int paginationSize;
   final bool showOfflineMedia;
+  final CatalogPresentation presentation;
+
+  CatalogBrowsingConfiguration copyWith({
+    int? paginationSize,
+    bool? showOfflineMedia,
+    CatalogPresentation? presentation,
+  }) {
+    return CatalogBrowsingConfiguration.resolve(
+      paginationSize: paginationSize ?? this.paginationSize,
+      showOfflineMedia: showOfflineMedia ?? this.showOfflineMedia,
+      presentationValue: (presentation ?? this.presentation).value,
+    );
+  }
 }
 
 final class VideoSummaryConfiguration {

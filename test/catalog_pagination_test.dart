@@ -20,8 +20,8 @@ void main() {
       final container = _container(query);
       addTearDown(container.dispose);
 
-      await container.read(catalogPresentationProvider.future);
-      final controller = container.read(catalogPresentationProvider.notifier);
+      await container.read(catalogPaginationProvider.future);
+      final controller = container.read(catalogPaginationProvider.notifier);
 
       final firstAppend = controller.loadMore();
       final duplicateAppend = controller.loadMore();
@@ -29,14 +29,14 @@ void main() {
       expect(query.fetchLimits, [4]);
       expect(
         container
-            .read(catalogPresentationProvider)
+            .read(catalogPaginationProvider)
             .requireValue
             .snapshot
             .loadedVideos,
         hasLength(2),
       );
       expect(
-        container.read(catalogPresentationProvider).requireValue.isAppending,
+        container.read(catalogPaginationProvider).requireValue.isAppending,
         isTrue,
       );
 
@@ -44,7 +44,7 @@ void main() {
       await Future.wait([firstAppend, duplicateAppend]);
 
       final presentation = container
-          .read(catalogPresentationProvider)
+          .read(catalogPaginationProvider)
           .requireValue;
       expect(presentation.snapshot.loadedVideos.map((video) => video.id), [
         1,
@@ -66,16 +66,14 @@ void main() {
       final container = _container(query);
       addTearDown(container.dispose);
 
-      await container.read(catalogPresentationProvider.future);
-      final controller = container.read(catalogPresentationProvider.notifier);
+      await container.read(catalogPaginationProvider.future);
+      final controller = container.read(catalogPaginationProvider.notifier);
 
       final failedAppend = controller.loadMore();
       query.failNext(StateError('offline'));
       await failedAppend;
 
-      var presentation = container
-          .read(catalogPresentationProvider)
-          .requireValue;
+      var presentation = container.read(catalogPaginationProvider).requireValue;
       expect(presentation.snapshot.loadedVideos, hasLength(2));
       expect(presentation.loadedPages, 1);
       expect(presentation.failedTargetPage, 2);
@@ -86,7 +84,7 @@ void main() {
       query.completeNext(_snapshot(4, totalCount: 6));
       await retry;
 
-      presentation = container.read(catalogPresentationProvider).requireValue;
+      presentation = container.read(catalogPaginationProvider).requireValue;
       expect(presentation.snapshot.loadedVideos, hasLength(4));
       expect(presentation.loadedPages, 2);
       expect(presentation.failedTargetPage, isNull);
@@ -99,8 +97,8 @@ void main() {
     final container = _container(query);
     addTearDown(container.dispose);
 
-    await container.read(catalogPresentationProvider.future);
-    await container.read(catalogPresentationProvider.notifier).loadMore();
+    await container.read(catalogPaginationProvider.future);
+    await container.read(catalogPaginationProvider.notifier).loadMore();
 
     expect(query.fetchLimits, isEmpty);
   });
@@ -113,9 +111,9 @@ void main() {
       final container = _container(query);
       addTearDown(container.dispose);
 
-      await container.read(catalogPresentationProvider.future);
+      await container.read(catalogPaginationProvider.future);
       final append = container
-          .read(catalogPresentationProvider.notifier)
+          .read(catalogPaginationProvider.notifier)
           .loadMore();
       query.completeNext(
         CatalogSnapshot(
@@ -136,7 +134,7 @@ void main() {
       await append;
 
       final presentation = container
-          .read(catalogPresentationProvider)
+          .read(catalogPaginationProvider)
           .requireValue;
       expect(presentation.snapshot.loadedVideos.map((video) => video.id), [
         1,
@@ -154,15 +152,15 @@ void main() {
     final container = _container(query);
     addTearDown(container.dispose);
 
-    await container.read(catalogPresentationProvider.future);
+    await container.read(catalogPaginationProvider.future);
     final staleSuccess = container
-        .read(catalogPresentationProvider.notifier)
+        .read(catalogPaginationProvider.notifier)
         .loadMore();
 
     container
         .read(_testCriteriaProvider.notifier)
         .setCriteria(_criteria(searchQuery: 'new'));
-    final refreshed = await container.read(catalogPresentationProvider.future);
+    final refreshed = await container.read(catalogPaginationProvider.future);
     expect(refreshed.snapshot.loadedVideos.single.id, 20);
     expect(refreshed.loadedPages, 1);
 
@@ -170,7 +168,7 @@ void main() {
     await staleSuccess;
     expect(
       container
-          .read(catalogPresentationProvider)
+          .read(catalogPaginationProvider)
           .requireValue
           .snapshot
           .loadedVideos
@@ -180,18 +178,18 @@ void main() {
     );
 
     container.read(_testCriteriaProvider.notifier).setCriteria(_criteria());
-    await container.read(catalogPresentationProvider.future);
+    await container.read(catalogPaginationProvider.future);
     final staleError = container
-        .read(catalogPresentationProvider.notifier)
+        .read(catalogPaginationProvider.notifier)
         .loadMore();
     container
         .read(_testCriteriaProvider.notifier)
         .setCriteria(_criteria(searchQuery: 'new'));
-    await container.read(catalogPresentationProvider.future);
+    await container.read(catalogPaginationProvider.future);
     query.failNext(StateError('stale'));
     await staleError;
 
-    final finalState = container.read(catalogPresentationProvider).requireValue;
+    final finalState = container.read(catalogPaginationProvider).requireValue;
     expect(finalState.snapshot.loadedVideos.single.id, 20);
     expect(finalState.appendError, isNull);
   });
@@ -202,9 +200,9 @@ void main() {
     final container = _container(query);
     addTearDown(container.dispose);
 
-    await container.read(catalogPresentationProvider.future);
+    await container.read(catalogPaginationProvider.future);
     final append = container
-        .read(catalogPresentationProvider.notifier)
+        .read(catalogPaginationProvider.notifier)
         .loadMore();
     query.completeNext(_snapshot(4, totalCount: 6));
     await append;
@@ -317,7 +315,7 @@ void main() {
       );
       expect(
         container
-            .read(catalogPresentationProvider)
+            .read(catalogPaginationProvider)
             .requireValue
             .snapshot
             .loadedVideos
@@ -329,6 +327,75 @@ void main() {
       await tester.pump();
     },
   );
+
+  testWidgets('list presentation keeps content mounted during pagination', (
+    tester,
+  ) async {
+    final query = _ControlledCatalogQuery(_snapshot(12, totalCount: 24));
+    addTearDown(query.close);
+    final folder = Folder(
+      id: 1,
+      path: '/Library',
+      alias: 'Library',
+      isPrivate: false,
+      addedAt: DateTime(2026, 7, 21),
+    );
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          catalogBaseCriteriaProvider.overrideWithValue(
+            _criteria(pageLimit: 12),
+          ),
+          catalogWatchProvider.overrideWithValue(query.watch),
+          catalogFetchProvider.overrideWithValue(query.fetch),
+          foldersDaoProvider.overrideWithValue(
+            _TestFoldersDao(query.database, [folder]),
+          ),
+          tagsDaoProvider.overrideWithValue(_TestTagsDao(query.database)),
+          videoSummariesDaoProvider.overrideWithValue(
+            _TestVideoSummariesDao(query.database),
+          ),
+          settingsProvider.overrideWith(_TestListSettings.new),
+        ],
+        child: MacosApp(
+          home: MacosWindow(
+            child: SizedBox(
+              width: 800,
+              height: 600,
+              child: CatalogScrollView(scrollController: scrollController),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
+    await tester.pump();
+    expect(query.fetchLimits, [24]);
+    expect(find.text('Loading more Videos…'), findsOneWidget);
+    expect(_visibleIds(tester), isNotEmpty);
+    final pendingOffset = scrollController.offset;
+
+    query.completeNext(_snapshot(24, totalCount: 24));
+    await tester.pumpAndSettle();
+    expect(scrollController.offset, closeTo(pendingOffset, 1));
+    expect(
+      ProviderScope.containerOf(tester.element(find.byType(CatalogScrollView)))
+          .read(catalogPaginationProvider)
+          .requireValue
+          .snapshot
+          .loadedVideos
+          .map((video) => video.id),
+      List.generate(24, (index) => index + 1),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 }
 
 Iterable<int> _visibleIds(WidgetTester tester) => tester
@@ -450,6 +517,15 @@ final class _ControlledCatalogQuery {
 class _TestSettings extends Settings {
   @override
   Future<AppSettings> build() async => AppSettings.defaults;
+}
+
+class _TestListSettings extends Settings {
+  @override
+  Future<AppSettings> build() async => AppSettings.defaults.copyWith(
+    catalogBrowsing: CatalogBrowsingConfiguration.resolve(
+      presentationValue: CatalogPresentation.list.value,
+    ),
+  );
 }
 
 class _TestFoldersDao extends FoldersDao {

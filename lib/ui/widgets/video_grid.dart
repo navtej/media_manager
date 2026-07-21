@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/catalog_controller.dart';
+import '../../logic/library_name.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/playback_controller.dart';
 import '../../logic/settings_provider.dart';
@@ -20,6 +21,7 @@ import '../../logic/video_summary_models.dart';
 import '../../logic/video_selection_controller.dart';
 import '../../services/library_access_service.dart';
 import 'package:icon_craft/icon_craft.dart';
+import 'catalog_presentation.dart';
 
 class CatalogScrollView extends ConsumerWidget {
   const CatalogScrollView({super.key, required this.scrollController});
@@ -37,7 +39,7 @@ class CatalogScrollView extends ConsumerWidget {
         }
         if (notification.metrics.pixels >=
             notification.metrics.maxScrollExtent - 500) {
-          ref.read(catalogPresentationProvider.notifier).loadMore();
+          ref.read(catalogPaginationProvider.notifier).loadMore();
         }
         return false;
       },
@@ -58,8 +60,8 @@ class CatalogPaginationTail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final presentationAsync = ref.watch(catalogPresentationProvider);
-    if (presentationAsync is! AsyncData<CatalogPresentationState>) {
+    final presentationAsync = ref.watch(catalogPaginationProvider);
+    if (presentationAsync is! AsyncData<CatalogPaginationState>) {
       return const SliverToBoxAdapter();
     }
     final presentation = presentationAsync.value;
@@ -96,7 +98,7 @@ class CatalogPaginationTail extends ConsumerWidget {
                   controlSize: ControlSize.small,
                   secondary: true,
                   onPressed: () =>
-                      ref.read(catalogPresentationProvider.notifier).loadMore(),
+                      ref.read(catalogPaginationProvider.notifier).loadMore(),
                   child: const Text('Retry'),
                 ),
               ],
@@ -116,6 +118,7 @@ class SliverVideoGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final videosAsync = ref.watch(filteredVideosProvider);
+    final presentation = ref.watch(catalogViewPresentationProvider);
 
     return videosAsync.when(
       loading: () => const SliverToBoxAdapter(
@@ -139,14 +142,34 @@ class SliverVideoGrid extends ConsumerWidget {
         final visibleVideoIds = videos
             .map((video) => video.id)
             .toList(growable: false);
+        if (presentation == CatalogPresentation.list) {
+          return SliverPadding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: CatalogLayoutMetrics.listPadding,
+              vertical: CatalogLayoutMetrics.listPadding,
+            ),
+            sliver: SliverFixedExtentList(
+              itemExtent: CatalogLayoutMetrics.listItemExtent,
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => VideoGridItem(
+                  key: ValueKey(videos[index].id),
+                  video: videos[index],
+                  visibleVideoIds: visibleVideoIds,
+                  presentation: CatalogPresentation.list,
+                ),
+                childCount: videos.length,
+              ),
+            ),
+          );
+        }
         return SliverPadding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(CatalogLayoutMetrics.gridPadding),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 350,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: 20,
-              mainAxisExtent: 280,
+              maxCrossAxisExtent: CatalogLayoutMetrics.gridMaxCrossAxisExtent,
+              mainAxisSpacing: CatalogLayoutMetrics.gridMainAxisSpacing,
+              crossAxisSpacing: CatalogLayoutMetrics.gridCrossAxisSpacing,
+              mainAxisExtent: CatalogLayoutMetrics.gridMainAxisExtent,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) => VideoGridItem(
@@ -166,10 +189,12 @@ class SliverVideoGrid extends ConsumerWidget {
 class VideoGridItem extends StatefulWidget {
   final Video video;
   final List<int> visibleVideoIds;
+  final CatalogPresentation presentation;
   const VideoGridItem({
     super.key,
     required this.video,
     this.visibleVideoIds = const <int>[],
+    this.presentation = CatalogPresentation.grid,
   });
 
   @override
@@ -179,6 +204,8 @@ class VideoGridItem extends StatefulWidget {
 class _VideoGridItemState extends State<VideoGridItem> {
   bool _isHovering = false;
   bool _isThumbnailHovering = false;
+  bool _isFocused = false;
+  bool _isPressed = false;
   final TextEditingController _tagController = TextEditingController();
 
   @override
@@ -199,21 +226,23 @@ class _VideoGridItemState extends State<VideoGridItem> {
           videoSelectionControllerProvider.notifier,
         );
 
+        if (widget.presentation == CatalogPresentation.list) {
+          return _buildCompactRow(
+            context,
+            ref,
+            video,
+            theme,
+            isSelected,
+            selectionController,
+          );
+        }
+
         return MouseRegion(
           onEnter: (_) => setState(() => _isHovering = true),
           onExit: (_) => setState(() => _isHovering = false),
           child: GestureDetector(
             behavior: HitTestBehavior.deferToChild,
-            onTap: () {
-              final keyboard = HardwareKeyboard.instance;
-              selectionController.selectWithIntent(
-                videoId: video.id,
-                orderedVisibleVideoIds: widget.visibleVideoIds,
-                isRangeSelection: keyboard.isShiftPressed,
-                isToggleSelection:
-                    keyboard.isMetaPressed || keyboard.isControlPressed,
-              );
-            },
+            onTap: () => _selectWithKeyboardIntent(selectionController),
             child: Opacity(
               opacity: video.isOffline ? 0.5 : 1.0,
               child: Container(
@@ -254,24 +283,10 @@ class _VideoGridItemState extends State<VideoGridItem> {
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(9),
                               ),
-                              child: video.thumbnailPath != null
-                                  ? Image.file(
-                                      File(video.thumbnailPath!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : (video.thumbnailBlob != null
-                                        ? Image.memory(
-                                            video.thumbnailBlob!,
-                                            fit: BoxFit.cover,
-                                          )
-                                        : Container(
-                                            color: MacosColors.black,
-                                            child: const Icon(
-                                              CupertinoIcons.play_circle,
-                                              color: MacosColors.white,
-                                              size: 40,
-                                            ),
-                                          )),
+                              child: _VideoThumbnailContent(
+                                video: video,
+                                placeholderIconSize: 40,
+                              ),
                             ),
                             // Hover Details Overlay
                             if (_isThumbnailHovering)
@@ -320,17 +335,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            MacosTooltip(
-                              message: video.title,
-                              child: Text(
-                                video.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.typography.body.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                            _VideoTitle(video: video),
                             const SizedBox(height: 2),
                             Row(
                               children: [
@@ -368,6 +373,269 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
+  Widget _buildCompactRow(
+    BuildContext context,
+    WidgetRef ref,
+    Video video,
+    MacosThemeData theme,
+    bool isSelected,
+    VideoSelectionController selectionController,
+  ) {
+    final highlighted = isSelected || _isHovering || _isFocused || _isPressed;
+    return Semantics(
+      selected: isSelected,
+      child: FocusableActionDetector(
+        onShowHoverHighlight: (value) => setState(() => _isHovering = value),
+        onShowFocusHighlight: (value) => setState(() => _isFocused = value),
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              _selectWithKeyboardIntent(selectionController);
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapCancel: () => setState(() => _isPressed = false),
+          onTapUp: (_) => setState(() => _isPressed = false),
+          onTap: () => _selectWithKeyboardIntent(selectionController),
+          child: Opacity(
+            opacity: video.isOffline ? 0.62 : 1,
+            child: Container(
+              height: CatalogLayoutMetrics.listItemExtent,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              decoration: BoxDecoration(
+                color: highlighted
+                    ? theme.primaryColor.withValues(
+                        alpha: isSelected ? 0.16 : 0.08,
+                      )
+                    : theme.canvasColor,
+                border: Border.all(
+                  color: _isFocused || isSelected
+                      ? theme.primaryColor
+                      : theme.dividerColor,
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(7),
+                boxShadow: _isFocused
+                    ? [BoxShadow(color: theme.primaryColor, spreadRadius: 1)]
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  _VideoSelectionCheckbox(
+                    key: ValueKey('video-selection-${video.id}'),
+                    selected: isSelected,
+                    onPressed: () => selectionController.toggle(video.id),
+                  ),
+                  const SizedBox(width: 8),
+                  ClipRRect(
+                    key: ValueKey('video-thumbnail-${video.id}'),
+                    borderRadius: BorderRadius.circular(5),
+                    child: SizedBox(
+                      width: CatalogLayoutMetrics.thumbnailWidth,
+                      height: CatalogLayoutMetrics.thumbnailHeight,
+                      child: _VideoThumbnailContent(
+                        video: video,
+                        placeholderIconSize: 28,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _VideoTitle(video: video),
+                        _FolderPathWidget(video: video, compact: true),
+                        Expanded(
+                          child: _CompactVideoTagLine(videoId: video.id),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 68,
+                    child: MacosTooltip(
+                      message:
+                          '${_formatDuration(video.duration)} · ${LibraryStats.formatSize(video.size)}',
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _formatDuration(video.duration),
+                            maxLines: 1,
+                            style: theme.typography.caption1,
+                          ),
+                          Text(
+                            LibraryStats.formatSize(video.size),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.typography.caption1,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 54,
+                    child: video.isOffline
+                        ? const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CupertinoIcons.exclamationmark_circle,
+                                size: 15,
+                              ),
+                              Text('Offline', style: TextStyle(fontSize: 10)),
+                            ],
+                          )
+                        : null,
+                  ),
+                  _buildCompactActions(ref),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectWithKeyboardIntent(VideoSelectionController selectionController) {
+    final keyboard = HardwareKeyboard.instance;
+    selectionController.selectWithIntent(
+      videoId: widget.video.id,
+      orderedVisibleVideoIds: widget.visibleVideoIds,
+      isRangeSelection: keyboard.isShiftPressed,
+      isToggleSelection: keyboard.isMetaPressed || keyboard.isControlPressed,
+    );
+  }
+
+  Widget _buildCompactActions(WidgetRef ref) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MacosTooltip(
+          message: 'Play',
+          child: MacosIconButton(
+            key: ValueKey('video-play-${widget.video.id}'),
+            padding: EdgeInsets.zero,
+            icon: const Icon(CupertinoIcons.play_fill, size: 16),
+            onPressed: () => _playVideo(ref, widget.video),
+          ),
+        ),
+        MacosTooltip(
+          message: widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
+          child: MacosIconButton(
+            key: ValueKey('video-favorite-${widget.video.id}'),
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              widget.video.isFavorite
+                  ? CupertinoIcons.heart_fill
+                  : CupertinoIcons.heart,
+              color: widget.video.isFavorite ? MacosColors.appleRed : null,
+              size: 16,
+            ),
+            onPressed: () => _toggleFavorite(ref),
+          ),
+        ),
+        MacosTooltip(
+          message: 'Add or edit tags',
+          child: MacosIconButton(
+            key: ValueKey('video-edit-tags-${widget.video.id}'),
+            padding: EdgeInsets.zero,
+            icon: const Icon(CupertinoIcons.tag, size: 16),
+            onPressed: () => _showTagEditor(ref),
+          ),
+        ),
+        Semantics(
+          label: 'More actions',
+          button: true,
+          child: MacosTooltip(
+            message: 'More actions',
+            child: MacosPulldownButton(
+              key: ValueKey('video-more-${widget.video.id}'),
+              icon: CupertinoIcons.ellipsis_circle,
+              menuAlignment: PulldownMenuAlignment.right,
+              items: [
+                MacosPulldownMenuItem(
+                  title: const Text('Info'),
+                  onTap: () => _showInfo(context, widget.video),
+                ),
+                MacosPulldownMenuItem(
+                  title: const Text('Reveal in Finder'),
+                  onTap: () => _revealVideo(ref, widget.video),
+                ),
+                MacosPulldownMenuItem(
+                  title: const Text('Video Summary'),
+                  onTap: () => _showSummaryDialog(context, ref, widget.video),
+                ),
+                const MacosPulldownMenuDivider(),
+                MacosPulldownMenuItem(
+                  title: const Text('Delete'),
+                  onTap: () => _confirmDelete(ref),
+                ),
+                MacosPulldownMenuItem(
+                  title: const Text('Clear Tags'),
+                  onTap: () => _clearTags(ref),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showTagEditor(WidgetRef ref) {
+    showMacosAlertDialog<void>(
+      context: context,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.tag),
+        title: Text('Tags: ${widget.video.title}'),
+        message: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 72,
+                child: _VideoTagList(videoId: widget.video.id),
+              ),
+              _TagAutocompleteInput(video: widget.video),
+            ],
+          ),
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Done'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleFavorite(WidgetRef ref) {
+    return ref
+        .read(videosDaoProvider)
+        .toggleFavorite(widget.video.id, widget.video.isFavorite);
+  }
+
+  Future<void> _clearTags(WidgetRef ref) {
+    return ref.read(tagsDaoProvider).deleteAllTagsForVideo(widget.video.id);
+  }
+
   Widget _buildActions(WidgetRef ref) {
     final hasFreshSummary =
         ref
@@ -396,9 +664,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
             color: widget.video.isFavorite ? MacosColors.appleRed : null,
             size: 16,
           ),
-          onPressed: () => ref
-              .read(videosDaoProvider)
-              .toggleFavorite(widget.video.id, widget.video.isFavorite),
+          onPressed: () => _toggleFavorite(ref),
         ),
         // Play
         MacosIconButton(
@@ -447,9 +713,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
               //   ),
               // ),
             ),
-            onPressed: () => ref
-                .read(tagsDaoProvider)
-                .deleteAllTagsForVideo(widget.video.id),
+            onPressed: () => _clearTags(ref),
           ),
         ),
       ],
@@ -771,6 +1035,55 @@ class _VideoGridItemState extends State<VideoGridItem> {
       return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
     return '$m:${s.toString().padLeft(2, '0')}';
+  }
+}
+
+class _VideoThumbnailContent extends StatelessWidget {
+  const _VideoThumbnailContent({
+    required this.video,
+    required this.placeholderIconSize,
+  });
+
+  final Video video;
+  final double placeholderIconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    if (video.thumbnailPath != null) {
+      return Image.file(File(video.thumbnailPath!), fit: BoxFit.cover);
+    }
+    if (video.thumbnailBlob != null) {
+      return Image.memory(video.thumbnailBlob!, fit: BoxFit.cover);
+    }
+    return Container(
+      color: MacosColors.black,
+      child: Icon(
+        CupertinoIcons.play_circle,
+        color: MacosColors.white,
+        size: placeholderIconSize,
+      ),
+    );
+  }
+}
+
+class _VideoTitle extends StatelessWidget {
+  const _VideoTitle({required this.video});
+
+  final Video video;
+
+  @override
+  Widget build(BuildContext context) {
+    return MacosTooltip(
+      message: video.title,
+      child: Text(
+        video.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: MacosTheme.of(
+          context,
+        ).typography.body.copyWith(fontWeight: FontWeight.bold),
+      ),
+    );
   }
 }
 
@@ -1180,9 +1493,44 @@ class _VideoTagList extends ConsumerWidget {
   }
 }
 
+class _CompactVideoTagLine extends ConsumerWidget {
+  const _CompactVideoTagLine({required this.videoId});
+
+  final int videoId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return StreamBuilder<List<Tag>>(
+      stream: ref.watch(tagsDaoProvider).watchTagsForVideo(videoId),
+      builder: (context, snapshot) {
+        final label = (snapshot.data ?? const <Tag>[])
+            .map((tag) => tag.tagText)
+            .join(' · ');
+        if (label.isEmpty) {
+          return Text(
+            'No tags',
+            maxLines: 1,
+            style: MacosTheme.of(context).typography.caption1,
+          );
+        }
+        return MacosTooltip(
+          message: label,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: MacosTheme.of(context).typography.caption1,
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _FolderPathWidget extends ConsumerWidget {
   final Video video;
-  const _FolderPathWidget({required this.video});
+  final bool compact;
+  const _FolderPathWidget({required this.video, this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1201,21 +1549,28 @@ class _FolderPathWidget extends ConsumerWidget {
           video.absolutePath,
           folder.path,
         );
-        if (relativePath.isEmpty) return const SizedBox();
+        final displayPath = compact
+            ? relativePath.isEmpty
+                  ? libraryDisplayName(folder)
+                  : '${libraryDisplayName(folder)} / $relativePath'
+            : relativePath;
+        if (displayPath.isEmpty) return const SizedBox();
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: EdgeInsets.only(bottom: compact ? 0 : 4),
           child: GestureDetector(
             onTap: () => ref
                 .read(catalogControllerProvider.notifier)
                 .setSearchQuery(relativePath),
             child: MacosTooltip(
-              message: 'Click to filter by folder: $relativePath',
+              message: compact
+                  ? video.absolutePath
+                  : 'Click to filter by folder: $relativePath',
               child: Text(
-                relativePath,
-                style: const TextStyle(
+                displayPath,
+                style: TextStyle(
                   fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: compact ? FontWeight.normal : FontWeight.bold,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

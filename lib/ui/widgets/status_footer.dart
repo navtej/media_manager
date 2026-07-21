@@ -93,13 +93,17 @@ class StatusFooter extends ConsumerWidget {
 
           // Right side: Video counts
           if (statusMsg == null) ...[
-            const Spacer(),
-            Text(
-              'Loaded: $visibleCount / Matching: $selectedCount / Selected: $selectedBulkCount / Total: $totalCount',
-              style: const TextStyle(
-                fontSize: 11,
-                color: MacosColors.white,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                'Loaded: $visibleCount / Matching: $selectedCount / Selected: $selectedBulkCount / Total: $totalCount',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: MacosColors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

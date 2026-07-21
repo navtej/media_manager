@@ -61,7 +61,10 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
 
     if (isToggleSelection) {
       toggle(videoId);
+      return;
     }
+
+    state = VideoSelectionState(selectedIds: {videoId}, anchorVideoId: videoId);
   }
 
   void _selectRange(int videoId, List<int> orderedVisibleVideoIds) {

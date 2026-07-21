@@ -192,10 +192,10 @@ void main() {
     final beforePaginationTags = snapshot.availableTags;
     final beforePaginationStats = snapshot.statistics;
 
-    await container.read(catalogPresentationProvider.notifier).loadMore();
+    await container.read(catalogPaginationProvider.notifier).loadMore();
     expect(
       container
-          .read(catalogPresentationProvider)
+          .read(catalogPaginationProvider)
           .requireValue
           .snapshot
           .loadedVideos,

@@ -25,6 +25,7 @@ void main() {
     expect(settings.appearance.themeMode, AppearanceThemeMode.system);
     expect(settings.catalogBrowsing.paginationSize, 50);
     expect(settings.catalogBrowsing.showOfflineMedia, isTrue);
+    expect(settings.catalogBrowsing.presentation, CatalogPresentation.grid);
     expect(settings.emptyFolderCleanup.enabled, isTrue);
     expect(settings.emptyFolderCleanup.intervalDays, 7);
     expect(
@@ -70,6 +71,7 @@ void main() {
         'themeMode': 'dark',
         'paginationSize': 75,
         'showOfflineMedia': false,
+        'catalogPresentation': 'list',
         'privateLibraryAutoLockMinutes': 45,
         'summaryModelSource': 'managed',
         'summaryModelPath': '/stale/model.bin',
@@ -93,6 +95,7 @@ void main() {
       expect(settings.appearance.themeMode, AppearanceThemeMode.dark);
       expect(settings.catalogBrowsing.paginationSize, 75);
       expect(settings.catalogBrowsing.showOfflineMedia, isFalse);
+      expect(settings.catalogBrowsing.presentation, CatalogPresentation.list);
       expect(settings.privateLibraryAccess.autoLockMinutes, 45);
       expect(
         settings.videoSummary.modelSource,
@@ -147,6 +150,7 @@ void main() {
       'batchSize': -1,
       'paginationSize': 0,
       'themeMode': 'sepia',
+      'catalogPresentation': 'columns',
       'privateLibraryAutoLockMinutes': 121,
     });
     final container = _containerFor(persistence);
@@ -156,6 +160,7 @@ void main() {
     expect(settings.librarySynchronization.scanIntervalMinutes, 5);
     expect(settings.librarySynchronization.batchSize, 4);
     expect(settings.catalogBrowsing.paginationSize, 50);
+    expect(settings.catalogBrowsing.presentation, CatalogPresentation.grid);
     expect(settings.appearance.themeMode, AppearanceThemeMode.system);
     expect(settings.privateLibraryAccess.autoLockMinutes, 10);
 
@@ -179,6 +184,7 @@ void main() {
     final notifier = container.read(settingsProvider.notifier);
     await notifier.updateSettings(15, 6, 80);
     await notifier.updateShowOfflineMedia(false);
+    await notifier.updateCatalogPresentation(CatalogPresentation.list);
     await notifier.updatePrivateLibraryAutoLockMinutes(25);
     await notifier.updateTheme(AppearanceThemeMode.dark);
     await notifier.updateSummaryPreferVttSubtitles(false);
@@ -206,6 +212,7 @@ void main() {
     expect(appearance.themeMode, AppearanceThemeMode.dark);
     expect(catalog.paginationSize, 80);
     expect(catalog.showOfflineMedia, isFalse);
+    expect(catalog.presentation, CatalogPresentation.list);
     expect(summary.preferVttSubtitles, isFalse);
     expect(summary.apiUrl, 'https://summary.example.test');
 
@@ -218,6 +225,7 @@ void main() {
     expect(reloaded.appearance.themeMode, AppearanceThemeMode.dark);
     expect(reloaded.catalogBrowsing.paginationSize, 80);
     expect(reloaded.catalogBrowsing.showOfflineMedia, isFalse);
+    expect(reloaded.catalogBrowsing.presentation, CatalogPresentation.list);
     expect(reloaded.videoSummary.preferVttSubtitles, isFalse);
     expect(reloaded.videoSummary.apiUrl, 'https://summary.example.test');
   });

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/settings_provider.dart';
 import '../widgets/video_grid.dart';
 import '../widgets/status_footer.dart';
 import '../widgets/filter_bar.dart';
@@ -15,6 +16,7 @@ import '../../logic/video_selection_controller.dart';
 import 'settings_screen.dart';
 import 'tag_management_screen.dart';
 import '../widgets/bulk_selection_toolbar.dart';
+import '../widgets/catalog_presentation.dart';
 import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
@@ -30,6 +32,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final TextEditingController _searchController;
   late final TextEditingController _tagFilterController;
+  late final ScrollController _catalogScrollController;
   bool _isBulkActionRunning = false;
 
   @override
@@ -39,6 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _searchController.addListener(_onSearchChanged);
     _tagFilterController = TextEditingController();
     _tagFilterController.addListener(_onTagFilterChanged);
+    _catalogScrollController = ScrollController();
   }
 
   @override
@@ -47,6 +51,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _searchController.dispose();
     _tagFilterController.removeListener(_onTagFilterChanged);
     _tagFilterController.dispose();
+    _catalogScrollController.dispose();
     super.dispose();
   }
 
@@ -87,6 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .map((video) => video.id)
             .toList(growable: false) ??
         const <int>[];
+    final catalogPresentation = ref.watch(catalogViewPresentationProvider);
 
     return MacosWindow(
       child: Row(
@@ -386,190 +392,255 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // Main Content Area
           Expanded(
             child: ContentArea(
-              builder: (context, scrollController) {
-                return Column(
-                  children: [
-                    // Header
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: MacosTheme.of(context).dividerColor,
+              builder: (context, _) {
+                return LayoutBuilder(
+                  builder: (context, constraints) => Column(
+                    children: [
+                      // Header
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: MacosTheme.of(context).dividerColor,
+                            ),
                           ),
+                          color: MacosTheme.of(context).canvasColor,
                         ),
-                        color: MacosTheme.of(context).canvasColor,
-                      ),
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            height: 52,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Row(
-                                children: [
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Library',
-                                    style: MacosTheme.of(
-                                      context,
-                                    ).typography.headline,
-                                  ),
-                                  const Spacer(),
-                                  const LibraryFilterMenu(),
-                                  const SizedBox(width: 8),
-                                  const ShowOfflineMediaControl(),
-                                  const SizedBox(width: 8),
-                                  MacosTooltip(
-                                    message: 'Add Folder',
-                                    child: MacosIconButton(
-                                      icon: const MacosIcon(CupertinoIcons.add),
-                                      onPressed: isBulkBusy
-                                          ? null
-                                          : _pickFolder,
-                                      shape: BoxShape.rectangle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  MacosTooltip(
-                                    message: 'Refresh Library',
-                                    child: MacosIconButton(
-                                      icon: const MacosIcon(
-                                        CupertinoIcons.refresh,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: constraints.maxWidth < 760 ? 92 : 52,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (constraints.maxWidth >= 760) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Library',
+                                        style: MacosTheme.of(
+                                          context,
+                                        ).typography.headline,
                                       ),
-                                      onPressed: isBulkBusy
-                                          ? null
-                                          : () {
-                                              print('DEBUG: Refresh pressed');
-                                              ref
-                                                  .read(
-                                                    libraryControllerProvider
-                                                        .notifier,
-                                                  )
-                                                  .syncAll();
-                                            },
-                                      shape: BoxShape.rectangle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  MacosTooltip(
-                                    message: 'Rebuild Index',
-                                    child: MacosIconButton(
-                                      icon: const MacosIcon(
-                                        CupertinoIcons.trash_circle,
-                                      ),
-                                      onPressed: isBulkBusy
-                                          ? null
-                                          : () {
-                                              showMacosAlertDialog(
-                                                context: context,
-                                                builder: (context) => MacosAlertDialog(
-                                                  appIcon: const MacosIcon(
-                                                    CupertinoIcons.film,
-                                                  ),
-                                                  title: const Text(
-                                                    'Rebuild Library?',
-                                                  ),
-                                                  message: const Text(
-                                                    'This will clear all existing tags and metadata, and re-scan everything using the new AI engine. This may take a while.',
-                                                  ),
-                                                  primaryButton: PushButton(
-                                                    controlSize:
-                                                        ControlSize.large,
-                                                    child: const Text(
-                                                      'Rebuild',
-                                                    ),
-                                                    onPressed: () {
-                                                      Navigator.pop(context);
+                                      const SizedBox(width: 16),
+                                    ],
+                                    Expanded(
+                                      child: Wrap(
+                                        alignment: WrapAlignment.end,
+                                        runAlignment: WrapAlignment.center,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          const LibraryFilterMenu(),
+                                          const ShowOfflineMediaControl(),
+                                          CatalogPresentationControl(
+                                            presentation: catalogPresentation,
+                                            onChanged: (next) =>
+                                                _changeCatalogPresentation(
+                                                  next: next,
+                                                  current: catalogPresentation,
+                                                  scrollController:
+                                                      _catalogScrollController,
+                                                  viewportWidth:
+                                                      constraints.maxWidth,
+                                                ),
+                                          ),
+                                          MacosTooltip(
+                                            message: 'Add Folder',
+                                            child: MacosIconButton(
+                                              icon: const MacosIcon(
+                                                CupertinoIcons.add,
+                                              ),
+                                              onPressed: isBulkBusy
+                                                  ? null
+                                                  : _pickFolder,
+                                              shape: BoxShape.rectangle,
+                                            ),
+                                          ),
+                                          MacosTooltip(
+                                            message: 'Refresh Library',
+                                            child: MacosIconButton(
+                                              icon: const MacosIcon(
+                                                CupertinoIcons.refresh,
+                                              ),
+                                              onPressed: isBulkBusy
+                                                  ? null
+                                                  : () {
                                                       ref
                                                           .read(
                                                             libraryControllerProvider
                                                                 .notifier,
                                                           )
-                                                          .rebuildLibrary();
+                                                          .syncAll();
                                                     },
-                                                  ),
-                                                  secondaryButton: PushButton(
-                                                    controlSize:
-                                                        ControlSize.large,
-                                                    child: const Text('Cancel'),
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                      shape: BoxShape.rectangle,
+                                              shape: BoxShape.rectangle,
+                                            ),
+                                          ),
+                                          MacosTooltip(
+                                            message: 'Rebuild Index',
+                                            child: MacosIconButton(
+                                              icon: const MacosIcon(
+                                                CupertinoIcons.trash_circle,
+                                              ),
+                                              onPressed: isBulkBusy
+                                                  ? null
+                                                  : () =>
+                                                        _confirmRebuildLibrary(
+                                                          context,
+                                                        ),
+                                              shape: BoxShape.rectangle,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            height: 44,
-                            alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.fromLTRB(24, 0, 16, 8),
-                            child: BulkSelectionToolbar(
-                              selectedCount: moveSelection.count,
-                              isBusy: isBulkBusy,
-                              onSelectLoaded: loadedVideoIds.isEmpty
-                                  ? null
-                                  : () => ref
-                                        .read(
-                                          videoSelectionControllerProvider
-                                              .notifier,
-                                        )
-                                        .selectLoaded(loadedVideoIds),
-                              onMove: () {
-                                final selectedVideoIds = _selectedVideoIds();
-                                if (selectedVideoIds.isEmpty) return;
-                                showVideoMoveDialog(
-                                  context: context,
-                                  ref: ref,
-                                  selectedVideoIds: selectedVideoIds,
-                                );
-                              },
-                              onDelete: _confirmDeleteSelectedVideos,
-                              onFavorite: () => _setFavoriteForSelected(true),
-                              onUnfavorite: () =>
-                                  _setFavoriteForSelected(false),
-                              onClearTags: _confirmClearTagsForSelected,
-                              onClearSelection: () => ref
-                                  .read(
-                                    videoSelectionControllerProvider.notifier,
-                                  )
-                                  .clear(),
+                            Container(
+                              height: 44,
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.fromLTRB(24, 0, 16, 8),
+                              child: BulkSelectionToolbar(
+                                selectedCount: moveSelection.count,
+                                isBusy: isBulkBusy,
+                                onSelectLoaded: loadedVideoIds.isEmpty
+                                    ? null
+                                    : () => ref
+                                          .read(
+                                            videoSelectionControllerProvider
+                                                .notifier,
+                                          )
+                                          .selectLoaded(loadedVideoIds),
+                                onMove: () {
+                                  final selectedVideoIds = _selectedVideoIds();
+                                  if (selectedVideoIds.isEmpty) return;
+                                  showVideoMoveDialog(
+                                    context: context,
+                                    ref: ref,
+                                    selectedVideoIds: selectedVideoIds,
+                                  );
+                                },
+                                onDelete: _confirmDeleteSelectedVideos,
+                                onFavorite: () => _setFavoriteForSelected(true),
+                                onUnfavorite: () =>
+                                    _setFavoriteForSelected(false),
+                                onClearTags: _confirmClearTagsForSelected,
+                                onClearSelection: () => ref
+                                    .read(
+                                      videoSelectionControllerProvider.notifier,
+                                    )
+                                    .clear(),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: MacosSearchField(
+                          controller: _searchController,
+                          placeholder: 'Search videos...',
+                        ),
                       ),
-                      child: MacosSearchField(
-                        controller: _searchController,
-                        placeholder: 'Search videos...',
+                      // Grid
+                      Expanded(
+                        child: CatalogScrollView(
+                          scrollController: _catalogScrollController,
+                        ),
                       ),
-                    ),
-                    // Grid
-                    Expanded(
-                      child: CatalogScrollView(
-                        scrollController: scrollController,
-                      ),
-                    ),
-                    // Footer (pinned)
-                    const StatusFooter(),
-                  ],
+                      // Footer (pinned)
+                      const StatusFooter(),
+                    ],
+                  ),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _changeCatalogPresentation({
+    required CatalogPresentation next,
+    required CatalogPresentation current,
+    required ScrollController scrollController,
+    required double viewportWidth,
+  }) async {
+    if (next == current) return;
+    final currentVideoIds =
+        ref
+            .read(filteredVideosProvider)
+            .asData
+            ?.value
+            .map((video) => video.id)
+            .toList(growable: false) ??
+        const <int>[];
+    final anchor = scrollController.hasClients && currentVideoIds.isNotEmpty
+        ? CatalogScrollAnchor.capture(
+            presentation: current,
+            orderedVideoIds: currentVideoIds,
+            scrollOffset: scrollController.offset,
+            viewportWidth: viewportWidth,
+          )
+        : null;
+
+    await ref.read(settingsProvider.notifier).updateCatalogPresentation(next);
+    if (!mounted || anchor == null) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !scrollController.hasClients) return;
+
+    final nextVideoIds =
+        ref
+            .read(filteredVideosProvider)
+            .asData
+            ?.value
+            .map((video) => video.id)
+            .toList(growable: false) ??
+        const <int>[];
+    final position = scrollController.position;
+    final target = anchor
+        .offsetFor(
+          presentation: next,
+          orderedVideoIds: nextVideoIds,
+          viewportWidth: viewportWidth,
+        )
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    scrollController.jumpTo(target);
+  }
+
+  void _confirmRebuildLibrary(BuildContext context) {
+    showMacosAlertDialog<void>(
+      context: context,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.film),
+        title: const Text('Rebuild Library?'),
+        message: const Text(
+          'This will clear all existing tags and metadata, and re-scan everything using the new AI engine. This may take a while.',
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            ref.read(libraryControllerProvider.notifier).rebuildLibrary();
+          },
+          child: const Text('Rebuild'),
+        ),
+        secondaryButton: PushButton(
+          controlSize: ControlSize.large,
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
       ),
     );
   }

@@ -18,6 +18,7 @@ const _batchSizeKey = 'batchSize';
 const _themeModeKey = 'themeMode';
 const _paginationSizeKey = 'paginationSize';
 const _showOfflineMediaKey = 'showOfflineMedia';
+const _catalogPresentationKey = 'catalogPresentation';
 const _emptyFolderCleanupEnabledKey = 'emptyFolderCleanupEnabled';
 const _emptyFolderCleanupIntervalDaysKey = 'emptyFolderCleanupIntervalDays';
 const _privateLibraryAutoLockMinutesKey = 'privateLibraryAutoLockMinutes';
@@ -143,6 +144,15 @@ final catalogPageSizeProvider = Provider<int>((ref) {
       CatalogBrowsingConfiguration.defaults.paginationSize;
 });
 
+final catalogViewPresentationProvider = Provider<CatalogPresentation>((ref) {
+  return ref
+          .watch(catalogBrowsingConfigurationProvider)
+          .asData
+          ?.value
+          .presentation ??
+      CatalogPresentation.grid;
+});
+
 final videoSummaryConfigurationProvider =
     Provider<AsyncValue<VideoSummaryConfiguration>>((ref) {
       return ref
@@ -208,6 +218,7 @@ class Settings extends _$Settings {
       catalogBrowsing: CatalogBrowsingConfiguration.resolve(
         paginationSize: persistence.getInt(_paginationSizeKey),
         showOfflineMedia: persistence.getBool(_showOfflineMediaKey),
+        presentationValue: persistence.getString(_catalogPresentationKey),
       ),
       videoSummary: videoSummary,
     );
@@ -223,9 +234,8 @@ class Settings extends _$Settings {
       scanIntervalMinutes: scanInterval,
       batchSize: batchSize,
     );
-    final catalog = CatalogBrowsingConfiguration.resolve(
+    final catalog = current.catalogBrowsing.copyWith(
       paginationSize: paginationSize,
-      showOfflineMedia: current.catalogBrowsing.showOfflineMedia,
     );
     final persistence = await _persistence();
     await persistence.setInt(
@@ -244,12 +254,22 @@ class Settings extends _$Settings {
 
   Future<void> updateShowOfflineMedia(bool value) async {
     final current = await _currentSettings();
-    final catalog = CatalogBrowsingConfiguration.resolve(
-      paginationSize: current.catalogBrowsing.paginationSize,
-      showOfflineMedia: value,
-    );
+    final catalog = current.catalogBrowsing.copyWith(showOfflineMedia: value);
     final persistence = await _persistence();
     await persistence.setBool(_showOfflineMediaKey, value);
+    state = AsyncData(current.copyWith(catalogBrowsing: catalog));
+  }
+
+  Future<void> updateCatalogPresentation(
+    CatalogPresentation presentation,
+  ) async {
+    final current = await _currentSettings();
+    if (current.catalogBrowsing.presentation == presentation) return;
+    final catalog = current.catalogBrowsing.copyWith(
+      presentation: presentation,
+    );
+    final persistence = await _persistence();
+    await persistence.setString(_catalogPresentationKey, presentation.value);
     state = AsyncData(current.copyWith(catalogBrowsing: catalog));
   }
 

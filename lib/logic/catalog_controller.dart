@@ -522,8 +522,8 @@ final catalogBaseCriteriaProvider = Provider<CatalogCriteria>((ref) {
 final catalogCriteriaProvider = Provider<CatalogCriteria>((ref) {
   final base = ref.watch(catalogBaseCriteriaProvider);
   final loadedPages = ref.watch(
-    catalogPresentationProvider.select(
-      (state) => state is AsyncData<CatalogPresentationState>
+    catalogPaginationProvider.select(
+      (state) => state is AsyncData<CatalogPaginationState>
           ? state.value.loadedPages
           : 1,
     ),
@@ -565,8 +565,8 @@ final class CatalogAppendState {
   final Object? error;
 }
 
-final class CatalogPresentationState {
-  const CatalogPresentationState({
+final class CatalogPaginationState {
+  const CatalogPaginationState({
     required this.snapshot,
     required this.loadedPages,
     this.append = const CatalogAppendState.idle(),
@@ -582,12 +582,12 @@ final class CatalogPresentationState {
   int? get failedTargetPage =>
       append.phase == CatalogAppendPhase.failed ? append.targetPage : null;
 
-  CatalogPresentationState copyWith({
+  CatalogPaginationState copyWith({
     CatalogSnapshot? snapshot,
     int? loadedPages,
     CatalogAppendState? append,
   }) {
-    return CatalogPresentationState(
+    return CatalogPaginationState(
       snapshot: snapshot ?? this.snapshot,
       loadedPages: loadedPages ?? this.loadedPages,
       append: append ?? this.append,
@@ -595,14 +595,14 @@ final class CatalogPresentationState {
   }
 }
 
-final class CatalogPresentationController
-    extends AsyncNotifier<CatalogPresentationState> {
+final class CatalogPaginationController
+    extends AsyncNotifier<CatalogPaginationState> {
   StreamSubscription<CatalogSnapshot>? _subscription;
   CatalogCriteria? _baseCriteria;
   int _generation = 0;
 
   @override
-  Future<CatalogPresentationState> build() async {
+  Future<CatalogPaginationState> build() async {
     final criteria = ref.watch(catalogBaseCriteriaProvider);
     final generation = ++_generation;
     ref.onDispose(() {
@@ -618,12 +618,12 @@ final class CatalogPresentationController
       firstSnapshot: firstSnapshot,
     );
     final snapshot = await firstSnapshot.future;
-    return CatalogPresentationState(snapshot: snapshot, loadedPages: 1);
+    return CatalogPaginationState(snapshot: snapshot, loadedPages: 1);
   }
 
   Future<void> loadMore() async {
     final currentAsync = state;
-    if (currentAsync is! AsyncData<CatalogPresentationState>) return;
+    if (currentAsync is! AsyncData<CatalogPaginationState>) return;
     final current = currentAsync.value;
     if (current.isAppending || !current.hasMore) return;
 
@@ -643,7 +643,7 @@ final class CatalogPresentationController
       if (generation != _generation) return;
 
       _validateExpandedPrefix(current.snapshot, expanded);
-      final next = CatalogPresentationState(
+      final next = CatalogPaginationState(
         snapshot: expanded,
         loadedPages: targetPage,
       );
@@ -652,7 +652,7 @@ final class CatalogPresentationController
     } catch (error) {
       if (generation != _generation) return;
       final latest = state;
-      if (latest is! AsyncData<CatalogPresentationState>) return;
+      if (latest is! AsyncData<CatalogPaginationState>) return;
       state = AsyncData(
         latest.value.copyWith(
           append: CatalogAppendState.failed(targetPage, error),
@@ -681,7 +681,7 @@ final class CatalogPresentationController
               return;
             }
             final current = state;
-            if (current is AsyncData<CatalogPresentationState>) {
+            if (current is AsyncData<CatalogPaginationState>) {
               state = AsyncData(current.value.copyWith(snapshot: snapshot));
             }
           },
@@ -691,7 +691,7 @@ final class CatalogPresentationController
               firstSnapshot.completeError(error, stackTrace);
               return;
             }
-            state = AsyncError<CatalogPresentationState>(error, stackTrace);
+            state = AsyncError<CatalogPaginationState>(error, stackTrace);
           },
         );
   }
@@ -714,16 +714,15 @@ final class CatalogPresentationController
   }
 }
 
-final catalogPresentationProvider =
-    AsyncNotifierProvider<
-      CatalogPresentationController,
-      CatalogPresentationState
-    >(CatalogPresentationController.new);
+final catalogPaginationProvider =
+    AsyncNotifierProvider<CatalogPaginationController, CatalogPaginationState>(
+      CatalogPaginationController.new,
+    );
 
 final catalogSnapshotProvider =
     Provider.autoDispose<AsyncValue<CatalogSnapshot>>(
       (ref) => ref
-          .watch(catalogPresentationProvider)
+          .watch(catalogPaginationProvider)
           .whenData((presentation) => presentation.snapshot),
     );
 
