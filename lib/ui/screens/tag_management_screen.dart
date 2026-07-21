@@ -7,6 +7,8 @@ import '../../data/database.dart';
 import '../../data/providers.dart';
 import '../../logic/catalog_controller.dart';
 import '../../logic/private_library_controller.dart';
+import '../movie_manager_visual_system.dart';
+import '../widgets/macos_preference_checkbox.dart';
 
 enum TagSortOption { name, count }
 
@@ -164,18 +166,12 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               child: Row(
                 children: [
                   // Merge Button
-                  MacosTooltip(
-                    message: 'Merge selected tags',
-                    child: MacosIconButton(
-                      icon: const MacosIcon(CupertinoIcons.arrow_merge),
-                      onPressed: _selectedTags.length >= 2
-                          ? _showMergeDialog
-                          : null,
-                      boxConstraints: const BoxConstraints(
-                        minHeight: 28,
-                        minWidth: 28,
-                      ),
-                    ),
+                  MovieManagerIconButton(
+                    label: 'Merge selected tags',
+                    icon: CupertinoIcons.arrow_merge,
+                    onPressed: _selectedTags.length >= 2
+                        ? _showMergeDialog
+                        : null,
                   ),
 
                   const SizedBox(width: 16),
@@ -586,9 +582,7 @@ class _TagChipState extends State<_TagChip> {
             color: widget.isSelected
                 ? theme.primaryColor
                 : MacosColors.systemGrayColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(
-              20,
-            ), // More rounded for proper "Chip" look
+            borderRadius: BorderRadius.circular(MovieManagerRadii.panel),
             border: Border.all(
               color: widget.isSelected
                   ? theme.primaryColor
@@ -607,7 +601,6 @@ class _TagChipState extends State<_TagChip> {
                       : theme.typography.body.color?.withValues(alpha: 0.9),
                 ),
               ),
-              // Actions visible on hover or selection (or always if space permits, but hover is cleaner)
               if (_isHovered || widget.isSelected) ...[
                 const SizedBox(width: 8),
                 _ActionButton(
@@ -630,6 +623,15 @@ class _TagChipState extends State<_TagChip> {
                   isSelected: widget.isSelected,
                   isDestructive: true,
                   tooltip: 'Delete tag',
+                ),
+              ],
+              if (!_isHovered && !widget.isSelected) ...[
+                const SizedBox(width: 8),
+                _ActionButton(
+                  icon: CupertinoIcons.ellipsis,
+                  onTap: widget.onViewVideos,
+                  isSelected: false,
+                  tooltip: 'View videos and tag actions',
                 ),
               ],
             ],
@@ -657,32 +659,16 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.white.withValues(alpha: 0.2)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Icon(
-          icon,
-          size: 14,
-          color: isSelected
-              ? MacosColors.white
-              : (isDestructive
-                    ? MacosColors.systemRedColor
-                    : MacosColors.systemGrayColor),
-        ),
-      ),
+    return MovieManagerIconButton(
+      label: tooltip ?? 'Tag action',
+      icon: icon,
+      color: isSelected
+          ? MacosColors.white
+          : isDestructive
+          ? MovieManagerVisuals.errorColor(context)
+          : null,
+      onPressed: onTap,
     );
-
-    if (tooltip != null) {
-      return MacosTooltip(message: tooltip!, child: button);
-    }
-    return button;
   }
 }
 
@@ -733,24 +719,12 @@ class _SortButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = MacosTheme.of(context);
-    final color = isActive ? theme.primaryColor : theme.typography.body.color;
-
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive
-              ? theme.primaryColor.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isActive
-                ? theme.primaryColor
-                : MacosColors.systemGrayColor.withValues(alpha: 0.3),
-          ),
-        ),
+    return PushButton(
+      controlSize: ControlSize.small,
+      secondary: true,
+      onPressed: onPressed,
+      child: Semantics(
+        selected: isActive,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -758,7 +732,6 @@ class _SortButton extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: color,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
@@ -769,7 +742,6 @@ class _SortButton extends StatelessWidget {
                     ? CupertinoIcons.arrow_up
                     : CupertinoIcons.arrow_down,
                 size: 12,
-                color: color,
               ),
             ],
           ],
@@ -794,36 +766,17 @@ class _FilterCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool current = isChecked;
-    return GestureDetector(
-      onTap: () => onChanged(!current),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
-              color: current ? theme.primaryColor : Colors.transparent,
-              border: Border.all(
-                color: current
-                    ? theme.primaryColor
-                    : MacosColors.systemGrayColor.withValues(alpha: 0.5),
-              ),
-            ),
-            child: current
-                ? const Icon(
-                    CupertinoIcons.checkmark,
-                    size: 10,
-                    color: MacosColors.white,
-                  )
-                : null,
-          ),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MacosPreferenceCheckbox(
+          value: isChecked,
+          semanticLabel: 'Show $label tags',
+          onChanged: onChanged,
+        ),
+        const SizedBox(width: MovieManagerSpacing.compact),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
     );
   }
 }

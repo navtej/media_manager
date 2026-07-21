@@ -264,6 +264,8 @@ private func authenticatePrivateLibrary(result: @escaping FlutterResult) {
 }
 
 class MainFlutterWindow: NSWindow {
+  static let minimumContentSize = NSSize(width: 800, height: 600)
+
   override func awakeFromNib() {
     super.awakeFromNib()
     print("DEBUG SWIFT: awakeFromNib started")
@@ -272,6 +274,7 @@ class MainFlutterWindow: NSWindow {
     self.isRestorable = false
     self.collectionBehavior = [.managed, .participatesInCycle]
     self.level = .normal
+    self.contentMinSize = Self.minimumContentSize
     
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame

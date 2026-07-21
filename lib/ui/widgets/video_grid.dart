@@ -20,8 +20,9 @@ import '../../logic/video_summary_controller.dart';
 import '../../logic/video_summary_models.dart';
 import '../../logic/video_selection_controller.dart';
 import '../../services/library_access_service.dart';
-import 'package:icon_craft/icon_craft.dart';
+import '../movie_manager_visual_system.dart';
 import 'catalog_presentation.dart';
+import 'macos_preference_checkbox.dart';
 
 class CatalogScrollView extends ConsumerWidget {
   const CatalogScrollView({super.key, required this.scrollController});
@@ -122,19 +123,37 @@ class SliverVideoGrid extends ConsumerWidget {
 
     return videosAsync.when(
       loading: () => const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Center(child: ProgressCircle()),
+        child: SizedBox(
+          height: 180,
+          child: MovieManagerStateMessage(
+            indicator: ProgressCircle(),
+            title: 'Loading Videos',
+            compact: true,
+          ),
         ),
       ),
-      error: (err, stack) =>
-          SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
+      error: (err, stack) => SliverToBoxAdapter(
+        child: SizedBox(
+          height: 220,
+          child: MovieManagerStateMessage(
+            icon: CupertinoIcons.exclamationmark_triangle,
+            title: 'Couldn’t Load Videos',
+            message: err.toString(),
+            actionLabel: 'Retry',
+            onAction: () => ref.invalidate(filteredVideosProvider),
+          ),
+        ),
+      ),
       data: (videos) {
         if (videos.isEmpty) {
           return const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.only(top: 50),
-              child: Center(child: Text("No videos found.")),
+            child: SizedBox(
+              height: 220,
+              child: MovieManagerStateMessage(
+                icon: CupertinoIcons.film,
+                title: 'No Videos Found',
+                message: 'Try another search or add a library folder.',
+              ),
             ),
           );
         }
@@ -237,133 +256,158 @@ class _VideoGridItemState extends State<VideoGridItem> {
           );
         }
 
-        return MouseRegion(
-          onEnter: (_) => setState(() => _isHovering = true),
-          onExit: (_) => setState(() => _isHovering = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.deferToChild,
-            onTap: () => _selectWithKeyboardIntent(selectionController),
-            child: Opacity(
-              opacity: video.isOffline ? 0.5 : 1.0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.canvasColor,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isSelected || _isHovering
-                        ? theme.primaryColor
-                        : theme.dividerColor,
-                    width: isSelected || _isHovering ? 2 : 1,
-                  ),
-                  boxShadow: isSelected || _isHovering
-                      ? [
-                          BoxShadow(
-                            color: theme.primaryColor.withValues(alpha: 0.2),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Thumbnail area
-                    Expanded(
-                      flex: 4,
-                      child: MouseRegion(
-                        onEnter: (_) =>
-                            setState(() => _isThumbnailHovering = true),
-                        onExit: (_) =>
-                            setState(() => _isThumbnailHovering = false),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(9),
-                              ),
-                              child: _VideoThumbnailContent(
-                                video: video,
-                                placeholderIconSize: 40,
-                              ),
+        final highlighted = isSelected || _isHovering || _isFocused;
+        return Semantics(
+          selected: isSelected,
+          label: video.title,
+          child: FocusableActionDetector(
+            onShowHoverHighlight: (value) =>
+                setState(() => _isHovering = value),
+            onShowFocusHighlight: (value) => setState(() => _isFocused = value),
+            shortcuts: const {
+              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+            },
+            actions: {
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  _selectWithKeyboardIntent(selectionController);
+                  return null;
+                },
+              ),
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.deferToChild,
+              onTap: () => _selectWithKeyboardIntent(selectionController),
+              child: Opacity(
+                opacity: video.isOffline ? 0.5 : 1.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.canvasColor,
+                    borderRadius: BorderRadius.circular(
+                      MovieManagerRadii.panel,
+                    ),
+                    border: Border.all(
+                      color: isSelected || _isFocused
+                          ? theme.primaryColor
+                          : theme.dividerColor,
+                      width: _isFocused ? 2 : 1,
+                    ),
+                    boxShadow: highlighted
+                        ? [
+                            BoxShadow(
+                              color: theme.primaryColor.withValues(alpha: 0.14),
+                              blurRadius: 4,
+                              spreadRadius: _isFocused ? 1 : 0,
                             ),
-                            // Hover Details Overlay
-                            if (_isThumbnailHovering)
-                              Positioned.fill(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: MacosColors.black.withValues(
-                                      alpha: 0.85,
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Thumbnail area
+                      Expanded(
+                        flex: 4,
+                        child: MouseRegion(
+                          onEnter: (_) =>
+                              setState(() => _isThumbnailHovering = true),
+                          onExit: (_) =>
+                              setState(() => _isThumbnailHovering = false),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(MovieManagerRadii.panel),
+                                ),
+                                child: _VideoThumbnailContent(
+                                  video: video,
+                                  placeholderIconSize: 40,
+                                ),
+                              ),
+                              // Hover Details Overlay
+                              if (_isThumbnailHovering)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: MacosColors.black.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(
+                                          MovieManagerRadii.panel,
+                                        ),
+                                      ),
                                     ),
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(9),
-                                    ),
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  child: SingleChildScrollView(
-                                    child: Text(
-                                      _getMetaDescription(video.metadataJson),
-                                      style: const TextStyle(
-                                        color: MacosColors.white,
-                                        fontSize: 11,
-                                        height: 1.3,
+                                    padding: const EdgeInsets.all(8),
+                                    child: SingleChildScrollView(
+                                      child: Text(
+                                        _getMetaDescription(video.metadataJson),
+                                        style: const TextStyle(
+                                          color: MacosColors.white,
+                                          fontSize: 11,
+                                          height: 1.3,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: _VideoSelectionCheckbox(
-                                key: ValueKey('video-selection-${video.id}'),
-                                selected: isSelected,
-                                onPressed: () =>
-                                    selectionController.toggle(video.id),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Content area
-                    Expanded(
-                      flex: 5,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _VideoTitle(video: video),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                _buildActions(ref),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _formatDuration(video.duration),
-                                  style: theme.typography.caption1.copyWith(
-                                    color: theme.typography.caption1.color
-                                        ?.withValues(alpha: 0.5),
-                                    fontSize: 10,
-                                  ),
+                              Positioned(
+                                top: 8,
+                                left: 8,
+                                child: _VideoSelectionCheckbox(
+                                  key: ValueKey('video-selection-${video.id}'),
+                                  selected: isSelected,
+                                  onPressed: () =>
+                                      selectionController.toggle(video.id),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // Folder Path (above tags)
-                            _FolderPathWidget(video: video),
-                            // Tags Section
-                            Expanded(child: _VideoTagList(videoId: video.id)),
-                            const SizedBox(height: 4),
-                            // Add Tag Input
-                            _TagAutocompleteInput(video: video),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      // Content area
+                      Expanded(
+                        flex: 5,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _VideoTitle(video: video),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _buildCompactActions(
+                                    ref,
+                                    includeTagAction: false,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _formatDuration(video.duration),
+                                    style: theme.typography.caption1.copyWith(
+                                      color: theme.typography.caption1.color
+                                          ?.withValues(alpha: 0.5),
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              // Folder Path (above tags)
+                              _FolderPathWidget(video: video),
+                              // Tags Section
+                              Expanded(child: _VideoTagList(videoId: video.id)),
+                              const SizedBox(height: 4),
+                              // Add Tag Input
+                              _TagAutocompleteInput(video: video),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -521,42 +565,51 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  Widget _buildCompactActions(WidgetRef ref) {
+  Widget _buildCompactActions(WidgetRef ref, {bool includeTagAction = true}) {
+    final hasFreshSummary =
+        ref
+            .watch(videoSummaryStateProvider(widget.video))
+            .asData
+            ?.value
+            .hasFreshSummary ==
+        true;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        MacosTooltip(
-          message: 'Play',
-          child: MacosIconButton(
-            key: ValueKey('video-play-${widget.video.id}'),
-            padding: EdgeInsets.zero,
-            icon: const Icon(CupertinoIcons.play_fill, size: 16),
-            onPressed: () => _playVideo(ref, widget.video),
-          ),
+        MovieManagerIconButton(
+          label: 'Video information',
+          icon: CupertinoIcons.info,
+          onPressed: () => _showInfo(context, widget.video),
         ),
-        MacosTooltip(
-          message: widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
-          child: MacosIconButton(
-            key: ValueKey('video-favorite-${widget.video.id}'),
-            padding: EdgeInsets.zero,
-            icon: Icon(
-              widget.video.isFavorite
-                  ? CupertinoIcons.heart_fill
-                  : CupertinoIcons.heart,
-              color: widget.video.isFavorite ? MacosColors.appleRed : null,
-              size: 16,
-            ),
-            onPressed: () => _toggleFavorite(ref),
-          ),
+        MovieManagerIconButton(
+          key: ValueKey('video-play-${widget.video.id}'),
+          label: 'Play',
+          icon: CupertinoIcons.play_fill,
+          onPressed: () => _playVideo(ref, widget.video),
         ),
-        MacosTooltip(
-          message: 'Add or edit tags',
-          child: MacosIconButton(
+        MovieManagerIconButton(
+          key: ValueKey('video-favorite-${widget.video.id}'),
+          label: widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
+          icon: widget.video.isFavorite
+              ? CupertinoIcons.heart_fill
+              : CupertinoIcons.heart,
+          color: widget.video.isFavorite
+              ? MovieManagerVisuals.errorColor(context)
+              : null,
+          onPressed: () => _toggleFavorite(ref),
+        ),
+        if (includeTagAction)
+          MovieManagerIconButton(
             key: ValueKey('video-edit-tags-${widget.video.id}'),
-            padding: EdgeInsets.zero,
-            icon: const Icon(CupertinoIcons.tag, size: 16),
+            label: 'Add or edit tags',
+            icon: CupertinoIcons.tag,
             onPressed: () => _showTagEditor(ref),
           ),
+        MovieManagerIconButton(
+          label: 'Video summary',
+          icon: CupertinoIcons.doc_text,
+          color: hasFreshSummary ? MacosColors.systemGreenColor : null,
+          onPressed: () => _showSummaryDialog(context, ref, widget.video),
         ),
         Semantics(
           label: 'More actions',
@@ -634,90 +687,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
 
   Future<void> _clearTags(WidgetRef ref) {
     return ref.read(tagsDaoProvider).deleteAllTagsForVideo(widget.video.id);
-  }
-
-  Widget _buildActions(WidgetRef ref) {
-    final hasFreshSummary =
-        ref
-            .watch(videoSummaryStateProvider(widget.video))
-            .asData
-            ?.value
-            .hasFreshSummary ==
-        true;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Info
-        MacosIconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(CupertinoIcons.info, size: 16),
-          onPressed: () => _showInfo(context, widget.video),
-        ),
-        // Favorite
-        MacosIconButton(
-          padding: EdgeInsets.zero,
-          icon: Icon(
-            widget.video.isFavorite
-                ? CupertinoIcons.heart_fill
-                : CupertinoIcons.heart,
-            color: widget.video.isFavorite ? MacosColors.appleRed : null,
-            size: 16,
-          ),
-          onPressed: () => _toggleFavorite(ref),
-        ),
-        // Play
-        MacosIconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(CupertinoIcons.play_fill, size: 16),
-          onPressed: () => _playVideo(ref, widget.video),
-        ),
-        // Finder
-        MacosIconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(CupertinoIcons.folder, size: 16),
-          onPressed: () => _revealVideo(ref, widget.video),
-        ),
-        MacosTooltip(
-          message: 'Video summary',
-          child: MacosIconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(
-              CupertinoIcons.doc_text,
-              color: hasFreshSummary ? MacosColors.systemGreenColor : null,
-              size: 16,
-            ),
-            onPressed: () => _showSummaryDialog(context, ref, widget.video),
-          ),
-        ),
-        // Delete
-        MacosIconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(CupertinoIcons.trash, size: 16),
-          onPressed: () => _confirmDelete(ref),
-        ),
-        // Clear all tags
-        MacosTooltip(
-          message: 'Clear all tags',
-          child: MacosIconButton(
-            padding: EdgeInsets.zero,
-            icon: const IconCraft(
-              Icon(CupertinoIcons.tag, size: 16),
-              Icon(CupertinoIcons.clear_thick, size: 10),
-              alignment: Alignment(1.2, -1.1),
-              secondaryIconSizeFactor: 0.5,
-
-              // decoration: const IconDecoration(
-              //   border: IconBorder(
-              //     width: 10.0,
-              //   ),
-              // ),
-            ),
-            onPressed: () => _clearTags(ref),
-          ),
-        ),
-      ],
-    );
   }
 
   // Removed _buildTagInput and replaced with _TagAutocompleteInput class below
@@ -1099,36 +1068,10 @@ class _VideoSelectionCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = MacosTheme.of(context);
-    return Semantics(
-      button: true,
-      checked: selected,
-      child: GestureDetector(
-        onTap: onPressed,
-        child: Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            color: selected
-                ? theme.primaryColor
-                : MacosColors.black.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: selected
-                  ? theme.primaryColor
-                  : MacosColors.white.withValues(alpha: 0.75),
-              width: 1.5,
-            ),
-          ),
-          child: selected
-              ? const Icon(
-                  CupertinoIcons.checkmark,
-                  size: 15,
-                  color: MacosColors.white,
-                )
-              : null,
-        ),
-      ),
+    return MacosPreferenceCheckbox(
+      value: selected,
+      semanticLabel: selected ? 'Deselect video' : 'Select video',
+      onChanged: (_) => onPressed(),
     );
   }
 }
@@ -1264,7 +1207,11 @@ class _SummarySubtitleSourceOption extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _InlineMacosCheckbox(value: useVtt, onChanged: onChanged),
+        MacosPreferenceCheckbox(
+          value: useVtt,
+          semanticLabel: 'Use VTT transcript',
+          onChanged: onChanged,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -1275,46 +1222,6 @@ class _SummarySubtitleSourceOption extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _InlineMacosCheckbox extends StatelessWidget {
-  const _InlineMacosCheckbox({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = MacosTheme.of(context);
-    return Semantics(
-      checked: value,
-      button: true,
-      child: GestureDetector(
-        onTap: onChanged == null ? null : () => onChanged!(!value),
-        child: Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            color: value ? theme.primaryColor : MacosColors.transparent,
-            border: Border.all(
-              color: value
-                  ? theme.primaryColor
-                  : MacosColors.systemGrayColor.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
-          ),
-          child: value
-              ? const MacosIcon(
-                  CupertinoIcons.checkmark,
-                  size: 12,
-                  color: MacosColors.white,
-                )
-              : null,
-        ),
-      ),
     );
   }
 }

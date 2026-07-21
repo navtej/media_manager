@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:macos_ui/macos_ui.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
@@ -21,6 +22,7 @@ import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
 import '../library_result_messages.dart';
+import '../movie_manager_visual_system.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -140,14 +142,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Row(
                     children: [
                       const Expanded(child: _SidebarHeader(text: 'SORT BY')),
-                      MacosIconButton(
-                        icon: Icon(
-                          ref.watch(selectedSortDirectionProvider) ==
-                                  SortDirection.asc
-                              ? CupertinoIcons.sort_up
-                              : CupertinoIcons.sort_down,
-                          size: 16,
-                        ),
+                      MovieManagerIconButton(
+                        label: 'Reverse sort direction',
+                        icon:
+                            ref.watch(selectedSortDirectionProvider) ==
+                                SortDirection.asc
+                            ? CupertinoIcons.sort_up
+                            : CupertinoIcons.sort_down,
                         onPressed: () => ref
                             .read(catalogControllerProvider.notifier)
                             .toggleSortDirection(),
@@ -217,11 +218,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ref.watch(tagFilterQueryProvider).isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(right: 8.0),
-                        child: MacosIconButton(
-                          icon: const Icon(
-                            CupertinoIcons.clear_circled,
-                            size: 14,
-                          ),
+                        child: MovieManagerIconButton(
+                          label: 'Clear tag filters',
+                          icon: CupertinoIcons.clear_circled,
                           onPressed: () {
                             ref
                                 .read(catalogControllerProvider.notifier)
@@ -306,15 +305,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           .when(
                                             data: (tags) {
                                               if (tags.isEmpty) {
-                                                return const Padding(
-                                                  padding: EdgeInsets.symmetric(
-                                                    horizontal: 4.0,
-                                                  ),
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 4.0,
+                                                      ),
                                                   child: Text(
                                                     'Select a tag above to see related tags.',
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: Colors.grey,
+                                                      color:
+                                                          MovieManagerVisuals.secondaryLabelColor(
+                                                            context,
+                                                          ),
                                                     ),
                                                   ),
                                                 );
@@ -340,8 +343,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             ),
                                             error: (err, stack) => Text(
                                               'Error: $err',
-                                              style: const TextStyle(
-                                                color: Colors.red,
+                                              style: TextStyle(
+                                                color:
+                                                    MovieManagerVisuals.errorColor(
+                                                      context,
+                                                    ),
                                                 fontSize: 10,
                                               ),
                                             ),
@@ -449,51 +455,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                       constraints.maxWidth,
                                                 ),
                                           ),
-                                          MacosTooltip(
-                                            message: 'Add Folder',
-                                            child: MacosIconButton(
-                                              icon: const MacosIcon(
-                                                CupertinoIcons.add,
-                                              ),
-                                              onPressed: isBulkBusy
-                                                  ? null
-                                                  : _pickFolder,
-                                              shape: BoxShape.rectangle,
-                                            ),
+                                          MovieManagerIconButton(
+                                            label: 'Add Folder',
+                                            icon: CupertinoIcons.add,
+                                            onPressed: isBulkBusy
+                                                ? null
+                                                : _pickFolder,
                                           ),
-                                          MacosTooltip(
-                                            message: 'Refresh Library',
-                                            child: MacosIconButton(
-                                              icon: const MacosIcon(
-                                                CupertinoIcons.refresh,
-                                              ),
-                                              onPressed: isBulkBusy
-                                                  ? null
-                                                  : () {
-                                                      ref
-                                                          .read(
-                                                            libraryControllerProvider
-                                                                .notifier,
-                                                          )
-                                                          .syncAll();
-                                                    },
-                                              shape: BoxShape.rectangle,
-                                            ),
+                                          MovieManagerIconButton(
+                                            label: 'Refresh Library',
+                                            icon: CupertinoIcons.refresh,
+                                            onPressed: isBulkBusy
+                                                ? null
+                                                : () {
+                                                    ref
+                                                        .read(
+                                                          libraryControllerProvider
+                                                              .notifier,
+                                                        )
+                                                        .syncAll();
+                                                  },
                                           ),
-                                          MacosTooltip(
-                                            message: 'Rebuild Index',
-                                            child: MacosIconButton(
-                                              icon: const MacosIcon(
-                                                CupertinoIcons.trash_circle,
-                                              ),
-                                              onPressed: isBulkBusy
-                                                  ? null
-                                                  : () =>
-                                                        _confirmRebuildLibrary(
-                                                          context,
-                                                        ),
-                                              shape: BoxShape.rectangle,
-                                            ),
+                                          MovieManagerIconButton(
+                                            label: 'Rebuild Index',
+                                            icon: CupertinoIcons.trash_circle,
+                                            color:
+                                                MovieManagerVisuals.errorColor(
+                                                  context,
+                                                ),
+                                            onPressed: isBulkBusy
+                                                ? null
+                                                : () => _confirmRebuildLibrary(
+                                                    context,
+                                                  ),
                                           ),
                                         ],
                                       ),
@@ -846,7 +840,7 @@ class _SidebarHeader extends StatelessWidget {
   }
 }
 
-class _SidebarNavItem extends StatelessWidget {
+class _SidebarNavItem extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool selected;
@@ -860,50 +854,85 @@ class _SidebarNavItem extends StatelessWidget {
   });
 
   @override
+  State<_SidebarNavItem> createState() => _SidebarNavItemState();
+}
+
+class _SidebarNavItemState extends State<_SidebarNavItem> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: selected
-              ? theme.primaryColor.withOpacity(0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: selected
-                  ? theme.primaryColor
-                  : theme.typography.body.color?.withOpacity(0.7),
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onTap();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            constraints: const BoxConstraints(
+              minHeight: MovieManagerControlMetrics.minimumTarget,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: theme.typography.body.copyWith(
-                  color: selected
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? theme.primaryColor.withOpacity(0.1)
+                  : Colors.transparent,
+              border: _focused
+                  ? Border.all(color: theme.primaryColor, width: 2)
+                  : null,
+              borderRadius: BorderRadius.circular(MovieManagerRadii.control),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  widget.icon,
+                  size: MovieManagerIconSizes.action,
+                  color: widget.selected
                       ? theme.primaryColor
-                      : theme.typography.body.color?.withOpacity(0.8),
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      : theme.typography.body.color?.withOpacity(0.7),
                 ),
-              ),
+                const SizedBox(width: MovieManagerSpacing.medium),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: theme.typography.body.copyWith(
+                      color: widget.selected
+                          ? theme.primaryColor
+                          : theme.typography.body.color?.withOpacity(0.8),
+                      fontWeight: widget.selected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _GridSortItem extends StatelessWidget {
+class _GridSortItem extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool selected;
@@ -917,45 +946,79 @@ class _GridSortItem extends StatelessWidget {
   });
 
   @override
+  State<_GridSortItem> createState() => _GridSortItemState();
+}
+
+class _GridSortItemState extends State<_GridSortItem> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        // Half width minus spacing
-        width: 95,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? theme.primaryColor.withOpacity(0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: selected
-                  ? theme.primaryColor
-                  : theme.typography.body.color?.withOpacity(0.7),
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: 'Sort by ${widget.label}',
+      child: FocusableActionDetector(
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onTap();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 95,
+            constraints: const BoxConstraints(
+              minHeight: MovieManagerControlMetrics.minimumTarget,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: theme.typography.body.copyWith(
-                  fontSize: 10, // Slightly smaller font
-                  color: selected
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? theme.primaryColor.withOpacity(0.1)
+                  : Colors.transparent,
+              border: _focused
+                  ? Border.all(color: theme.primaryColor, width: 2)
+                  : null,
+              borderRadius: BorderRadius.circular(MovieManagerRadii.control),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  widget.icon,
+                  size: MovieManagerIconSizes.inline,
+                  color: widget.selected
                       ? theme.primaryColor
-                      : theme.typography.body.color?.withOpacity(0.8),
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      : theme.typography.body.color?.withOpacity(0.7),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+                const SizedBox(width: MovieManagerSpacing.small),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    style: theme.typography.body.copyWith(
+                      fontSize: 10,
+                      color: widget.selected
+                          ? theme.primaryColor
+                          : theme.typography.body.color?.withOpacity(0.8),
+                      fontWeight: widget.selected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -1,12 +1,13 @@
 import Cocoa
 import FlutterMacOS
 import XCTest
+@testable import Media_Manager
 
 class RunnerTests: XCTestCase {
 
-  func testExample() {
-    // If you add code to the Runner application, consider adding tests here.
-    // See https://developer.apple.com/documentation/xctest for more information about using XCTest.
+  func testMinimumContentSizeMatchesPER33Contract() {
+    XCTAssertEqual(MainFlutterWindow.minimumContentSize.width, 800)
+    XCTAssertEqual(MainFlutterWindow.minimumContentSize.height, 600)
   }
 
 }

@@ -16,6 +16,8 @@ import '../../logic/managed_library_service.dart';
 import '../../logic/private_library_controller.dart';
 import '../../logic/video_move_controller.dart';
 import '../library_result_messages.dart';
+import '../movie_manager_visual_system.dart';
+import 'macos_preference_checkbox.dart';
 
 const _dialogBorderRadius = BorderRadius.all(Radius.circular(12));
 
@@ -566,9 +568,12 @@ class _PreflightPreview extends StatelessWidget {
       return const Center(child: ProgressCircle());
     }
     if (error != null) {
-      return Text(
-        error.toString(),
-        style: const TextStyle(color: MacosColors.appleRed),
+      return MovieManagerStateMessage(
+        icon: CupertinoIcons.exclamationmark_triangle,
+        title: 'Couldn’t Prepare Move',
+        message: error.toString(),
+        compact: true,
+        iconColor: MovieManagerVisuals.errorColor(context),
       );
     }
     if (preflight == null) {
@@ -632,7 +637,18 @@ class _ProblemLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Text(message, style: const TextStyle(color: MacosColors.appleRed)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MacosIcon(
+            CupertinoIcons.exclamationmark_triangle,
+            size: MovieManagerIconSizes.inline,
+            color: MovieManagerVisuals.errorColor(context),
+          ),
+          const SizedBox(width: MovieManagerSpacing.small),
+          Expanded(child: Text(message)),
+        ],
+      ),
     );
   }
 }
@@ -645,54 +661,23 @@ class _CleanupOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onChanged == null ? null : () => onChanged!(!value),
-      child: Row(
-        children: [
-          _SmallCheckbox(value: value),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Remove empty source folders after move',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: MacosTheme.of(context).typography.caption1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SmallCheckbox extends StatelessWidget {
-  const _SmallCheckbox({required this.value});
-
-  final bool value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = MacosTheme.of(context);
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
-        color: value ? theme.primaryColor : MacosColors.transparent,
-        border: Border.all(
-          color: value
-              ? theme.primaryColor
-              : MacosColors.systemGrayColor.withValues(alpha: 0.5),
-          width: 1.5,
+    return Row(
+      children: [
+        MacosPreferenceCheckbox(
+          value: value,
+          semanticLabel: 'Remove empty source folders after move',
+          onChanged: onChanged,
         ),
-      ),
-      child: value
-          ? const Icon(
-              CupertinoIcons.checkmark,
-              size: 12,
-              color: MacosColors.white,
-            )
-          : null,
+        const SizedBox(width: MovieManagerSpacing.small),
+        Expanded(
+          child: Text(
+            'Remove empty source folders after move',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: MacosTheme.of(context).typography.caption1,
+          ),
+        ),
+      ],
     );
   }
 }

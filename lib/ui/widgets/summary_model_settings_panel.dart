@@ -4,7 +4,30 @@ import 'package:macos_ui/macos_ui.dart';
 
 import '../../logic/video_summary_models.dart';
 import '../../logic/whisper_model_catalog.dart';
+import '../movie_manager_visual_system.dart';
 import 'macos_preference_checkbox.dart';
+
+class _SettingsProblem extends StatelessWidget {
+  const _SettingsProblem({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MacosIcon(
+          Icons.error_outline,
+          size: MovieManagerIconSizes.action,
+          color: MovieManagerVisuals.errorColor(context),
+        ),
+        const SizedBox(width: MovieManagerSpacing.small),
+        Expanded(child: Text(message)),
+      ],
+    );
+  }
+}
 
 class SummaryModelSettingsPanel extends StatelessWidget {
   const SummaryModelSettingsPanel({
@@ -194,6 +217,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
                 ),
               PushButton(
                 controlSize: ControlSize.large,
+                secondary: true,
                 onPressed:
                     sourceMode == SummaryModelSourceMode.localFile &&
                         !isDownloading
@@ -203,11 +227,13 @@ class SummaryModelSettingsPanel extends StatelessWidget {
               ),
               PushButton(
                 controlSize: ControlSize.large,
+                secondary: true,
                 onPressed: modelPath.isNotEmpty ? onRevealPressed : null,
                 child: const Text('Reveal Model'),
               ),
               PushButton(
                 controlSize: ControlSize.large,
+                secondary: true,
                 onPressed: isDownloading ? null : onRefreshCatalogPressed,
                 child: Text(
                   catalogState.isRefreshing
@@ -218,6 +244,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
               if (sourceMode == SummaryModelSourceMode.managedDownload)
                 PushButton(
                   controlSize: ControlSize.large,
+                  secondary: true,
                   onPressed: canDeleteManagedModel && !isDownloading
                       ? onDeletePressed
                       : null,
@@ -226,6 +253,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
               if (sourceMode == SummaryModelSourceMode.localFile)
                 PushButton(
                   controlSize: ControlSize.large,
+                  secondary: true,
                   onPressed: modelPath.isNotEmpty && !isDownloading
                       ? onClearSelectionPressed
                       : null,
@@ -269,10 +297,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
           ],
           if (downloadState.phase == ModelDownloadPhase.failed &&
               downloadState.error != null) ...[
-            Text(
-              downloadState.error!,
-              style: const TextStyle(color: MacosColors.appleRed),
-            ),
+            _SettingsProblem(message: downloadState.error!),
             const SizedBox(height: 8),
           ],
           if (downloadState.phase == ModelDownloadPhase.completed) ...[
@@ -284,10 +309,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           if (catalogState.refreshError != null) ...[
-            Text(
-              catalogState.refreshError!,
-              style: const TextStyle(color: MacosColors.appleRed),
-            ),
+            _SettingsProblem(message: catalogState.refreshError!),
             const SizedBox(height: 8),
           ],
           const SizedBox(height: 12),

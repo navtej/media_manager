@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart' as drift;
+import 'dart:ui' show SemanticsAction, Tristate;
+
 import 'package:drift/native.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -409,6 +411,79 @@ void main() {
       1,
       3,
     });
+  });
+
+  testWidgets('grid cards expose focus and keyboard selection', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 7, 21);
+    final folder = Folder(
+      id: 1,
+      path: '/Volumes/Catalog',
+      alias: 'Catalog',
+      isPrivate: false,
+      addedAt: now,
+    );
+    final video = Video(
+      id: 1,
+      folderId: 1,
+      absolutePath: '/Volumes/Catalog/video-1.mp4',
+      title: 'Keyboard Video',
+      duration: 60,
+      size: 1024,
+      metadataJson: '{}',
+      isOffline: false,
+      isFavorite: false,
+      addedAt: now,
+      fileCreatedAt: now,
+      aiProcessed: false,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(_TestFoldersDao(db, [folder])),
+          tagsDaoProvider.overrideWithValue(_TestTagsDao(db)),
+          videoSummariesDaoProvider.overrideWithValue(
+            _TestVideoSummariesDao(db),
+          ),
+          settingsProvider.overrideWith(_TestSettings.new),
+        ],
+        child: MacosApp(
+          home: MacosWindow(
+            child: Center(
+              child: SizedBox(
+                width: 240,
+                height: 360,
+                child: VideoGridItem(
+                  key: const ValueKey('keyboard-grid-card'),
+                  video: video,
+                  visibleVideoIds: const [1],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byKey(const ValueKey('keyboard-grid-card'))),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(container.read(videoSelectionControllerProvider).selectedIds, {1});
+    final semantics = tester.getSemantics(
+      find.byKey(const ValueKey('keyboard-grid-card')),
+    );
+    expect(semantics.label, contains('Keyboard Video'));
+    expect(semantics.flagsCollection.isSelected, Tristate.isTrue);
+    expect(semantics.flagsCollection.isFocused, Tristate.isTrue);
+    expect(semantics.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
   });
 
   testWidgets(

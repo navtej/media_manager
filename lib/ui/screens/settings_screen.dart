@@ -24,6 +24,7 @@ import '../../services/natural_language_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../library_result_messages.dart';
+import '../movie_manager_visual_system.dart';
 import '../widgets/summary_model_settings_panel.dart';
 import '../widgets/summarization_api_settings_panel.dart';
 import '../widgets/private_library_auto_lock_control.dart';
@@ -129,8 +130,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text('Back'),
         leading: Transform.translate(
           offset: const Offset(-10, 0),
-          child: MacosIconButton(
-            icon: const MacosIcon(CupertinoIcons.back),
+          child: MovieManagerIconButton(
+            label: 'Back',
+            icon: CupertinoIcons.back,
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
@@ -151,6 +153,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   children: [
                     CupertinoSlidingSegmentedControl<_SettingsTab>(
                       groupValue: _selectedTab,
+                      backgroundColor: MacosTheme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.35),
+                      thumbColor: MovieManagerVisuals.surfaceColor(context),
                       children: const {
                         _SettingsTab.general: Padding(
                           padding: EdgeInsets.symmetric(
@@ -239,16 +245,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: MacosTheme.of(context).typography.headline,
             ),
             const Spacer(),
-            MacosTooltip(
-              message: 'Add Folder',
-              child: MacosIconButton(
-                key: const ValueKey('settings-add-library-folder-button'),
-                icon: const MacosIcon(CupertinoIcons.add),
-                onPressed: () {
-                  _pickLibraryFolder();
-                },
-                shape: BoxShape.rectangle,
-              ),
+            MovieManagerIconButton(
+              key: const ValueKey('settings-add-library-folder-button'),
+              label: 'Add Folder',
+              icon: CupertinoIcons.add,
+              onPressed: () {
+                _pickLibraryFolder();
+              },
             ),
           ],
         ),
@@ -310,8 +313,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: MacosTheme.of(context).typography.headline,
             ),
             const SizedBox(width: 12),
-            MacosIconButton(
-              icon: const MacosIcon(CupertinoIcons.floppy_disk),
+            MovieManagerIconButton(
+              label: 'Save advanced preferences',
+              icon: CupertinoIcons.floppy_disk,
               onPressed: () {
                 final interval =
                     int.tryParse(_intervalController.text) ??
@@ -539,8 +543,9 @@ class _OpenDataFolderWidget extends ConsumerWidget {
             ).typography.body.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 8),
-          MacosIconButton(
-            icon: const MacosIcon(CupertinoIcons.folder, size: 18),
+          MovieManagerIconButton(
+            label: 'Open data folder in Finder',
+            icon: CupertinoIcons.folder,
             onPressed: () async {
               final directory = await getApplicationSupportDirectory();
               await NaturalLanguageService().openFolder(directory.path);
@@ -637,104 +642,87 @@ class _FolderList extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    MacosTooltip(
-                      message: folder.isPrivate
+                    MovieManagerIconButton(
+                      label: folder.isPrivate
                           ? 'Private library. Click to make videos visible by default.'
                           : 'Public library. Click to require authentication before videos appear.',
-                      child: MacosIconButton(
-                        icon: Icon(
-                          folder.isPrivate
-                              ? CupertinoIcons.lock
-                              : CupertinoIcons.lock_open,
-                          color: folder.isPrivate
-                              ? MacosColors.systemPurpleColor
-                              : MacosColors.systemGrayColor,
-                          size: 16,
-                        ),
-                        onPressed: () async {
-                          final nextIsPrivate = !folder.isPrivate;
-                          final result = await ref
-                              .read(managedLibraryServiceProvider)
-                              .setPrivacy(folder.id, isPrivate: nextIsPrivate);
-                          ref.read(statusMessageProvider.notifier).set(
-                            switch (result.status) {
-                              ManagedLibraryPrivacyStatus.madePrivate =>
-                                'Library is now private.',
-                              ManagedLibraryPrivacyStatus.madePublic =>
-                                'Library is now visible by default.',
-                              ManagedLibraryPrivacyStatus
-                                  .authenticationCancelled =>
-                                'Authentication cancelled. Library remains private.',
-                              ManagedLibraryPrivacyStatus.notFound =>
-                                'Library no longer exists.',
-                              ManagedLibraryPrivacyStatus.unchanged =>
-                                folder.isPrivate
-                                    ? 'Library remains private.'
-                                    : 'Library remains visible by default.',
-                            },
-                          );
-                        },
-                      ),
+                      icon: folder.isPrivate
+                          ? CupertinoIcons.lock
+                          : CupertinoIcons.lock_open,
+                      selected: folder.isPrivate,
+                      onPressed: () async {
+                        final nextIsPrivate = !folder.isPrivate;
+                        final result = await ref
+                            .read(managedLibraryServiceProvider)
+                            .setPrivacy(folder.id, isPrivate: nextIsPrivate);
+                        ref.read(statusMessageProvider.notifier).set(
+                          switch (result.status) {
+                            ManagedLibraryPrivacyStatus.madePrivate =>
+                              'Library is now private.',
+                            ManagedLibraryPrivacyStatus.madePublic =>
+                              'Library is now visible by default.',
+                            ManagedLibraryPrivacyStatus
+                                .authenticationCancelled =>
+                              'Authentication cancelled. Library remains private.',
+                            ManagedLibraryPrivacyStatus.notFound =>
+                              'Library no longer exists.',
+                            ManagedLibraryPrivacyStatus.unchanged =>
+                              folder.isPrivate
+                                  ? 'Library remains private.'
+                                  : 'Library remains visible by default.',
+                          },
+                        );
+                      },
                     ),
-                    MacosTooltip(
-                      message: accessTooltip,
-                      child: MacosIconButton(
-                        icon: Icon(
-                          CupertinoIcons.exclamationmark_shield,
-                          color: storageStatus.needsRepair
-                              ? MacosColors.systemOrangeColor
-                              : storageStatus.isRemovableStorage
-                              ? MacosColors.systemBlueColor
-                              : MacosColors.systemGrayColor,
-                          size: 16,
-                        ),
-                        onPressed: () async {
-                          final selectedDirectory = await FilePicker.platform
-                              .getDirectoryPath();
-                          if (selectedDirectory == null) {
-                            return;
-                          }
-                          final result = await ref
-                              .read(managedLibraryServiceProvider)
-                              .repairAccess(folder.id, selectedDirectory);
-                          ref.read(statusMessageProvider.notifier).set(
-                            switch (result.status) {
-                              ManagedLibraryRepairStatus.repaired =>
-                                'Folder access repaired.',
-                              ManagedLibraryRepairStatus.pathMismatch =>
-                                'Select the same folder to repair access.',
-                              ManagedLibraryRepairStatus.bookmarkUnavailable =>
-                                'Could not repair folder access.',
-                              ManagedLibraryRepairStatus.notFound =>
-                                'Library no longer exists.',
-                            },
-                          );
-                        },
-                      ),
+                    MovieManagerIconButton(
+                      label: accessTooltip,
+                      icon: CupertinoIcons.exclamationmark_shield,
+                      color: storageStatus.needsRepair
+                          ? MacosColors.systemOrangeColor
+                          : storageStatus.isRemovableStorage
+                          ? MacosColors.systemBlueColor
+                          : MacosColors.systemGrayColor,
+                      onPressed: () async {
+                        final selectedDirectory = await FilePicker.platform
+                            .getDirectoryPath();
+                        if (selectedDirectory == null) {
+                          return;
+                        }
+                        final result = await ref
+                            .read(managedLibraryServiceProvider)
+                            .repairAccess(folder.id, selectedDirectory);
+                        ref.read(statusMessageProvider.notifier).set(
+                          switch (result.status) {
+                            ManagedLibraryRepairStatus.repaired =>
+                              'Folder access repaired.',
+                            ManagedLibraryRepairStatus.pathMismatch =>
+                              'Select the same folder to repair access.',
+                            ManagedLibraryRepairStatus.bookmarkUnavailable =>
+                              'Could not repair folder access.',
+                            ManagedLibraryRepairStatus.notFound =>
+                              'Library no longer exists.',
+                          },
+                        );
+                      },
                     ),
-                    MacosTooltip(
-                      message:
+                    MovieManagerIconButton(
+                      label:
                           'Remove this folder from the library. Files stay on disk.',
-                      child: MacosIconButton(
-                        icon: const Icon(
-                          CupertinoIcons.trash,
-                          color: MacosColors.appleRed,
-                          size: 16,
-                        ),
-                        onPressed: () async {
-                          final result = await ref
-                              .read(maintenanceControllerProvider.notifier)
-                              .removeFolder(folder.id);
-                          ref
-                              .read(statusMessageProvider.notifier)
-                              .set(
-                                result.status ==
-                                        ManagedLibraryRemoveStatus.removed
-                                    ? 'Library removed. Files remain on disk.'
-                                    : 'Library no longer exists.',
-                              );
-                        },
-                      ),
+                      icon: CupertinoIcons.trash,
+                      color: MovieManagerVisuals.errorColor(context),
+                      onPressed: () async {
+                        final result = await ref
+                            .read(maintenanceControllerProvider.notifier)
+                            .removeFolder(folder.id);
+                        ref
+                            .read(statusMessageProvider.notifier)
+                            .set(
+                              result.status ==
+                                      ManagedLibraryRemoveStatus.removed
+                                  ? 'Library removed. Files remain on disk.'
+                                  : 'Library no longer exists.',
+                            );
+                      },
                     ),
                   ],
                 ),

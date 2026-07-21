@@ -16,34 +16,24 @@ Future<void> showAppAboutDialog(BuildContext context) async {
       title: const Text('Media Manager'),
       message: Column(
         children: [
-          Text('Version $version', style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          const Text(
-            'Github:',
-            style: TextStyle(fontSize: 12),
+          Text(
+            'Version $version',
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: () async {
+          const SizedBox(height: 16),
+          PushButton(
+            controlSize: ControlSize.regular,
+            secondary: true,
+            onPressed: () async {
               final url = Uri.parse('https://github.com/navtej/media_manager');
               if (await canLaunchUrl(url)) {
                 await launchUrl(url);
               }
             },
-            child: const Text(
-              'https://github.com/navtej/media_manager',
-              style: TextStyle(
-                color: MacosColors.appleBlue,
-                decoration: TextDecoration.underline,
-                fontSize: 12,
-              ),
-            ),
+            child: const Text('Open GitHub Repository'),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '© 2026 Navtej Singh',
-            style: TextStyle(fontSize: 10),
-          ),
+          const Text('© 2026 Navtej Singh', style: TextStyle(fontSize: 10)),
         ],
       ),
       primaryButton: PushButton(

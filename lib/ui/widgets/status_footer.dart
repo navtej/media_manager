@@ -8,6 +8,7 @@ import '../../logic/catalog_controller.dart';
 import '../../logic/video_summary_controller.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
+import '../movie_manager_visual_system.dart';
 
 class StatusFooter extends ConsumerWidget {
   const StatusFooter({super.key});
@@ -43,33 +44,32 @@ class StatusFooter extends ConsumerWidget {
       loading: () => 0,
     );
 
+    final theme = MacosTheme.of(context);
+    final labelColor = MovieManagerVisuals.secondaryLabelColor(context);
     return Container(
       height: 32,
       width: double.infinity,
-      color: MacosTheme.of(context).primaryColor,
+      decoration: BoxDecoration(
+        color: MovieManagerVisuals.surfaceColor(context),
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           // Left side: Status messages or indicators
           if (statusMsg != null) ...[
-            const Icon(
+            Icon(
               CupertinoIcons.check_mark_circled,
-              color: MacosColors.white,
+              color: MovieManagerVisuals.successColor(context),
               size: 14,
             ),
             const SizedBox(width: 8),
-            Text(
-              statusMsg,
-              style: const TextStyle(fontSize: 11, color: MacosColors.white),
-            ),
+            Text(statusMsg, style: TextStyle(fontSize: 11, color: labelColor)),
           ] else if (scanStatus.isNotEmpty ||
               aiStatus.isNotEmpty ||
               summaryStatus.isNotEmpty ||
               moveState.statusMessage.isNotEmpty) ...[
-            const CupertinoActivityIndicator(
-              radius: 7,
-              color: MacosColors.white,
-            ),
+            CupertinoActivityIndicator(radius: 7, color: labelColor),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -81,9 +81,9 @@ class StatusFooter extends ConsumerWidget {
                 ].where((s) => s.isNotEmpty).join(' | '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: MacosColors.white,
+                  color: labelColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -99,9 +99,9 @@ class StatusFooter extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: MacosColors.white,
+                  color: labelColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
