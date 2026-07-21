@@ -191,6 +191,7 @@ class SummaryModelSettingsPanel extends StatelessWidget {
               MacosPreferenceCheckbox(
                 key: const ValueKey('prefer-vtt-subtitles-checkbox'),
                 value: preferVttSubtitles,
+                semanticLabel: 'Use .vtt subtitles when available',
                 onChanged: onPreferVttSubtitlesChanged,
               ),
               const SizedBox(width: 8),
@@ -554,8 +555,12 @@ class _SelectionPillButton extends StatelessWidget {
           );
 
     return Semantics(
+      label: label,
       button: true,
       enabled: isEnabled,
+      selected: isSelected,
+      onTap: onPressed,
+      excludeSemantics: true,
       child: MouseRegion(
         cursor: isEnabled ? SystemMouseCursors.click : MouseCursor.defer,
         child: GestureDetector(

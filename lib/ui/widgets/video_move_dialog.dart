@@ -141,14 +141,22 @@ class _WideMoveDialogFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
     final brightness = MacosTheme.brightnessOf(context);
-    final outerBorderColor = brightness.resolve(
-      Colors.black.withValues(alpha: 0.23),
-      Colors.black.withValues(alpha: 0.76),
-    );
-    final innerBorderColor = brightness.resolve(
-      Colors.white.withValues(alpha: 0.45),
-      Colors.white.withValues(alpha: 0.15),
-    );
+    final highContrast = MovieManagerVisuals.isHighContrast(context);
+    final outerBorderColor = highContrast
+        ? brightness.resolve(Colors.black, Colors.white)
+        : brightness.resolve(
+            Colors.black.withValues(alpha: 0.23),
+            Colors.black.withValues(alpha: 0.76),
+          );
+    final innerBorderColor = highContrast
+        ? brightness.resolve(
+            Colors.black.withValues(alpha: 0.42),
+            Colors.white.withValues(alpha: 0.55),
+          )
+        : brightness.resolve(
+            Colors.white.withValues(alpha: 0.45),
+            Colors.white.withValues(alpha: 0.15),
+          );
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -180,7 +188,7 @@ class _WideMoveDialogFrame extends StatelessWidget {
             DefaultTextStyle(
               style: theme.typography.headline,
               textAlign: TextAlign.center,
-              child: title,
+              child: Semantics(container: true, header: true, child: title),
             ),
             const SizedBox(height: 18),
             Expanded(
@@ -306,38 +314,43 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
                       0.0,
                       constraints.maxWidth - _popupLabelReservedWidth,
                     );
-                    return MacosPopupButton<int>(
-                      value: effectiveDestinationId,
-                      selectedItemBuilder: (_) => folders
-                          .map(
-                            (folder) => _FolderPopupLabel(
-                              label: _folderLabel(folder),
-                              width: labelWidth,
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: _isSubmitting
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _destinationFolderId = value;
-                                _actionMessage = null;
-                                _actionError = null;
-                                _clearPreflight();
-                              });
-                            },
-                      items: folders
-                          .map(
-                            (folder) => MacosPopupMenuItem<int>(
-                              value: folder.id,
-                              child: _FolderPopupLabel(
-                                label: _folderLabel(folder),
-                                width: labelWidth,
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
+                    return MergeSemantics(
+                      child: Semantics(
+                        label: 'Destination folder',
+                        child: MacosPopupButton<int>(
+                          value: effectiveDestinationId,
+                          selectedItemBuilder: (_) => folders
+                              .map(
+                                (folder) => _FolderPopupLabel(
+                                  label: _folderLabel(folder),
+                                  width: labelWidth,
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: _isSubmitting
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _destinationFolderId = value;
+                                    _actionMessage = null;
+                                    _actionError = null;
+                                    _clearPreflight();
+                                  });
+                                },
+                          items: folders
+                              .map(
+                                (folder) => MacosPopupMenuItem<int>(
+                                  value: folder.id,
+                                  child: _FolderPopupLabel(
+                                    label: _folderLabel(folder),
+                                    width: labelWidth,
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -530,7 +543,13 @@ class _SelectionSizeSummaryLabel extends StatelessWidget {
             '$selectedCount selected • total size unavailable',
           _ => '$selectedCount selected • Calculating size…',
         };
-        return Text(label, key: const ValueKey('move-selection-size-summary'));
+        return Semantics(
+          liveRegion: true,
+          child: Text(
+            label,
+            key: const ValueKey('move-selection-size-summary'),
+          ),
+        );
       },
     );
   }
@@ -565,7 +584,11 @@ class _PreflightPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(child: ProgressCircle());
+      return const MovieManagerStateMessage(
+        indicator: ProgressCircle(),
+        title: 'Preparing Move',
+        compact: true,
+      );
     }
     if (error != null) {
       return MovieManagerStateMessage(
@@ -581,48 +604,52 @@ class _PreflightPreview extends StatelessWidget {
     }
     final currentPreflight = preflight!;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (currentPreflight.items.isNotEmpty) ...[
-            Text(
-              'Preview',
-              style: MacosTheme.of(context).typography.subheadline,
-            ),
-            const SizedBox(height: 6),
-            ...currentPreflight.items.take(5).map((item) {
-              final destination = item.isNoOp
-                  ? 'Already in destination'
-                  : p.relative(item.destinationPath);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '${item.video.title} -> $destination',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (currentPreflight.items.isNotEmpty) ...[
+              Text(
+                'Preview',
+                style: MacosTheme.of(context).typography.subheadline,
+              ),
+              const SizedBox(height: 6),
+              ...currentPreflight.items.take(5).map((item) {
+                final destination = item.isNoOp
+                    ? 'Already in destination'
+                    : p.relative(item.destinationPath);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${item.video.title} -> $destination',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: MacosTheme.of(context).typography.caption1,
+                  ),
+                );
+              }),
+              if (currentPreflight.items.length > 5)
+                Text(
+                  '+ ${currentPreflight.items.length - 5} more',
                   style: MacosTheme.of(context).typography.caption1,
                 ),
-              );
-            }),
-            if (currentPreflight.items.length > 5)
-              Text(
-                '+ ${currentPreflight.items.length - 5} more',
-                style: MacosTheme.of(context).typography.caption1,
-              ),
-          ],
-          if (currentPreflight.errors.isNotEmpty ||
-              currentPreflight.conflicts.isNotEmpty)
-            const SizedBox(height: 12),
-          ...currentPreflight.errors.map(
-            (message) => _ProblemLine(message: message),
-          ),
-          ...currentPreflight.conflicts.map(
-            (conflict) => _ProblemLine(
-              message: '${conflict.message} ${conflict.destinationPath}',
+            ],
+            if (currentPreflight.errors.isNotEmpty ||
+                currentPreflight.conflicts.isNotEmpty)
+              const SizedBox(height: 12),
+            ...currentPreflight.errors.map(
+              (message) => _ProblemLine(message: message),
             ),
-          ),
-        ],
+            ...currentPreflight.conflicts.map(
+              (conflict) => _ProblemLine(
+                message: '${conflict.message} ${conflict.destinationPath}',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -670,11 +697,13 @@ class _CleanupOption extends StatelessWidget {
         ),
         const SizedBox(width: MovieManagerSpacing.small),
         Expanded(
-          child: Text(
-            'Remove empty source folders after move',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: MacosTheme.of(context).typography.caption1,
+          child: ExcludeSemantics(
+            child: Text(
+              'Remove empty source folders after move',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: MacosTheme.of(context).typography.caption1,
+            ),
           ),
         ),
       ],

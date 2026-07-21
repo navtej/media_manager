@@ -34,6 +34,9 @@ abstract final class MovieManagerWindowMetrics {
 }
 
 abstract final class MovieManagerVisuals {
+  static bool isHighContrast(BuildContext context) =>
+      MediaQuery.maybeOf(context)?.highContrast ?? false;
+
   static Color surfaceColorFor(Brightness brightness) =>
       brightness == Brightness.dark
       ? MacosColors.controlBackgroundColor.darkColor
@@ -43,6 +46,9 @@ abstract final class MovieManagerVisuals {
       surfaceColorFor(MacosTheme.of(context).brightness);
 
   static Color secondaryLabelColor(BuildContext context) {
+    if (isHighContrast(context)) {
+      return MacosDynamicColor.resolve(MacosColors.labelColor, context);
+    }
     final brightness = MacosTheme.of(context).brightness;
     return brightness == Brightness.dark
         ? MacosColors.secondaryLabelColor.darkColor
@@ -50,6 +56,12 @@ abstract final class MovieManagerVisuals {
   }
 
   static Color tertiaryLabelColor(BuildContext context) {
+    if (isHighContrast(context)) {
+      return MacosDynamicColor.resolve(
+        MacosColors.secondaryLabelColor,
+        context,
+      );
+    }
     final brightness = MacosTheme.of(context).brightness;
     return brightness == Brightness.dark
         ? MacosColors.tertiaryLabelColor.darkColor
@@ -72,21 +84,28 @@ abstract final class MovieManagerVisuals {
     bool focused = false,
   }) {
     final theme = MacosTheme.of(context);
+    final highContrast = isHighContrast(context);
     return BoxDecoration(
       color:
           color ??
           (selected
-              ? theme.primaryColor.withValues(alpha: 0.12)
+              ? theme.primaryColor.withValues(alpha: highContrast ? 0.22 : 0.12)
               : surfaceColor(context)),
       borderRadius: BorderRadius.circular(MovieManagerRadii.panel),
       border: Border.all(
-        color: selected || focused ? theme.primaryColor : theme.dividerColor,
-        width: focused ? 2 : 1,
+        color: selected || focused
+            ? theme.primaryColor
+            : highContrast
+            ? secondaryLabelColor(context)
+            : theme.dividerColor,
+        width: focused || highContrast ? 2 : 1,
       ),
       boxShadow: focused
           ? [
               BoxShadow(
-                color: theme.primaryColor.withValues(alpha: 0.16),
+                color: theme.primaryColor.withValues(
+                  alpha: highContrast ? 0.28 : 0.16,
+                ),
                 blurRadius: 4,
                 spreadRadius: 1,
               ),
@@ -143,6 +162,8 @@ class _MovieManagerIconButtonState extends State<MovieManagerIconButton> {
       focusable: enabled,
       focused: _focusNode.hasFocus,
       onFocus: enabled ? _focusNode.requestFocus : null,
+      onTap: enabled ? widget.onPressed : null,
+      excludeSemantics: true,
       child: MacosTooltip(
         message: widget.label,
         child: FocusableActionDetector(
@@ -225,6 +246,7 @@ class MovieManagerStateMessage extends StatelessWidget {
     final theme = MacosTheme.of(context);
     return Semantics(
       container: true,
+      liveRegion: true,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -275,6 +297,107 @@ class MovieManagerStateMessage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+typedef MovieManagerFieldBuilder = Widget Function(FocusNode focusNode);
+
+class MovieManagerLabeledField extends StatefulWidget {
+  const MovieManagerLabeledField({
+    super.key,
+    required this.label,
+    required this.controller,
+    required this.builder,
+    this.focusNode,
+    this.enabled = true,
+    this.obscured = false,
+    this.multiline = false,
+    this.hasVisibleLabel = false,
+    this.onChanged,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final MovieManagerFieldBuilder builder;
+  final FocusNode? focusNode;
+  final bool enabled;
+  final bool obscured;
+  final bool multiline;
+  final bool hasVisibleLabel;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  State<MovieManagerLabeledField> createState() =>
+      _MovieManagerLabeledFieldState();
+}
+
+class _MovieManagerLabeledFieldState extends State<MovieManagerLabeledField> {
+  FocusNode? _internalFocusNode;
+
+  FocusNode get _focusNode =>
+      widget.focusNode ??
+      (_internalFocusNode ??= FocusNode(debugLabel: widget.label));
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_handleChanged);
+    _focusNode.addListener(_handleChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_handleChanged);
+    _focusNode.removeListener(_handleChanged);
+    _internalFocusNode?.dispose();
+    super.dispose();
+  }
+
+  void _handleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _setText(String value) {
+    widget.controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    widget.onChanged?.call(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final field = Semantics(
+      value: widget.controller.text,
+      textField: true,
+      enabled: widget.enabled,
+      focusable: widget.enabled,
+      focused: _focusNode.hasFocus,
+      obscured: widget.obscured,
+      multiline: widget.multiline,
+      onFocus: widget.enabled ? _focusNode.requestFocus : null,
+      onTap: widget.enabled ? _focusNode.requestFocus : null,
+      onSetText: widget.enabled ? _setText : null,
+      onSetSelection: widget.enabled
+          ? (selection) => widget.controller.selection = selection
+          : null,
+      excludeSemantics: true,
+      child: widget.builder(_focusNode),
+    );
+    if (widget.hasVisibleLabel) return field;
+
+    return Stack(
+      children: [
+        field,
+        Positioned.fill(
+          child: Semantics(
+            label: widget.label,
+            container: true,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ],
     );
   }
 }

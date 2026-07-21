@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:macos_ui/macos_ui.dart';
 
+import '../movie_manager_visual_system.dart';
+
 typedef SummarizationApiSaveCallback =
     FutureOr<void> Function({required String apiUrl, required String apiKey});
 
@@ -70,21 +72,34 @@ class _SummarizationApiSettingsPanelState
             const SizedBox(height: 16),
             _SettingsField(
               label: 'API URL',
-              child: MacosTextField(
-                key: const ValueKey('summarization-api-url-field'),
+              child: MovieManagerLabeledField(
+                label: 'API URL',
                 controller: _apiUrlController,
-                placeholder: 'https://api.openai.com/v1/chat/completions',
+                hasVisibleLabel: true,
+                builder: (focusNode) => MacosTextField(
+                  key: const ValueKey('summarization-api-url-field'),
+                  controller: _apiUrlController,
+                  focusNode: focusNode,
+                  placeholder: 'https://api.openai.com/v1/chat/completions',
+                ),
               ),
             ),
             const SizedBox(height: 14),
             _SettingsField(
               label: 'API Key',
               trailingLabel: 'Optional',
-              child: MacosTextField(
-                key: const ValueKey('summarization-api-key-field'),
+              child: MovieManagerLabeledField(
+                label: 'API Key',
                 controller: _apiKeyController,
-                placeholder: 'sk-...',
-                obscureText: true,
+                hasVisibleLabel: true,
+                obscured: true,
+                builder: (focusNode) => MacosTextField(
+                  key: const ValueKey('summarization-api-key-field'),
+                  controller: _apiKeyController,
+                  focusNode: focusNode,
+                  placeholder: 'sk-...',
+                  obscureText: true,
+                ),
               ),
             ),
             const SizedBox(height: 18),

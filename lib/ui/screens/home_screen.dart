@@ -236,10 +236,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     horizontal: 16.0,
                     vertical: 4.0,
                   ),
-                  child: MacosSearchField(
+                  child: MovieManagerLabeledField(
+                    label: 'Filter tags',
                     controller: _tagFilterController,
-                    placeholder: 'Filter tags...',
-                    style: const TextStyle(fontSize: 11),
+                    builder: (focusNode) => MacosSearchField(
+                      controller: _tagFilterController,
+                      focusNode: focusNode,
+                      placeholder: 'Filter tags...',
+                      style: const TextStyle(fontSize: 11),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -540,9 +545,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        child: MacosSearchField(
+                        child: MovieManagerLabeledField(
+                          label: 'Search videos',
                           controller: _searchController,
-                          placeholder: 'Search videos...',
+                          builder: (focusNode) => MacosSearchField(
+                            controller: _searchController,
+                            focusNode: focusNode,
+                            placeholder: 'Search videos...',
+                          ),
                         ),
                       ),
                       // Grid
@@ -867,6 +877,8 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
       button: true,
       selected: widget.selected,
       label: widget.label,
+      onTap: widget.onTap,
+      excludeSemantics: true,
       child: FocusableActionDetector(
         onShowFocusHighlight: (value) => setState(() => _focused = value),
         shortcuts: const {
@@ -959,6 +971,8 @@ class _GridSortItemState extends State<_GridSortItem> {
       button: true,
       selected: widget.selected,
       label: 'Sort by ${widget.label}',
+      onTap: widget.onTap,
+      excludeSemantics: true,
       child: FocusableActionDetector(
         onShowFocusHighlight: (value) => setState(() => _focused = value),
         shortcuts: const {

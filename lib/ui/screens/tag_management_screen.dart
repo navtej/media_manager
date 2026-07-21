@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Material, Divider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:macos_ui/macos_ui.dart';
 
 import '../../data/database.dart';
@@ -24,6 +26,7 @@ class TagManagementScreen extends ConsumerStatefulWidget {
 
 class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   final Set<String> _selectedTags = {};
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   TagStatistics? _stats;
 
@@ -39,6 +42,12 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   void initState() {
     super.initState();
     _loadStats();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStats() async {
@@ -117,7 +126,11 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
       toolBar: ToolBar(
         decoration: BoxDecoration(color: theme.canvasColor),
         title: const Text('Tag Management'),
-        leading: MacosBackButton(onPressed: () => Navigator.of(context).pop()),
+        leading: MovieManagerIconButton(
+          label: 'Back',
+          icon: CupertinoIcons.back,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       children: [
         ContentArea(
@@ -134,11 +147,19 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                   // Search Bar
                   Padding(
                     padding: const EdgeInsets.all(12.0),
-                    child: MacosTextField(
-                      placeholder: 'Search tags...',
-                      prefix: const MacosIcon(CupertinoIcons.search),
+                    child: MovieManagerLabeledField(
+                      label: 'Search tags',
+                      controller: _searchController,
                       onChanged: (value) =>
                           setState(() => _searchQuery = value.toLowerCase()),
+                      builder: (focusNode) => MacosTextField(
+                        controller: _searchController,
+                        focusNode: focusNode,
+                        placeholder: 'Search tags...',
+                        prefix: const MacosIcon(CupertinoIcons.search),
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value.toLowerCase()),
+                      ),
                     ),
                   ),
 
@@ -230,6 +251,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                       onPressed: () {
                         setState(() {
                           _searchQuery = '';
+                          _searchController.clear();
                           _selectedTags.clear();
                         });
                       },
@@ -304,38 +326,41 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
           );
         }
 
-        return SingleChildScrollView(
+        return GridView.builder(
           padding: const EdgeInsets.all(16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: processedTags.map((tag) {
-              final isSelected = _selectedTags.contains(tag.tagText);
-              return _TagChip(
-                tag: tag,
-                isSelected: isSelected,
-                theme: theme,
-                onTap: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedTags.remove(tag.tagText);
-                    } else {
-                      _selectedTags.add(tag.tagText);
-                    }
-                  });
-                },
-                onRename: () => _showRenameDialog(tag),
-                onDelete: () => _confirmDelete(tag),
-                onViewVideos: () {
-                  // Set the tag in the filter and navigate to home screen
-                  ref
-                      .read(catalogControllerProvider.notifier)
-                      .setPrimaryTag(tag.tagText);
-                  Navigator.of(context).pop();
-                },
-              );
-            }).toList(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 240,
+            mainAxisExtent: 44,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
           ),
+          itemCount: processedTags.length,
+          itemBuilder: (context, index) {
+            final tag = processedTags[index];
+            final isSelected = _selectedTags.contains(tag.tagText);
+            return _TagChip(
+              tag: tag,
+              isSelected: isSelected,
+              theme: theme,
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedTags.remove(tag.tagText);
+                  } else {
+                    _selectedTags.add(tag.tagText);
+                  }
+                });
+              },
+              onRename: () => _showRenameDialog(tag),
+              onDelete: () => _confirmDelete(tag),
+              onViewVideos: () {
+                ref
+                    .read(catalogControllerProvider.notifier)
+                    .setPrimaryTag(tag.tagText);
+                Navigator.of(context).pop();
+              },
+            );
+          },
         );
       },
     );
@@ -358,10 +383,15 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               'Renaming "${tag.tagText}" (used in ${tag.videoCount} videos)',
             ),
             const SizedBox(height: 12),
-            MacosTextField(
+            MovieManagerLabeledField(
+              label: 'New tag name',
               controller: controller,
-              placeholder: 'New tag name',
-              autofocus: true,
+              builder: (focusNode) => MacosTextField(
+                controller: controller,
+                focusNode: focusNode,
+                placeholder: 'New tag name',
+                autofocus: true,
+              ),
             ),
           ],
         ),
@@ -424,10 +454,15 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
             const SizedBox(height: 8),
             const Text('Enter the target tag name:'),
             const SizedBox(height: 12),
-            MacosTextField(
+            MovieManagerLabeledField(
+              label: 'Target tag name',
               controller: controller,
-              placeholder: 'Target tag name',
-              autofocus: true,
+              builder: (focusNode) => MacosTextField(
+                controller: controller,
+                focusNode: focusNode,
+                placeholder: 'Target tag name',
+                autofocus: true,
+              ),
             ),
           ],
         ),
@@ -565,76 +600,135 @@ class _TagChip extends StatefulWidget {
 
 class _TagChipState extends State<_TagChip> {
   bool _isHovered = false;
+  bool _isFocused = false;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode(debugLabel: widget.tag.tagText);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
 
     // Matches the visual style of Sidebar tags approx
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: widget.isSelected
-                ? theme.primaryColor
-                : MacosColors.systemGrayColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(MovieManagerRadii.panel),
-            border: Border.all(
-              color: widget.isSelected
-                  ? theme.primaryColor
-                  : MacosColors.systemGrayColor.withValues(alpha: 0.2),
-            ),
+    return Semantics(
+      label: '${widget.tag.tagText}, ${widget.tag.videoCount} videos',
+      button: true,
+      selected: widget.isSelected,
+      focusable: true,
+      focused: _focusNode.hasFocus,
+      onFocus: _focusNode.requestFocus,
+      onTap: widget.onTap,
+      customSemanticsActions: {
+        CustomSemanticsAction(label: 'View videos'): widget.onViewVideos,
+        CustomSemanticsAction(label: 'Rename tag'): widget.onRename,
+        CustomSemanticsAction(label: 'Delete tag'): widget.onDelete,
+      },
+      excludeSemantics: true,
+      child: FocusableActionDetector(
+        focusNode: _focusNode,
+        onShowFocusHighlight: (value) => setState(() => _isFocused = value),
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onTap();
+              return null;
+            },
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${widget.tag.tagText} (${widget.tag.videoCount})',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: widget.isSelected
-                      ? MacosColors.white
-                      : theme.typography.body.color?.withValues(alpha: 0.9),
+        },
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: widget.isSelected
+                    ? theme.primaryColor
+                    : MacosColors.systemGrayColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(MovieManagerRadii.panel),
+                border: Border.all(
+                  color: widget.isSelected || _isFocused
+                      ? theme.primaryColor
+                      : MovieManagerVisuals.isHighContrast(context)
+                      ? MovieManagerVisuals.secondaryLabelColor(context)
+                      : MacosColors.systemGrayColor.withValues(alpha: 0.2),
+                  width:
+                      _isFocused || MovieManagerVisuals.isHighContrast(context)
+                      ? 2
+                      : 1,
                 ),
               ),
-              if (_isHovered || widget.isSelected) ...[
-                const SizedBox(width: 8),
-                _ActionButton(
-                  icon: CupertinoIcons.play_circle,
-                  onTap: widget.onViewVideos,
-                  isSelected: widget.isSelected,
-                  tooltip: 'View videos with this tag',
-                ),
-                const SizedBox(width: 4),
-                _ActionButton(
-                  icon: CupertinoIcons.pencil,
-                  onTap: widget.onRename,
-                  isSelected: widget.isSelected,
-                  tooltip: 'Rename tag',
-                ),
-                const SizedBox(width: 4),
-                _ActionButton(
-                  icon: CupertinoIcons.trash,
-                  onTap: widget.onDelete,
-                  isSelected: widget.isSelected,
-                  isDestructive: true,
-                  tooltip: 'Delete tag',
-                ),
-              ],
-              if (!_isHovered && !widget.isSelected) ...[
-                const SizedBox(width: 8),
-                _ActionButton(
-                  icon: CupertinoIcons.ellipsis,
-                  onTap: widget.onViewVideos,
-                  isSelected: false,
-                  tooltip: 'View videos and tag actions',
-                ),
-              ],
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: ExcludeSemantics(
+                      child: Text(
+                        '${widget.tag.tagText} (${widget.tag.videoCount})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: widget.isSelected
+                              ? MacosColors.white
+                              : theme.typography.body.color?.withValues(
+                                  alpha: 0.9,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_isHovered || widget.isSelected || _isFocused) ...[
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      icon: CupertinoIcons.play_circle,
+                      onTap: widget.onViewVideos,
+                      isSelected: widget.isSelected,
+                      tooltip: 'View videos with this tag',
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionButton(
+                      icon: CupertinoIcons.pencil,
+                      onTap: widget.onRename,
+                      isSelected: widget.isSelected,
+                      tooltip: 'Rename tag',
+                    ),
+                    const SizedBox(width: 4),
+                    _ActionButton(
+                      icon: CupertinoIcons.trash,
+                      onTap: widget.onDelete,
+                      isSelected: widget.isSelected,
+                      isDestructive: true,
+                      tooltip: 'Delete tag',
+                    ),
+                  ],
+                  if (!_isHovered && !widget.isSelected && !_isFocused) ...[
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      icon: CupertinoIcons.ellipsis,
+                      onTap: widget.onViewVideos,
+                      isSelected: false,
+                      tooltip: 'View videos and tag actions',
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -775,7 +869,9 @@ class _FilterCheckbox extends StatelessWidget {
           onChanged: onChanged,
         ),
         const SizedBox(width: MovieManagerSpacing.compact),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        ExcludeSemantics(
+          child: Text(label, style: const TextStyle(fontSize: 12)),
+        ),
       ],
     );
   }

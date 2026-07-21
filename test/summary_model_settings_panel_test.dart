@@ -184,6 +184,21 @@ void main() {
     );
 
     expect(find.text('Use .vtt subtitles when available'), findsOneWidget);
+    expect(
+      tester.getSemantics(
+        find.byKey(const ValueKey('prefer-vtt-subtitles-checkbox')),
+      ),
+      matchesSemantics(
+        label: 'Use .vtt subtitles when available',
+        isChecked: true,
+        hasCheckedState: true,
+        isFocusable: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasFocusAction: true,
+        hasTapAction: true,
+      ),
+    );
     await tester.tap(
       find.byKey(const ValueKey('prefer-vtt-subtitles-checkbox')),
     );

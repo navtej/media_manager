@@ -113,6 +113,7 @@ void main() {
         hasEnabledState: true,
         isEnabled: true,
         hasFocusAction: true,
+        hasTapAction: true,
       ),
     );
 
@@ -138,6 +139,7 @@ void main() {
         hasEnabledState: true,
         isEnabled: true,
         hasFocusAction: true,
+        hasTapAction: true,
       ),
     );
   });
@@ -230,6 +232,19 @@ void main() {
       const Size(112, 63),
     );
     expect(find.text('Offline'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('video-row-1'))),
+      matchesSemantics(
+        label: video.title,
+        value: '1:02:03, 2.0 MB, Offline',
+        isButton: true,
+        isSelected: false,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasFocusAction: true,
+        hasTapAction: true,
+      ),
+    );
     expect(
       _tooltipMessages(tester),
       containsAll([

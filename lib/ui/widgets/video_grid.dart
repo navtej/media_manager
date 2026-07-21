@@ -225,10 +225,12 @@ class _VideoGridItemState extends State<VideoGridItem> {
   bool _isThumbnailHovering = false;
   bool _isFocused = false;
   bool _isPressed = false;
+  final FocusNode _focusNode = FocusNode(debugLabel: 'Video card');
   final TextEditingController _tagController = TextEditingController();
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _tagController.dispose();
     super.dispose();
   }
@@ -258,9 +260,18 @@ class _VideoGridItemState extends State<VideoGridItem> {
 
         final highlighted = isSelected || _isHovering || _isFocused;
         return Semantics(
+          container: true,
+          explicitChildNodes: true,
+          button: true,
           selected: isSelected,
+          focusable: true,
+          focused: _focusNode.hasFocus,
           label: video.title,
+          value: _videoSemanticValue(video),
+          onFocus: _focusNode.requestFocus,
+          onTap: () => _selectWithKeyboardIntent(selectionController),
           child: FocusableActionDetector(
+            focusNode: _focusNode,
             onShowHoverHighlight: (value) =>
                 setState(() => _isHovering = value),
             onShowFocusHighlight: (value) => setState(() => _isFocused = value),
@@ -321,9 +332,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(MovieManagerRadii.panel),
                                 ),
-                                child: _VideoThumbnailContent(
-                                  video: video,
-                                  placeholderIconSize: 40,
+                                child: ExcludeSemantics(
+                                  child: _VideoThumbnailContent(
+                                    video: video,
+                                    placeholderIconSize: 40,
+                                  ),
                                 ),
                               ),
                               // Hover Details Overlay
@@ -375,7 +388,9 @@ class _VideoGridItemState extends State<VideoGridItem> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _VideoTitle(video: video),
+                              ExcludeSemantics(
+                                child: _VideoTitle(video: video),
+                              ),
                               const SizedBox(height: 2),
                               Row(
                                 children: [
@@ -384,12 +399,14 @@ class _VideoGridItemState extends State<VideoGridItem> {
                                     includeTagAction: false,
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    _formatDuration(video.duration),
-                                    style: theme.typography.caption1.copyWith(
-                                      color: theme.typography.caption1.color
-                                          ?.withValues(alpha: 0.5),
-                                      fontSize: 10,
+                                  ExcludeSemantics(
+                                    child: Text(
+                                      _formatDuration(video.duration),
+                                      style: theme.typography.caption1.copyWith(
+                                        color: theme.typography.caption1.color
+                                            ?.withValues(alpha: 0.5),
+                                        fontSize: 10,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -427,8 +444,18 @@ class _VideoGridItemState extends State<VideoGridItem> {
   ) {
     final highlighted = isSelected || _isHovering || _isFocused || _isPressed;
     return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      button: true,
       selected: isSelected,
+      focusable: true,
+      focused: _focusNode.hasFocus,
+      label: video.title,
+      value: _videoSemanticValue(video),
+      onFocus: _focusNode.requestFocus,
+      onTap: () => _selectWithKeyboardIntent(selectionController),
       child: FocusableActionDetector(
+        focusNode: _focusNode,
         onShowHoverHighlight: (value) => setState(() => _isHovering = value),
         onShowFocusHighlight: (value) => setState(() => _isFocused = value),
         shortcuts: const {
@@ -485,9 +512,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
                     child: SizedBox(
                       width: CatalogLayoutMetrics.thumbnailWidth,
                       height: CatalogLayoutMetrics.thumbnailHeight,
-                      child: _VideoThumbnailContent(
-                        video: video,
-                        placeholderIconSize: 28,
+                      child: ExcludeSemantics(
+                        child: _VideoThumbnailContent(
+                          video: video,
+                          placeholderIconSize: 28,
+                        ),
                       ),
                     ),
                   ),
@@ -496,7 +525,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _VideoTitle(video: video),
+                        ExcludeSemantics(child: _VideoTitle(video: video)),
                         _FolderPathWidget(video: video, compact: true),
                         Expanded(
                           child: _CompactVideoTagLine(videoId: video.id),
@@ -507,25 +536,27 @@ class _VideoGridItemState extends State<VideoGridItem> {
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 68,
-                    child: MacosTooltip(
-                      message:
-                          '${_formatDuration(video.duration)} · ${LibraryStats.formatSize(video.size)}',
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            _formatDuration(video.duration),
-                            maxLines: 1,
-                            style: theme.typography.caption1,
-                          ),
-                          Text(
-                            LibraryStats.formatSize(video.size),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.typography.caption1,
-                          ),
-                        ],
+                    child: ExcludeSemantics(
+                      child: MacosTooltip(
+                        message:
+                            '${_formatDuration(video.duration)} · ${LibraryStats.formatSize(video.size)}',
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatDuration(video.duration),
+                              maxLines: 1,
+                              style: theme.typography.caption1,
+                            ),
+                            Text(
+                              LibraryStats.formatSize(video.size),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.typography.caption1,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -563,6 +594,15 @@ class _VideoGridItemState extends State<VideoGridItem> {
       isRangeSelection: keyboard.isShiftPressed,
       isToggleSelection: keyboard.isMetaPressed || keyboard.isControlPressed,
     );
+  }
+
+  String _videoSemanticValue(Video video) {
+    return [
+      _formatDuration(video.duration),
+      LibraryStats.formatSize(video.size),
+      if (video.isOffline) 'Offline',
+      if (video.isFavorite) 'Favorite',
+    ].join(', ');
   }
 
   Widget _buildCompactActions(WidgetRef ref, {bool includeTagAction = true}) {
@@ -611,38 +651,40 @@ class _VideoGridItemState extends State<VideoGridItem> {
           color: hasFreshSummary ? MacosColors.systemGreenColor : null,
           onPressed: () => _showSummaryDialog(context, ref, widget.video),
         ),
-        Semantics(
-          label: 'More actions',
-          button: true,
-          child: MacosTooltip(
-            message: 'More actions',
-            child: MacosPulldownButton(
-              key: ValueKey('video-more-${widget.video.id}'),
-              icon: CupertinoIcons.ellipsis_circle,
-              menuAlignment: PulldownMenuAlignment.right,
-              items: [
-                MacosPulldownMenuItem(
-                  title: const Text('Info'),
-                  onTap: () => _showInfo(context, widget.video),
-                ),
-                MacosPulldownMenuItem(
-                  title: const Text('Reveal in Finder'),
-                  onTap: () => _revealVideo(ref, widget.video),
-                ),
-                MacosPulldownMenuItem(
-                  title: const Text('Video Summary'),
-                  onTap: () => _showSummaryDialog(context, ref, widget.video),
-                ),
-                const MacosPulldownMenuDivider(),
-                MacosPulldownMenuItem(
-                  title: const Text('Delete'),
-                  onTap: () => _confirmDelete(ref),
-                ),
-                MacosPulldownMenuItem(
-                  title: const Text('Clear Tags'),
-                  onTap: () => _clearTags(ref),
-                ),
-              ],
+        MergeSemantics(
+          child: Semantics(
+            label: 'More actions',
+            button: true,
+            child: MacosTooltip(
+              message: 'More actions',
+              child: MacosPulldownButton(
+                key: ValueKey('video-more-${widget.video.id}'),
+                icon: CupertinoIcons.ellipsis_circle,
+                menuAlignment: PulldownMenuAlignment.right,
+                items: [
+                  MacosPulldownMenuItem(
+                    title: const Text('Info'),
+                    onTap: () => _showInfo(context, widget.video),
+                  ),
+                  MacosPulldownMenuItem(
+                    title: const Text('Reveal in Finder'),
+                    onTap: () => _revealVideo(ref, widget.video),
+                  ),
+                  MacosPulldownMenuItem(
+                    title: const Text('Video Summary'),
+                    onTap: () => _showSummaryDialog(context, ref, widget.video),
+                  ),
+                  const MacosPulldownMenuDivider(),
+                  MacosPulldownMenuItem(
+                    title: const Text('Delete'),
+                    onTap: () => _confirmDelete(ref),
+                  ),
+                  MacosPulldownMenuItem(
+                    title: const Text('Clear Tags'),
+                    onTap: () => _clearTags(ref),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -814,7 +856,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
       context: context,
       builder: (dialogContext) => MacosAlertDialog(
         appIcon: const MacosIcon(CupertinoIcons.info),
-        title: const Text('Video Information'),
+        title: Semantics(
+          container: true,
+          header: true,
+          child: const Text('Video Information'),
+        ),
         message: SelectableText(
           'Drive: $drive\nSize: $sizeStr\n\nFull Path: ${video.absolutePath}',
         ),
@@ -1760,15 +1806,20 @@ class _TagAutocompleteInputState extends ConsumerState<_TagAutocompleteInput> {
             }
             return KeyEventResult.ignored;
           },
-          child: MacosTextField(
+          child: MovieManagerLabeledField(
+            label: 'Add tags for ${widget.video.title}',
             controller: _controller,
             focusNode: _focusNode,
-            placeholder: 'Add tags...',
-            placeholderStyle: const TextStyle(
-              color: MacosColors.systemGrayColor,
+            builder: (focusNode) => MacosTextField(
+              controller: _controller,
+              focusNode: focusNode,
+              placeholder: 'Add tags...',
+              placeholderStyle: const TextStyle(
+                color: MacosColors.systemGrayColor,
+              ),
+              style: const TextStyle(fontSize: 11),
+              onSubmitted: (_) => _submitTags(),
             ),
-            style: const TextStyle(fontSize: 11),
-            onSubmitted: (_) => _submitTags(),
           ),
         ),
       ),

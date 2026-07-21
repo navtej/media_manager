@@ -29,6 +29,51 @@ void main() {
     expect(light.computeLuminance(), greaterThan(dark.computeLuminance()));
   });
 
+  testWidgets('shared surfaces strengthen boundaries for high contrast', (
+    tester,
+  ) async {
+    late BoxDecoration panel;
+    late Color secondaryLabel;
+
+    Future<void> pump({required bool highContrast}) {
+      return tester.pumpWidget(
+        MacosApp(
+          theme: MacosThemeData.light(),
+          home: MacosWindow(
+            child: MediaQuery(
+              data: MediaQueryData(highContrast: highContrast),
+              child: Builder(
+                builder: (context) {
+                  panel = MovieManagerVisuals.panelDecoration(context);
+                  secondaryLabel = MovieManagerVisuals.secondaryLabelColor(
+                    context,
+                  );
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pump(highContrast: false);
+    final normalBorder = panel.border! as Border;
+    final normalLabelLuminance = Color.alphaBlend(
+      secondaryLabel,
+      MacosColors.white,
+    ).computeLuminance();
+
+    await pump(highContrast: true);
+    final highContrastBorder = panel.border! as Border;
+
+    expect(highContrastBorder.top.width, greaterThan(normalBorder.top.width));
+    expect(
+      Color.alphaBlend(secondaryLabel, MacosColors.white).computeLuminance(),
+      lessThan(normalLabelLuminance),
+    );
+  });
+
   testWidgets(
     'shared icon action has tooltip, semantics, target, and keyboard',
     (tester) async {
@@ -66,6 +111,7 @@ void main() {
           hasEnabledState: true,
           isEnabled: true,
           hasFocusAction: true,
+          hasTapAction: true,
         ),
       );
 
@@ -85,6 +131,7 @@ void main() {
           hasEnabledState: true,
           isEnabled: true,
           hasFocusAction: true,
+          hasTapAction: true,
         ),
       );
     },
@@ -117,13 +164,13 @@ void main() {
       tester.getSemantics(checkbox),
       matchesSemantics(
         label: 'Show Offline Media',
-        isButton: true,
         isChecked: false,
         hasCheckedState: true,
         isFocusable: true,
         hasEnabledState: true,
         isEnabled: true,
         hasFocusAction: true,
+        hasTapAction: true,
       ),
     );
 
@@ -137,7 +184,6 @@ void main() {
       tester.getSemantics(checkbox),
       matchesSemantics(
         label: 'Show Offline Media',
-        isButton: true,
         isChecked: true,
         hasCheckedState: true,
         isFocusable: true,
@@ -145,6 +191,50 @@ void main() {
         hasEnabledState: true,
         isEnabled: true,
         hasFocusAction: true,
+        hasTapAction: true,
+      ),
+    );
+  });
+
+  testWidgets('labeled field merges its accessible name with editing actions', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: Center(
+            child: MovieManagerLabeledField(
+              label: 'Search videos',
+              controller: controller,
+              builder: (focusNode) => MacosTextField(
+                key: const ValueKey('search-videos-field'),
+                controller: controller,
+                focusNode: focusNode,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Search videos')),
+      matchesSemantics(label: 'Search videos', isFocusable: false),
+    );
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('search-videos-field'))),
+      matchesSemantics(
+        isTextField: true,
+        isFocusable: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        hasFocusAction: true,
+        hasTapAction: true,
+        hasSetTextAction: true,
+        hasSetSelectionAction: true,
       ),
     );
   });

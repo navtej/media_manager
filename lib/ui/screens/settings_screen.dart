@@ -127,7 +127,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       toolBar: ToolBar(
         decoration: BoxDecoration(color: MacosTheme.of(context).canvasColor),
         centerTitle: false,
-        title: const Text('Back'),
+        title: const ExcludeSemantics(child: Text('Back')),
         leading: Transform.translate(
           offset: const Offset(-10, 0),
           child: MovieManagerIconButton(
@@ -223,9 +223,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       children: [
         Text(label, style: MacosTheme.of(context).typography.subheadline),
         const SizedBox(height: 4),
-        MacosTextField(
+        MovieManagerLabeledField(
+          label: label,
           controller: controller,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          hasVisibleLabel: true,
+          builder: (focusNode) => MacosTextField(
+            controller: controller,
+            focusNode: focusNode,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
         ),
       ],
     );
@@ -823,20 +829,26 @@ class _LibraryNameFieldState extends ConsumerState<_LibraryNameField> {
       children: [
         SizedBox(
           width: 260,
-          child: MacosTextField(
-            key: ValueKey('library-name-field-${widget.folder.id}'),
+          child: MovieManagerLabeledField(
+            label: 'Library name for ${widget.folder.path}',
             controller: _controller,
             focusNode: _focusNode,
             enabled: !_isSaving,
-            textInputAction: TextInputAction.done,
-            onChanged: (_) {
-              if (_errorText != null) {
-                setState(() {
-                  _errorText = null;
-                });
-              }
-            },
-            onSubmitted: (_) => _saveName(),
+            builder: (focusNode) => MacosTextField(
+              key: ValueKey('library-name-field-${widget.folder.id}'),
+              controller: _controller,
+              focusNode: focusNode,
+              enabled: !_isSaving,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+              onSubmitted: (_) => _saveName(),
+            ),
           ),
         ),
         if (_errorText != null) ...[

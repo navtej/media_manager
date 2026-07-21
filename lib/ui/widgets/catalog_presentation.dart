@@ -216,6 +216,8 @@ class _PresentationButtonState extends State<_PresentationButton> {
       focusable: true,
       focused: _focusNode.hasFocus,
       onFocus: _focusNode.requestFocus,
+      onTap: widget.onPressed,
+      excludeSemantics: true,
       child: MacosTooltip(
         message: widget.label,
         child: FocusableActionDetector(

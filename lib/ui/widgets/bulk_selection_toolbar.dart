@@ -48,11 +48,14 @@ class BulkSelectionToolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            '$selectedCount Selected',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.typography.body,
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              '$selectedCount Selected',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.typography.body,
+            ),
           ),
           const SizedBox(width: 12),
           PushButton(

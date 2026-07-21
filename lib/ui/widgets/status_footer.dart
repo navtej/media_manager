@@ -46,68 +46,75 @@ class StatusFooter extends ConsumerWidget {
 
     final theme = MacosTheme.of(context);
     final labelColor = MovieManagerVisuals.secondaryLabelColor(context);
-    return Container(
-      height: 32,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: MovieManagerVisuals.surfaceColor(context),
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          // Left side: Status messages or indicators
-          if (statusMsg != null) ...[
-            Icon(
-              CupertinoIcons.check_mark_circled,
-              color: MovieManagerVisuals.successColor(context),
-              size: 14,
-            ),
-            const SizedBox(width: 8),
-            Text(statusMsg, style: TextStyle(fontSize: 11, color: labelColor)),
-          ] else if (scanStatus.isNotEmpty ||
-              aiStatus.isNotEmpty ||
-              summaryStatus.isNotEmpty ||
-              moveState.statusMessage.isNotEmpty) ...[
-            CupertinoActivityIndicator(radius: 7, color: labelColor),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                [
-                  scanStatus,
-                  aiStatus,
-                  summaryStatus,
-                  moveState.statusMessage,
-                ].where((s) => s.isNotEmpty).join(' | '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: labelColor,
-                  fontWeight: FontWeight.w500,
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        height: 32,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: MovieManagerVisuals.surfaceColor(context),
+          border: Border(top: BorderSide(color: theme.dividerColor)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            // Left side: Status messages or indicators
+            if (statusMsg != null) ...[
+              Icon(
+                CupertinoIcons.check_mark_circled,
+                color: MovieManagerVisuals.successColor(context),
+                size: 14,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                statusMsg,
+                style: TextStyle(fontSize: 11, color: labelColor),
+              ),
+            ] else if (scanStatus.isNotEmpty ||
+                aiStatus.isNotEmpty ||
+                summaryStatus.isNotEmpty ||
+                moveState.statusMessage.isNotEmpty) ...[
+              CupertinoActivityIndicator(radius: 7, color: labelColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  [
+                    scanStatus,
+                    aiStatus,
+                    summaryStatus,
+                    moveState.statusMessage,
+                  ].where((s) => s.isNotEmpty).join(' | '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: labelColor,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-          ] else
-            const Spacer(),
+            ] else
+              const Spacer(),
 
-          // Right side: Video counts
-          if (statusMsg == null) ...[
-            Expanded(
-              child: Text(
-                'Loaded: $visibleCount / Matching: $selectedCount / Selected: $selectedBulkCount / Total: $totalCount',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: labelColor,
-                  fontWeight: FontWeight.w600,
+            // Right side: Video counts
+            if (statusMsg == null) ...[
+              Expanded(
+                child: Text(
+                  'Loaded: $visibleCount / Matching: $selectedCount / Selected: $selectedBulkCount / Total: $totalCount',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: labelColor,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

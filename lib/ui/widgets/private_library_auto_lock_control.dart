@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 
 import '../../logic/settings_provider.dart';
+import '../movie_manager_visual_system.dart';
 
 const privateLibraryAutoLockValidationMessage =
     'Enter a whole number from 1 to 120.';
@@ -110,15 +111,23 @@ class _PrivateLibraryAutoLockControlState
             ),
             SizedBox(
               width: 72,
-              child: MacosTextField(
-                key: const ValueKey('private-library-auto-lock-minutes-field'),
+              child: MovieManagerLabeledField(
+                label: 'Private library auto-lock minutes',
                 controller: _controller,
                 focusNode: _focusNode,
                 enabled: configuration.hasValue && !_isCommitting,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onSubmitted: (_) => unawaited(_commit()),
+                builder: (focusNode) => MacosTextField(
+                  key: const ValueKey(
+                    'private-library-auto-lock-minutes-field',
+                  ),
+                  controller: _controller,
+                  focusNode: focusNode,
+                  enabled: configuration.hasValue && !_isCommitting,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onSubmitted: (_) => unawaited(_commit()),
+                ),
               ),
             ),
             const SizedBox(width: 8),

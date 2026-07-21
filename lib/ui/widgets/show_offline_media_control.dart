@@ -15,7 +15,7 @@ class ShowOfflineMediaControl extends ConsumerWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Show Offline Media'),
+            const ExcludeSemantics(child: Text('Show Offline Media')),
             const SizedBox(width: 6),
             MacosPreferenceCheckbox(
               key: const ValueKey('show-offline-media-checkbox'),

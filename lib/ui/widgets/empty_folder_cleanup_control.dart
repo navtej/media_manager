@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
 
 import '../../logic/settings_provider.dart';
+import '../movie_manager_visual_system.dart';
 import 'macos_preference_checkbox.dart';
 
 const emptyFolderCleanupValidationMessage =
@@ -131,16 +132,24 @@ class _EmptyFolderCleanupControlState
             const SizedBox(width: 8),
             SizedBox(
               width: 72,
-              child: MacosTextField(
-                key: const ValueKey('empty-folder-cleanup-interval-days-field'),
+              child: MovieManagerLabeledField(
+                label: 'Empty folder cleanup interval in days',
                 controller: _controller,
                 focusNode: _focusNode,
                 enabled: value != null && !_isCommitting,
-                keyboardType: const TextInputType.numberWithOptions(
-                  signed: true,
+                builder: (focusNode) => MacosTextField(
+                  key: const ValueKey(
+                    'empty-folder-cleanup-interval-days-field',
+                  ),
+                  controller: _controller,
+                  focusNode: focusNode,
+                  enabled: value != null && !_isCommitting,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => unawaited(_commitInterval()),
                 ),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => unawaited(_commitInterval()),
               ),
             ),
             const SizedBox(width: 8),

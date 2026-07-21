@@ -9,12 +9,12 @@ class MacosPreferenceCheckbox extends StatefulWidget {
     super.key,
     required this.value,
     required this.onChanged,
-    this.semanticLabel,
+    required this.semanticLabel,
   });
 
   final bool value;
   final ValueChanged<bool>? onChanged;
-  final String? semanticLabel;
+  final String semanticLabel;
 
   @override
   State<MacosPreferenceCheckbox> createState() =>
@@ -45,12 +45,13 @@ class _MacosPreferenceCheckboxState extends State<MacosPreferenceCheckbox> {
     final enabled = widget.onChanged != null;
     return Semantics(
       checked: widget.value,
-      button: true,
       enabled: enabled,
       focusable: enabled,
       focused: _focusNode.hasFocus,
       onFocus: enabled ? _focusNode.requestFocus : null,
+      onTap: enabled ? _toggle : null,
       label: widget.semanticLabel,
+      excludeSemantics: true,
       child: FocusableActionDetector(
         enabled: enabled,
         focusNode: _focusNode,
