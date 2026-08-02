@@ -53,6 +53,7 @@ class ScanStatus extends _$ScanStatus {
 @Riverpod(keepAlive: true)
 class LibraryController extends _$LibraryController {
   bool _isScanning = false;
+  bool _scanPending = false;
   Timer? _periodicTimer;
 
   @override
@@ -79,6 +80,12 @@ class LibraryController extends _$LibraryController {
           'DEBUG: Scan interval changed from $oldInterval to $newInterval. Updating timer.',
         );
         _setupTimer(newInterval);
+      }
+    });
+    ref.listen(libraryOperationControllerProvider, (previous, next) {
+      if (_scanPending && (previous?.isBusy ?? false) && !next.isBusy) {
+        _scanPending = false;
+        unawaited(syncAll());
       }
     });
 
@@ -115,6 +122,9 @@ class LibraryController extends _$LibraryController {
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     if (!operation.beginScan()) {
       final operationState = ref.read(libraryOperationControllerProvider);
+      if (!operationState.isScanning) {
+        _scanPending = true;
+      }
       ref
           .read(scanStatusProvider.notifier)
           .setStatus(_operationBlockedMessage(operationState));
@@ -125,6 +135,7 @@ class LibraryController extends _$LibraryController {
       });
       return;
     }
+    _scanPending = false;
 
     try {
       _isScanning = true;

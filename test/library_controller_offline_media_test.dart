@@ -64,6 +64,54 @@ void main() {
     expect(catalog.totalCount, 0);
   });
 
+  test('startup scan retries after Library maintenance finishes', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    final folderId = await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: '/Volumes/Archive/Movies',
+        securityScopedBookmark: const drift.Value('bookmark'),
+      ),
+    );
+    await db.videosDao.insertVideo(
+      VideosCompanion.insert(
+        folderId: folderId,
+        absolutePath: '/Volumes/Archive/Movies/clip.mp4',
+        title: 'clip',
+        aiProcessed: const drift.Value(true),
+      ),
+    );
+    final adapter = _DenyingLibraryAccessAdapter();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: adapter),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final operations = container.read(
+      libraryOperationControllerProvider.notifier,
+    );
+    expect(operations.beginCleanup(), isTrue);
+
+    await container.read(libraryControllerProvider.future);
+    await _waitForScanStatus(container, 'Library maintenance in progress');
+    expect(adapter.hasStarted, isFalse);
+
+    operations.endCleanup();
+    await adapter.started;
+    await _waitForScanIdle(container);
+
+    final video = (await db.videosDao.getVideoByPath(
+      '/Volumes/Archive/Movies/clip.mp4',
+    ))!;
+    expect(video.isOffline, isTrue);
+  });
+
   test('online removable-folder videos remain visible', () async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -145,6 +193,7 @@ class _DenyingLibraryAccessAdapter implements LibraryAccessAdapter {
   final Completer<void> _started = Completer<void>();
 
   Future<void> get started => _started.future;
+  bool get hasStarted => _started.isCompleted;
 
   @override
   Future<String?> createBookmark(String path) async => 'bookmark:$path';
@@ -199,4 +248,17 @@ Future<void> _waitForScanIdle(ProviderContainer container) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
   throw TimeoutException('Timed out waiting for library scan to finish.');
+}
+
+Future<void> _waitForScanStatus(
+  ProviderContainer container,
+  String expected,
+) async {
+  for (var attempt = 0; attempt < 50; attempt++) {
+    if (container.read(scanStatusProvider) == expected) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw TimeoutException('Timed out waiting for scan status "$expected".');
 }
