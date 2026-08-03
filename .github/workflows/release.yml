@@ -79,3 +79,37 @@ jobs:
             --generate-notes \
             --target "$GITHUB_SHA" \
             --title "$TAG"
+
+      - name: Check out Homebrew tap
+        if: ${{ !inputs.dry_run }}
+        uses: actions/checkout@v4
+        with:
+          repository: navtej/homebrew-tap
+          ref: main
+          path: homebrew-tap
+          token: ${{ secrets.TAP_ACCESS_PAT }}
+          fetch-depth: 1
+
+      - name: Update Homebrew cask
+        if: ${{ !inputs.dry_run }}
+        env:
+          ARTIFACT_NAME: ${{ steps.version.outputs.ARTIFACT_NAME }}
+          RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          cask_path="homebrew-tap/Casks/media-manager.rb"
+          checksum="$(cut -d' ' -f1 "dist/${ARTIFACT_NAME}.sha256")"
+
+          sed -i '' \
+            -e "s/^  version \".*\"$/  version \"${RELEASE_VERSION}\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"${checksum}\"/" \
+            "$cask_path"
+
+          grep -Fq "  version \"${RELEASE_VERSION}\"" "$cask_path"
+          grep -Fq "  sha256 \"${checksum}\"" "$cask_path"
+
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Casks/media-manager.rb
+          git -C homebrew-tap commit -m "Update Media Manager to ${RELEASE_VERSION}"
+          git -C homebrew-tap push origin HEAD:main
