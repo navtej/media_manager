@@ -17,6 +17,7 @@ import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
 import 'package:movie_manager/ui/widgets/private_library_auto_lock_control.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/library_access_test_adapter.dart';
 
@@ -59,6 +60,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libraries'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('show-private-libraries-in-filter-checkbox')),
+      findsOneWidget,
+    );
     expect(find.byType(PrivateLibraryAutoLockControl), findsOneWidget);
     expect(
       find.byKey(const ValueKey('empty-folder-cleanup-checkbox')),
@@ -91,6 +96,59 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+
+  testWidgets(
+    'settings persists private-filter visibility without authentication',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final auth = _FakePrivateLibraryAuthService(result: true);
+      final container = ProviderContainer(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(_TestFoldersDao(db, [])),
+          privateLibraryAuthServiceProvider.overrideWithValue(auth),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(settingsProvider.future);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        container
+            .read(settingsProvider)
+            .requireValue
+            .privateLibraryAccess
+            .showPrivateLibrariesInFilter,
+        isFalse,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('show-private-libraries-in-filter-checkbox')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        container
+            .read(settingsProvider)
+            .requireValue
+            .privateLibraryAccess
+            .showPrivateLibrariesInFilter,
+        isTrue,
+      );
+      expect(auth.attempts, 0);
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getBool('showPrivateLibrariesInFilter'), isTrue);
+    },
+  );
 
   testWidgets('settings add folder button adds selected library folder', (
     tester,

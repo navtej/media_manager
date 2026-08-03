@@ -22,6 +22,7 @@ void main() {
       settings.privateLibraryAccess.autoLockDuration,
       const Duration(minutes: 10),
     );
+    expect(settings.privateLibraryAccess.showPrivateLibrariesInFilter, isFalse);
     expect(settings.appearance.themeMode, AppearanceThemeMode.system);
     expect(settings.catalogBrowsing.paginationSize, 50);
     expect(settings.catalogBrowsing.showOfflineMedia, isTrue);
@@ -73,6 +74,7 @@ void main() {
         'showOfflineMedia': false,
         'catalogPresentation': 'list',
         'privateLibraryAutoLockMinutes': 45,
+        'showPrivateLibrariesInFilter': true,
         'summaryModelSource': 'managed',
         'summaryModelPath': '/stale/model.bin',
         'summarySelectedModelId': 'medium',
@@ -97,6 +99,10 @@ void main() {
       expect(settings.catalogBrowsing.showOfflineMedia, isFalse);
       expect(settings.catalogBrowsing.presentation, CatalogPresentation.list);
       expect(settings.privateLibraryAccess.autoLockMinutes, 45);
+      expect(
+        settings.privateLibraryAccess.showPrivateLibrariesInFilter,
+        isTrue,
+      );
       expect(
         settings.videoSummary.modelSource,
         SummaryModelSourceMode.managedDownload,
@@ -186,6 +192,7 @@ void main() {
     await notifier.updateShowOfflineMedia(false);
     await notifier.updateCatalogPresentation(CatalogPresentation.list);
     await notifier.updatePrivateLibraryAutoLockMinutes(25);
+    await notifier.updateShowPrivateLibrariesInFilter(true);
     await notifier.updateTheme(AppearanceThemeMode.dark);
     await notifier.updateSummaryPreferVttSubtitles(false);
     await notifier.updateSummaryApiUrl('https://summary.example.test');
@@ -209,6 +216,7 @@ void main() {
     expect(synchronization.scanIntervalMinutes, 15);
     expect(synchronization.batchSize, 6);
     expect(privateLibrary.autoLockDuration, const Duration(minutes: 25));
+    expect(privateLibrary.showPrivateLibrariesInFilter, isTrue);
     expect(appearance.themeMode, AppearanceThemeMode.dark);
     expect(catalog.paginationSize, 80);
     expect(catalog.showOfflineMedia, isFalse);
@@ -222,6 +230,7 @@ void main() {
     expect(reloaded.librarySynchronization.scanIntervalMinutes, 15);
     expect(reloaded.librarySynchronization.batchSize, 6);
     expect(reloaded.privateLibraryAccess.autoLockMinutes, 25);
+    expect(reloaded.privateLibraryAccess.showPrivateLibrariesInFilter, isTrue);
     expect(reloaded.appearance.themeMode, AppearanceThemeMode.dark);
     expect(reloaded.catalogBrowsing.paginationSize, 80);
     expect(reloaded.catalogBrowsing.showOfflineMedia, isFalse);

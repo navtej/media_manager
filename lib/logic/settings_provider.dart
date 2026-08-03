@@ -22,6 +22,7 @@ const _catalogPresentationKey = 'catalogPresentation';
 const _emptyFolderCleanupEnabledKey = 'emptyFolderCleanupEnabled';
 const _emptyFolderCleanupIntervalDaysKey = 'emptyFolderCleanupIntervalDays';
 const _privateLibraryAutoLockMinutesKey = 'privateLibraryAutoLockMinutes';
+const _showPrivateLibrariesInFilterKey = 'showPrivateLibrariesInFilter';
 const _summaryModelSourceKey = 'summaryModelSource';
 const _summaryModelPathKey = 'summaryModelPath';
 const _summarySelectedModelIdKey = 'summarySelectedModelId';
@@ -169,6 +170,15 @@ final privateLibraryAutoLockDurationProvider = Provider<Duration>((ref) {
       PrivateLibraryAccessConfiguration.defaults.autoLockDuration;
 });
 
+final showPrivateLibrariesInFilterProvider = Provider<bool>((ref) {
+  return ref
+          .watch(privateLibraryAccessConfigurationProvider)
+          .asData
+          ?.value
+          .showPrivateLibrariesInFilter ??
+      PrivateLibraryAccessConfiguration.defaults.showPrivateLibrariesInFilter;
+});
+
 @Riverpod(keepAlive: true)
 class Settings extends _$Settings {
   Future<AppSettings>? _loadingSettings;
@@ -211,6 +221,9 @@ class Settings extends _$Settings {
       ),
       privateLibraryAccess: PrivateLibraryAccessConfiguration.resolve(
         autoLockMinutes: persistence.getInt(_privateLibraryAutoLockMinutesKey),
+        showPrivateLibrariesInFilter: persistence.getBool(
+          _showPrivateLibrariesInFilterKey,
+        ),
       ),
       appearance: AppearanceConfiguration.resolve(
         themeMode: persistence.getString(_themeModeKey),
@@ -297,9 +310,21 @@ class Settings extends _$Settings {
     final current = await _currentSettings();
     final configuration = PrivateLibraryAccessConfiguration.resolve(
       autoLockMinutes: validated,
+      showPrivateLibrariesInFilter:
+          current.privateLibraryAccess.showPrivateLibrariesInFilter,
     );
     final persistence = await _persistence();
     await persistence.setInt(_privateLibraryAutoLockMinutesKey, validated);
+    state = AsyncData(current.copyWith(privateLibraryAccess: configuration));
+  }
+
+  Future<void> updateShowPrivateLibrariesInFilter(bool value) async {
+    final current = await _currentSettings();
+    final configuration = current.privateLibraryAccess.copyWith(
+      showPrivateLibrariesInFilter: value,
+    );
+    final persistence = await _persistence();
+    await persistence.setBool(_showPrivateLibrariesInFilterKey, value);
     state = AsyncData(current.copyWith(privateLibraryAccess: configuration));
   }
 

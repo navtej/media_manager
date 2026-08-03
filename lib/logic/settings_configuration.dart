@@ -82,26 +82,46 @@ final class EmptyFolderCleanupConfiguration {
 }
 
 final class PrivateLibraryAccessConfiguration {
-  const PrivateLibraryAccessConfiguration._({required this.autoLockMinutes});
+  const PrivateLibraryAccessConfiguration._({
+    required this.autoLockMinutes,
+    required this.showPrivateLibrariesInFilter,
+  });
 
   static const defaultAutoLockMinutes = 10;
   static const minimumAutoLockMinutes = 1;
   static const maximumAutoLockMinutes = 120;
   static const defaults = PrivateLibraryAccessConfiguration._(
     autoLockMinutes: defaultAutoLockMinutes,
+    showPrivateLibrariesInFilter: false,
   );
 
-  factory PrivateLibraryAccessConfiguration.resolve({int? autoLockMinutes}) {
+  factory PrivateLibraryAccessConfiguration.resolve({
+    int? autoLockMinutes,
+    bool? showPrivateLibrariesInFilter,
+  }) {
     return PrivateLibraryAccessConfiguration._(
       autoLockMinutes: isValidAutoLockMinutes(autoLockMinutes)
           ? autoLockMinutes!
           : defaultAutoLockMinutes,
+      showPrivateLibrariesInFilter: showPrivateLibrariesInFilter ?? false,
     );
   }
 
   final int autoLockMinutes;
+  final bool showPrivateLibrariesInFilter;
 
   Duration get autoLockDuration => Duration(minutes: autoLockMinutes);
+
+  PrivateLibraryAccessConfiguration copyWith({
+    int? autoLockMinutes,
+    bool? showPrivateLibrariesInFilter,
+  }) {
+    return PrivateLibraryAccessConfiguration.resolve(
+      autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+      showPrivateLibrariesInFilter:
+          showPrivateLibrariesInFilter ?? this.showPrivateLibrariesInFilter,
+    );
+  }
 
   static bool isValidAutoLockMinutes(int? minutes) {
     return minutes != null &&

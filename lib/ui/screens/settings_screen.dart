@@ -29,6 +29,7 @@ import '../widgets/summary_model_settings_panel.dart';
 import '../widgets/summarization_api_settings_panel.dart';
 import '../widgets/private_library_auto_lock_control.dart';
 import '../widgets/empty_folder_cleanup_control.dart';
+import '../widgets/macos_preference_checkbox.dart';
 
 enum _SettingsTab { general, transcribe, summarization }
 
@@ -250,7 +251,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Libraries',
               style: MacosTheme.of(context).typography.headline,
             ),
-            const Spacer(),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ExcludeSemantics(
+                child: Text(
+                  'Show private libraries in the Library filter',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            MacosPreferenceCheckbox(
+              key: const ValueKey('show-private-libraries-in-filter-checkbox'),
+              value:
+                  settingsAsync
+                      .value
+                      ?.privateLibraryAccess
+                      .showPrivateLibrariesInFilter ??
+                  PrivateLibraryAccessConfiguration
+                      .defaults
+                      .showPrivateLibrariesInFilter,
+              semanticLabel: 'Show private libraries in the Library filter',
+              onChanged: (value) => ref
+                  .read(settingsProvider.notifier)
+                  .updateShowPrivateLibrariesInFilter(value),
+            ),
+            const SizedBox(width: 8),
             MovieManagerIconButton(
               key: const ValueKey('settings-add-library-folder-button'),
               label: 'Add Folder',

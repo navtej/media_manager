@@ -11,6 +11,42 @@ import 'package:movie_manager/ui/widgets/library_filter_menu.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('library filter hides private libraries by default', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(
+            _StaticFoldersDao(db, _folders()),
+          ),
+          privateLibraryAuthServiceProvider.overrideWithValue(
+            _FakePrivateLibraryAuthService(result: true),
+          ),
+        ],
+        child: const MacosApp(
+          home: MacosWindow(
+            child: MacosScaffold(
+              children: [ContentArea(builder: _libraryFilterContentBuilder)],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Libraries: All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Public Movies'), findsOneWidget);
+    expect(find.text('Private Movies'), findsNothing);
+    expect(find.text('Unlock Private Libraries'), findsNothing);
+  });
+
   testWidgets('library filter toggles folders and resets to all visible', (
     tester,
   ) async {
@@ -59,6 +95,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'privateLibraryAutoLockMinutes': 10,
+      'showPrivateLibrariesInFilter': true,
     });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -117,6 +154,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'privateLibraryAutoLockMinutes': 1,
+      'showPrivateLibrariesInFilter': true,
     });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -172,6 +210,9 @@ void main() {
   testWidgets('library filter folder rows expose full path tooltips', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'showPrivateLibrariesInFilter': true,
+    });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -220,6 +261,9 @@ void main() {
   testWidgets('library filter lists private folders below unlock action', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'showPrivateLibrariesInFilter': true,
+    });
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
     final now = DateTime(2026, 6, 22);

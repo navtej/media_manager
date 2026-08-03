@@ -65,6 +65,42 @@ void main() {
     expect(state.errorMessage, 'Authentication cancelled.');
   });
 
+  test(
+    'disabling filter visibility while authenticating keeps private libraries locked',
+    () async {
+      final auth = _DeferredPrivateLibraryAuthService();
+      final container = ProviderContainer(
+        overrides: [privateLibraryAuthServiceProvider.overrideWithValue(auth)],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        privateLibraryAccessControllerProvider.notifier,
+      );
+      await container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(true);
+      await _waitFor(
+        () => container.read(showPrivateLibrariesInFilterProvider),
+      );
+
+      final unlockFuture = controller.unlock();
+      await auth.started.future;
+      await container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(false);
+      await _waitFor(
+        () => !container.read(showPrivateLibrariesInFilterProvider),
+      );
+      auth.complete(true);
+
+      expect(await unlockFuture, isFalse);
+      expect(
+        container.read(privateLibraryAccessControllerProvider).isUnlocked,
+        isFalse,
+      );
+    },
+  );
+
   test('lock clears private access state', () async {
     final container = ProviderContainer(
       overrides: [
@@ -320,6 +356,125 @@ void main() {
     },
   );
 
+  test(
+    'disabling private-library filter visibility locks and clears private selections',
+    () async {
+      final fixture = await _PrivateLibraryPolicyFixture.create(
+        authenticationResult: true,
+      );
+      addTearDown(fixture.dispose);
+      await readAsyncValue<List<Folder>>(
+        fixture.container,
+        libraryFoldersProvider,
+      );
+      final controller = fixture.container.read(
+        privateLibraryAccessControllerProvider.notifier,
+      );
+      await fixture.container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(true);
+      await _waitFor(
+        () => fixture.container.read(showPrivateLibrariesInFilterProvider),
+      );
+
+      final selectedFolders = fixture.container.read(
+        selectedLibraryFoldersControllerProvider.notifier,
+      );
+      selectedFolders.toggle(fixture.publicFolderId);
+      selectedFolders.toggle(fixture.privateFolderId);
+      await fixture.container
+          .read(videoSelectionControllerProvider.notifier)
+          .selectLoaded([fixture.publicVideoId, fixture.privateVideoId]);
+      await controller.unlock();
+
+      await fixture.container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(false);
+      await _waitFor(() {
+        final selectedFolderIds = fixture.container.read(
+          selectedLibraryFoldersControllerProvider,
+        );
+        final selectedVideoIds = fixture.container
+            .read(videoSelectionControllerProvider)
+            .selectedIds;
+        return !fixture.container
+                .read(privateLibraryAccessControllerProvider)
+                .isUnlocked &&
+            selectedFolderIds.length == 1 &&
+            selectedFolderIds.contains(fixture.publicFolderId) &&
+            selectedVideoIds.length == 1 &&
+            selectedVideoIds.contains(fixture.publicVideoId);
+      });
+
+      expect(
+        fixture.container
+            .read(privateLibraryAccessControllerProvider)
+            .isUnlocked,
+        isFalse,
+      );
+      expect(fixture.container.read(selectedLibraryFoldersControllerProvider), {
+        fixture.publicFolderId,
+      });
+      expect(
+        fixture.container.read(videoSelectionControllerProvider).selectedIds,
+        {fixture.publicVideoId},
+      );
+    },
+  );
+
+  test(
+    'disabling filter visibility waits for an active private action',
+    () async {
+      final fixture = await _PrivateLibraryPolicyFixture.create(
+        authenticationResult: true,
+      );
+      addTearDown(fixture.dispose);
+      final controller = fixture.container.read(
+        privateLibraryAccessControllerProvider.notifier,
+      );
+      await fixture.container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(true);
+      await _waitFor(
+        () => fixture.container.read(showPrivateLibrariesInFilterProvider),
+      );
+      await controller.unlock();
+      final actionStarted = Completer<void>();
+      final finishAction = Completer<void>();
+
+      final actionFuture = controller.runVideoAction<int>(
+        videoIds: [fixture.privateVideoId],
+        action: () async {
+          actionStarted.complete();
+          await finishAction.future;
+          return 42;
+        },
+      );
+      await actionStarted.future;
+
+      await fixture.container
+          .read(settingsProvider.notifier)
+          .updateShowPrivateLibrariesInFilter(false);
+      await _waitFor(
+        () => !fixture.container.read(showPrivateLibrariesInFilterProvider),
+      );
+      expect(
+        fixture.container
+            .read(privateLibraryAccessControllerProvider)
+            .isUnlocked,
+        isTrue,
+      );
+
+      finishAction.complete();
+      expect(await actionFuture, 42);
+      await _waitFor(
+        () => !fixture.container
+            .read(privateLibraryAccessControllerProvider)
+            .isUnlocked,
+      );
+    },
+  );
+
   test('locked private action authenticates, runs, and relocks', () async {
     final fixture = await _PrivateLibraryPolicyFixture.create(
       authenticationResult: true,
@@ -568,6 +723,19 @@ class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {
   }
 }
 
+class _DeferredPrivateLibraryAuthService extends PrivateLibraryAuthService {
+  final Completer<void> started = Completer<void>();
+  final Completer<bool> _result = Completer<bool>();
+
+  @override
+  Future<bool> authenticate() {
+    started.complete();
+    return _result.future;
+  }
+
+  void complete(bool value) => _result.complete(value);
+}
+
 class _PrivateLibraryPolicyFixture {
   const _PrivateLibraryPolicyFixture({
     required this.db,
@@ -646,4 +814,14 @@ Future<int> _insertPolicyVideo(
     VideosCompanion.insert(folderId: folderId, absolutePath: path, title: path),
   );
   return (await db.videosDao.getVideoByPath(path))!.id;
+}
+
+Future<void> _waitFor(bool Function() condition) async {
+  for (var attempt = 0; attempt < 50; attempt += 1) {
+    if (condition()) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail('Condition was not met.');
 }

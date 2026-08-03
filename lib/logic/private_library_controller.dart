@@ -44,17 +44,26 @@ class PrivateLibraryAccessController
   DateTime? _autoLockDeadline;
   int _activePrivateActionCount = 0;
   bool _lockRequested = false;
+  bool _authenticationInvalidated = false;
   Completer<void>? _deferredLockCompleter;
 
   @override
   PrivateLibraryAccessState build() {
     ref.onDispose(_dispose);
     ref.listen(privateLibraryAccessConfigurationProvider, (previous, next) {
-      final previousMinutes = previous?.asData?.value.autoLockMinutes;
-      final nextMinutes = next.asData?.value.autoLockMinutes;
+      final previousConfiguration = previous?.asData?.value;
+      final nextConfiguration = next.asData?.value;
+      if (previousConfiguration?.showPrivateLibrariesInFilter == true &&
+          nextConfiguration?.showPrivateLibrariesInFilter == false) {
+        _authenticationInvalidated = state.isAuthenticating;
+        unawaited(lock());
+        return;
+      }
+      final previousMinutes = previousConfiguration?.autoLockMinutes;
+      final nextMinutes = nextConfiguration?.autoLockMinutes;
       if (state.isUnlocked && previousMinutes != nextMinutes) {
         _startAutoLockCountdown(
-          next.asData?.value.autoLockDuration ??
+          nextConfiguration?.autoLockDuration ??
               PrivateLibraryAccessConfiguration.defaults.autoLockDuration,
         );
       }
@@ -107,12 +116,21 @@ class PrivateLibraryAccessController
   }
 
   Future<bool> _authenticateAndUnlock({required bool startCountdown}) async {
+    _authenticationInvalidated = false;
     state = state.copyWith(isAuthenticating: true, clearError: true);
     final authenticated = await ref
         .read(privateLibraryAuthServiceProvider)
         .authenticate();
     if (authenticated) {
       await ref.read(settingsProvider.future);
+      if (!ref.mounted) {
+        return false;
+      }
+      if (_authenticationInvalidated) {
+        state = const PrivateLibraryAccessState();
+        await _retainPublicSelections();
+        return false;
+      }
       state = const PrivateLibraryAccessState(isUnlocked: true);
       if (startCountdown) {
         _startAutoLockCountdown(
@@ -170,6 +188,9 @@ class PrivateLibraryAccessController
     }
 
     final folders = await ref.read(foldersDaoProvider).getAllFolders();
+    if (!ref.mounted) {
+      return;
+    }
     final publicFolderIds = _publicLibraryFolderIds(folders);
     ref
         .read(selectedLibraryFoldersControllerProvider.notifier)
@@ -181,6 +202,9 @@ class PrivateLibraryAccessController
     final selectedVideos = await ref
         .read(videosDaoProvider)
         .getVideosByIds(selectedVideoIds);
+    if (!ref.mounted) {
+      return;
+    }
     final videosById = {for (final video in selectedVideos) video.id: video};
     final inaccessibleVideoIds = selectedVideoIds.where((videoId) {
       final video = videosById[videoId];

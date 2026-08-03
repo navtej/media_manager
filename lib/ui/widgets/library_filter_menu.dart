@@ -5,6 +5,7 @@ import 'package:macos_ui/macos_ui.dart';
 import '../../data/database.dart';
 import '../../logic/library_name.dart';
 import '../../logic/private_library_controller.dart';
+import '../../logic/settings_provider.dart';
 
 class LibraryFilterMenu extends ConsumerWidget {
   const LibraryFilterMenu({super.key});
@@ -17,6 +18,9 @@ class LibraryFilterMenu extends ConsumerWidget {
     );
     final effectiveFolderIds = ref.watch(effectiveLibraryFolderIdsProvider);
     final privateAccess = ref.watch(privateLibraryAccessControllerProvider);
+    final showPrivateLibraries = ref.watch(
+      showPrivateLibrariesInFilterProvider,
+    );
 
     final title = selectedFolderIds.isEmpty
         ? 'Libraries: All'
@@ -37,7 +41,7 @@ class LibraryFilterMenu extends ConsumerWidget {
             .where((folder) => !folder.isPrivate)
             .toList(growable: false);
         final privateFolders = sortedFolders
-            .where((folder) => folder.isPrivate)
+            .where((folder) => showPrivateLibraries && folder.isPrivate)
             .toList(growable: false);
         final hasPrivateFolders = privateFolders.isNotEmpty;
         MacosPulldownMenuItem folderItem(Folder folder) {
