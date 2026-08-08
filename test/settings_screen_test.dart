@@ -181,6 +181,7 @@ void main() {
         find.byKey(const ValueKey('show-private-libraries-in-filter-checkbox')),
       );
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 1));
 
       expect(
         container
