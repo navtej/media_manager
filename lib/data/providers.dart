@@ -20,6 +20,11 @@ FoldersDao foldersDao(Ref ref) {
 }
 
 @riverpod
+LibraryGroupsDao libraryGroupsDao(Ref ref) {
+  return LibraryGroupsDao(ref.watch(foldersDaoProvider).attachedDatabase);
+}
+
+@riverpod
 VideosDao videosDao(Ref ref) {
   return ref.watch(databaseProvider).videosDao;
 }

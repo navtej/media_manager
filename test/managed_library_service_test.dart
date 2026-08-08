@@ -54,6 +54,46 @@ void main() {
     expect(added.folder?.alias, 'Archive / Movies');
   });
 
+  test(
+    'groups persist, assign libraries, and return removed members to default',
+    () async {
+      final fixture = _ManagedLibraryFixture();
+      addTearDown(fixture.dispose);
+      final library = await fixture.service.addOrRefresh(
+        '/Volumes/Media/Movies',
+      );
+      final folderId = library.folder!.id;
+
+      expect(
+        (await fixture.service.addGroup('Favorites')).status,
+        ManagedLibraryGroupStatus.created,
+      );
+      expect(
+        (await fixture.service.assignGroup(folderId, 'Favorites')).status,
+        ManagedLibraryGroupStatus.assigned,
+      );
+      expect(
+        (await fixture.db.foldersDao.getFolderById(folderId))?.groupName,
+        'Favorites',
+      );
+
+      expect(
+        (await fixture.service.removeGroup('Favorites')).status,
+        ManagedLibraryGroupStatus.removed,
+      );
+      expect(
+        (await fixture.db.foldersDao.getFolderById(folderId))?.groupName,
+        'Default Group',
+      );
+      expect(
+        (await fixture.db.libraryGroupsDao.getAllGroups()).map(
+          (group) => group.name,
+        ),
+        ['Default Group'],
+      );
+    },
+  );
+
   test('serializes concurrent creation and rename uniqueness checks', () async {
     final fixture = _ManagedLibraryFixture();
     addTearDown(fixture.dispose);
@@ -251,6 +291,7 @@ class _ManagedLibraryFixture {
       auth = _FakePrivateLibraryAuthService(authResults) {
     service = ManagedLibraryService(
       foldersDao: db.foldersDao,
+      libraryGroupsDao: db.libraryGroupsDao,
       catalogVideoCount: (folderId) async {
         final videos = await db.videosDao.getVideosByFolder(folderId);
         return videos.length;

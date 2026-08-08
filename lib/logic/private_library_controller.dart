@@ -319,6 +319,16 @@ class SelectedLibraryFoldersController extends Notifier<Set<int>> {
     state = next;
   }
 
+  void toggleGroup(Set<int> folderIds) {
+    final next = Set<int>.from(state);
+    if (folderIds.every(next.contains)) {
+      next.removeAll(folderIds);
+    } else {
+      next.addAll(folderIds);
+    }
+    state = next;
+  }
+
   void selectAllVisible() {
     state = const <int>{};
   }

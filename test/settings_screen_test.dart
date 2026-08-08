@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,6 +61,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libraries'), findsOneWidget);
+    expect(find.text('Groups'), findsOneWidget);
+    expect(find.text('Misc'), findsOneWidget);
     expect(find.text('Transcription & Summarization'), findsOneWidget);
     expect(find.text('Transcribe'), findsNothing);
     expect(find.text('Summarization'), findsNothing);
@@ -68,13 +71,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(PrivateLibraryAutoLockControl), findsOneWidget);
+    expect(find.text('Appearance'), findsNothing);
     expect(
       find.byKey(const ValueKey('empty-folder-cleanup-checkbox')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('empty-folder-cleanup-interval-days-field')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       tester
@@ -139,8 +139,93 @@ void main() {
 
     expect(foldersDao.nameUpdates, [(1, 'Primary Movies')]);
 
+    await tester.tap(find.text('Misc'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Appearance'), findsNothing);
+    expect(find.text('Advanced Preferences'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is MacosTooltip &&
+            widget.message == 'Save advanced preferences',
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('empty-folder-cleanup-checkbox')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('empty-folder-cleanup-interval-days-field')),
+      findsOneWidget,
+    );
+    expect(
+      (tester.getCenter(find.text('Theme')).dy -
+              tester.getCenter(find.text('System')).dy)
+          .abs(),
+      lessThan(12),
+    );
+    expect(
+      (tester.getCenter(find.text('Remove empty folders')).dy -
+              tester
+                  .getCenter(
+                    find.byKey(const ValueKey('empty-folder-cleanup-checkbox')),
+                  )
+                  .dy)
+          .abs(),
+      lessThan(12),
+    );
+    expect(
+      (tester.getCenter(find.text('Cleanup interval (days)')).dy -
+              tester
+                  .getCenter(
+                    find.byKey(
+                      const ValueKey(
+                        'empty-folder-cleanup-interval-days-field',
+                      ),
+                    ),
+                  )
+                  .dy)
+          .abs(),
+      lessThan(12),
+    );
+    for (final entry in <(String, Key)>[
+      ('Scan Interval (min)', const ValueKey('scan-interval-preference-field')),
+      ('DB Batch Size', const ValueKey('batch-size-preference-field')),
+      ('Pagination Size', const ValueKey('pagination-size-preference-field')),
+    ]) {
+      expect(
+        (tester.getCenter(find.text(entry.$1)).dy -
+                tester.getCenter(find.byKey(entry.$2)).dy)
+            .abs(),
+        lessThan(12),
+      );
+    }
+    expect(
+      tester.getTopLeft(find.text('Theme')).dy,
+      lessThan(tester.getTopLeft(find.text('Remove empty folders')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Remove empty folders')).dy,
+      lessThan(tester.getTopLeft(find.text('Cleanup interval (days)')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Cleanup interval (days)')).dy,
+      lessThan(tester.getTopLeft(find.text('Scan Interval (min)')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Scan Interval (min)')).dy,
+      lessThan(tester.getTopLeft(find.text('DB Batch Size')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('DB Batch Size')).dy,
+      lessThan(tester.getTopLeft(find.text('Pagination Size')).dy),
+    );
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets(
@@ -194,6 +279,10 @@ void main() {
       expect(auth.attempts, 0);
       final preferences = await SharedPreferences.getInstance();
       expect(preferences.getBool('showPrivateLibrariesInFilter'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
     },
   );
 
@@ -262,6 +351,89 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+  });
+
+  testWidgets('settings manages groups and assigns them to libraries', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final folderId = await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: '/Volumes/Media/Movies',
+        alias: const drift.Value('Movies'),
+        groupName: const drift.Value('Default Group'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 0),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final groupNameField = find.byKey(
+      const ValueKey('library-group-name-field'),
+    );
+    await tester.ensureVisible(groupNameField);
+    await tester.enterText(groupNameField, 'Cinema');
+    await tester.tap(find.byKey(const ValueKey('library-group-add-button')));
+    await tester.pumpAndSettle();
+
+    final groups = await db.libraryGroupsDao.getAllGroups();
+    for (final group in groups) {
+      final chip = find.byKey(ValueKey('library-group-chip-${group.id}'));
+      await tester.ensureVisible(chip);
+      final label = find.descendant(of: chip, matching: find.text(group.name));
+      final actionSlot = find.byKey(
+        ValueKey('library-group-action-slot-${group.id}'),
+      );
+      expect(
+        tester.getRect(label).right,
+        closeTo(tester.getRect(actionSlot).left - 8, 0.1),
+      );
+      expect(tester.widget<Text>(label).textAlign, TextAlign.right);
+      expect(
+        tester.getCenter(label).dy,
+        closeTo(tester.getCenter(chip).dy, 0.1),
+      );
+      expect(
+        (tester.widget<Container>(chip).decoration! as BoxDecoration).color,
+        isNotNull,
+      );
+    }
+
+    final selector = find.byKey(ValueKey('library-group-selector-$folderId'));
+    await tester.ensureVisible(selector);
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cinema').last);
+    await tester.pumpAndSettle();
+    expect((await db.foldersDao.getFolderById(folderId))?.groupName, 'Cinema');
+
+    final cinema = (await db.libraryGroupsDao.getAllGroups()).firstWhere(
+      (group) => group.name == 'Cinema',
+    );
+    final removeButton = find.byKey(
+      ValueKey('library-group-remove-${cinema.id}'),
+    );
+    await tester.ensureVisible(removeButton);
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+    expect(
+      (await db.foldersDao.getFolderById(folderId))?.groupName,
+      'Default Group',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('settings presents the managed Library add outcome', (

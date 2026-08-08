@@ -91,6 +91,52 @@ final class FoldersDaoProvider
 
 String _$foldersDaoHash() => r'e04711ac611ae61f1583122aa082661c4f7955d5';
 
+@ProviderFor(libraryGroupsDao)
+final libraryGroupsDaoProvider = LibraryGroupsDaoProvider._();
+
+final class LibraryGroupsDaoProvider
+    extends
+        $FunctionalProvider<
+          LibraryGroupsDao,
+          LibraryGroupsDao,
+          LibraryGroupsDao
+        >
+    with $Provider<LibraryGroupsDao> {
+  LibraryGroupsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'libraryGroupsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$libraryGroupsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<LibraryGroupsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  LibraryGroupsDao create(Ref ref) {
+    return libraryGroupsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(LibraryGroupsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<LibraryGroupsDao>(value),
+    );
+  }
+}
+
+String _$libraryGroupsDaoHash() => r'8b4ee35070d897262370e6e577638bea8f9a7a89';
+
 @ProviderFor(videosDao)
 final videosDaoProvider = VideosDaoProvider._();
 

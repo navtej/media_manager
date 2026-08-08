@@ -6,12 +6,14 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:flutter/services.dart';
 import '../../data/database.dart';
 import '../../data/providers.dart';
+import '../../data/tables.dart';
 
 import '../../logic/model_download_controller.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/catalog_controller.dart';
 import '../../logic/folder_storage_status.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/library_groups.dart';
 import '../../logic/library_name.dart';
 import '../../logic/managed_library_service.dart';
 import '../../logic/settings_provider.dart';
@@ -31,7 +33,7 @@ import '../widgets/private_library_auto_lock_control.dart';
 import '../widgets/empty_folder_cleanup_control.dart';
 import '../widgets/macos_preference_checkbox.dart';
 
-enum _SettingsTab { general, transcriptionAndSummarization }
+enum _SettingsTab { general, misc, transcriptionAndSummarization }
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -44,6 +46,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _intervalController;
   late TextEditingController _batchSizeController;
   late TextEditingController _paginationSizeController;
+  late FocusNode _intervalFocusNode;
+  late FocusNode _batchSizeFocusNode;
+  late FocusNode _paginationSizeFocusNode;
   _SettingsTab _selectedTab = _SettingsTab.general;
   String? _summaryActionMessage;
   String? _summarizationActionMessage;
@@ -55,14 +60,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _intervalController = TextEditingController();
     _batchSizeController = TextEditingController();
     _paginationSizeController = TextEditingController();
+    _intervalFocusNode = FocusNode(debugLabel: 'scan-interval-preference')
+      ..addListener(_saveAdvancedSettingsWhenIntervalLosesFocus);
+    _batchSizeFocusNode = FocusNode(debugLabel: 'batch-size-preference')
+      ..addListener(_saveAdvancedSettingsWhenBatchSizeLosesFocus);
+    _paginationSizeFocusNode = FocusNode(
+      debugLabel: 'pagination-size-preference',
+    )..addListener(_saveAdvancedSettingsWhenPaginationSizeLosesFocus);
   }
 
   @override
   void dispose() {
+    _intervalFocusNode.dispose();
+    _batchSizeFocusNode.dispose();
+    _paginationSizeFocusNode.dispose();
     _intervalController.dispose();
     _batchSizeController.dispose();
     _paginationSizeController.dispose();
     super.dispose();
+  }
+
+  void _saveAdvancedSettingsWhenIntervalLosesFocus() {
+    if (!_intervalFocusNode.hasFocus) {
+      _saveAdvancedSettings();
+    }
+  }
+
+  void _saveAdvancedSettingsWhenBatchSizeLosesFocus() {
+    if (!_batchSizeFocusNode.hasFocus) {
+      _saveAdvancedSettings();
+    }
+  }
+
+  void _saveAdvancedSettingsWhenPaginationSizeLosesFocus() {
+    if (!_paginationSizeFocusNode.hasFocus) {
+      _saveAdvancedSettings();
+    }
+  }
+
+  void _saveAdvancedSettings() {
+    final interval =
+        int.tryParse(_intervalController.text) ??
+        LibrarySynchronizationConfiguration.defaultScanIntervalMinutes;
+    final batch =
+        int.tryParse(_batchSizeController.text) ??
+        LibrarySynchronizationConfiguration.defaultBatchSize;
+    final pagination =
+        int.tryParse(_paginationSizeController.text) ??
+        CatalogBrowsingConfiguration.defaultPaginationSize;
+
+    ref
+        .read(settingsProvider.notifier)
+        .updateSettings(interval, batch, pagination);
+    ref.read(statusMessageProvider.notifier).set('Preferences saved');
   }
 
   Future<void> _pickSummaryModel() async {
@@ -166,6 +216,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           child: Text('General'),
                         ),
+                        _SettingsTab.misc: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Text('Misc'),
+                        ),
                         _SettingsTab.transcriptionAndSummarization: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: 12,
@@ -186,6 +243,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     Expanded(
                       child: switch (_selectedTab) {
                         _SettingsTab.general => _buildGeneralSettings(
+                          context,
+                          settingsAsync,
+                        ),
+                        _SettingsTab.misc => _buildMiscSettings(
                           context,
                           settingsAsync,
                         ),
@@ -210,20 +271,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     BuildContext context,
     String label,
     TextEditingController controller,
+    FocusNode focusNode,
+    Key fieldKey,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(label, style: MacosTheme.of(context).typography.subheadline),
-        const SizedBox(height: 4),
-        MovieManagerLabeledField(
-          label: label,
-          controller: controller,
-          hasVisibleLabel: true,
-          builder: (focusNode) => MacosTextField(
+        SizedBox(
+          width: 200,
+          child: Text(
+            label,
+            style: MacosTheme.of(context).typography.subheadline,
+          ),
+        ),
+        SizedBox(
+          width: 160,
+          child: MovieManagerLabeledField(
+            label: label,
             controller: controller,
             focusNode: focusNode,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            hasVisibleLabel: true,
+            builder: (focusNode) => MacosTextField(
+              key: fieldKey,
+              controller: controller,
+              focusNode: focusNode,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _saveAdvancedSettings(),
+            ),
           ),
         ),
       ],
@@ -302,11 +377,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 20),
-          Text('Appearance', style: MacosTheme.of(context).typography.headline),
-          const SizedBox(height: 10),
+          const _LibraryGroupsPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiscSettings(
+    BuildContext context,
+    AsyncValue<AppSettings> settingsAsync,
+  ) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(width: 200, child: Text('Theme')),
+              SizedBox(
+                width: 200,
+                child: Text(
+                  'Theme',
+                  style: MacosTheme.of(context).typography.subheadline,
+                ),
+              ),
               MacosPopupButton<AppearanceThemeMode>(
                 value:
                     settingsAsync.value?.appearance.themeMode ??
@@ -333,74 +427,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Text(
-                'Advanced Preferences',
-                style: MacosTheme.of(context).typography.headline,
-              ),
-              const SizedBox(width: 12),
-              MovieManagerIconButton(
-                label: 'Save advanced preferences',
-                icon: CupertinoIcons.floppy_disk,
-                onPressed: () {
-                  final interval =
-                      int.tryParse(_intervalController.text) ??
-                      LibrarySynchronizationConfiguration
-                          .defaultScanIntervalMinutes;
-                  final batch =
-                      int.tryParse(_batchSizeController.text) ??
-                      LibrarySynchronizationConfiguration.defaultBatchSize;
-                  final pagination =
-                      int.tryParse(_paginationSizeController.text) ??
-                      CatalogBrowsingConfiguration.defaultPaginationSize;
-
-                  ref
-                      .read(settingsProvider.notifier)
-                      .updateSettings(interval, batch, pagination);
-
-                  ref
-                      .read(statusMessageProvider.notifier)
-                      .set('Preferences saved');
-                  Navigator.pop(context);
-                },
-              ),
-              const Spacer(),
-              const EmptyFolderCleanupControl(),
-            ],
+          const SizedBox(height: 16),
+          const EmptyFolderCleanupControl(),
+          const SizedBox(height: 16),
+          _buildPreferenceRow(
+            context,
+            'Scan Interval (min)',
+            _intervalController,
+            _intervalFocusNode,
+            const ValueKey('scan-interval-preference-field'),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPreferenceRow(
-                  context,
-                  'Scan Interval (min)',
-                  _intervalController,
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _buildPreferenceRow(
-                  context,
-                  'DB Batch Size',
-                  _batchSizeController,
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _buildPreferenceRow(
-                  context,
-                  'Pagination Size',
-                  _paginationSizeController,
-                ),
-              ),
-            ],
+          const SizedBox(height: 12),
+          _buildPreferenceRow(
+            context,
+            'DB Batch Size',
+            _batchSizeController,
+            _batchSizeFocusNode,
+            const ValueKey('batch-size-preference-field'),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          _buildPreferenceRow(
+            context,
+            'Pagination Size',
+            _paginationSizeController,
+            _paginationSizeFocusNode,
+            const ValueKey('pagination-size-preference-field'),
+          ),
         ],
       ),
     );
@@ -646,164 +698,438 @@ class _FolderList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final foldersAsync = ref.watch(foldersDaoProvider).watchAllFolders();
+    ref.watch(libraryGroupsRefreshProvider);
+    final groupsFuture = ref.read(libraryGroupsDaoProvider).getAllGroups();
 
-    return StreamBuilder(
-      stream: foldersAsync,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: ProgressCircle());
+    return FutureBuilder<List<LibraryGroup>>(
+      future: groupsFuture,
+      builder: (context, groupSnapshot) {
+        final groupNames = (groupSnapshot.data ?? const <LibraryGroup>[])
+            .map((group) => group.name)
+            .toList();
+        if (!groupNames.any(
+          (name) => sameLibraryGroupName(name, defaultLibraryGroupName),
+        )) {
+          groupNames.insert(0, defaultLibraryGroupName);
+        }
 
-        final folders = snapshot.data ?? [];
-        return Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: MacosTheme.of(context).dividerColor),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ListView.separated(
-            itemCount: folders.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final folder = folders[index];
-              final storageStatus = FolderStorageStatus.fromFolder(
-                path: folder.path,
-                securityScopedBookmark: folder.securityScopedBookmark,
-              );
-              final statusLabel = storageStatus.statusLabel;
-              final accessTooltip = _folderAccessTooltip(storageStatus);
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(CupertinoIcons.folder, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+        return StreamBuilder(
+          stream: foldersAsync,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: ProgressCircle());
+
+            final folders = snapshot.data ?? [];
+            return Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: MacosTheme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListView.separated(
+                itemCount: folders.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final folder = folders[index];
+                  final storageStatus = FolderStorageStatus.fromFolder(
+                    path: folder.path,
+                    securityScopedBookmark: folder.securityScopedBookmark,
+                  );
+                  final statusLabel = storageStatus.statusLabel;
+                  final accessTooltip = _folderAccessTooltip(storageStatus);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(CupertinoIcons.folder, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _LibraryNameField(folder: folder),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 5),
-                                  child: Text(
-                                    folder.path,
-                                    style: MacosTheme.of(
-                                      context,
-                                    ).typography.caption1,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _LibraryNameField(folder: folder),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 5),
+                                      child: Text(
+                                        folder.path,
+                                        style: MacosTheme.of(
+                                          context,
+                                        ).typography.caption1,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _LibraryGroupSelector(
+                                    folder: folder,
+                                    groupNames: groupNames,
+                                  ),
+                                ],
+                              ),
+                              if (statusLabel != null)
+                                Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                    color: storageStatus.needsRepair
+                                        ? MacosColors.systemOrangeColor
+                                        : MacosColors.systemBlueColor,
+                                    fontSize: 11,
                                   ),
                                 ),
-                              ),
                             ],
                           ),
-                          if (statusLabel != null)
-                            Text(
-                              statusLabel,
-                              style: TextStyle(
-                                color: storageStatus.needsRepair
-                                    ? MacosColors.systemOrangeColor
-                                    : MacosColors.systemBlueColor,
-                                fontSize: 11,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    MovieManagerIconButton(
-                      label: folder.isPrivate
-                          ? 'Private library. Click to make videos visible by default.'
-                          : 'Public library. Click to require authentication before videos appear.',
-                      icon: folder.isPrivate
-                          ? CupertinoIcons.lock
-                          : CupertinoIcons.lock_open,
-                      selected: folder.isPrivate,
-                      onPressed: () async {
-                        final nextIsPrivate = !folder.isPrivate;
-                        final result = await ref
-                            .read(managedLibraryServiceProvider)
-                            .setPrivacy(folder.id, isPrivate: nextIsPrivate);
-                        ref.read(statusMessageProvider.notifier).set(
-                          switch (result.status) {
-                            ManagedLibraryPrivacyStatus.madePrivate =>
-                              'Library is now private.',
-                            ManagedLibraryPrivacyStatus.madePublic =>
-                              'Library is now visible by default.',
-                            ManagedLibraryPrivacyStatus
-                                .authenticationCancelled =>
-                              'Authentication cancelled. Library remains private.',
-                            ManagedLibraryPrivacyStatus.notFound =>
-                              'Library no longer exists.',
-                            ManagedLibraryPrivacyStatus.unchanged =>
-                              folder.isPrivate
-                                  ? 'Library remains private.'
-                                  : 'Library remains visible by default.',
-                          },
-                        );
-                      },
-                    ),
-                    MovieManagerIconButton(
-                      label: accessTooltip,
-                      icon: CupertinoIcons.exclamationmark_shield,
-                      color: storageStatus.needsRepair
-                          ? MacosColors.systemOrangeColor
-                          : storageStatus.isRemovableStorage
-                          ? MacosColors.systemBlueColor
-                          : MacosColors.systemGrayColor,
-                      onPressed: () async {
-                        final selectedDirectory = await FilePicker.platform
-                            .getDirectoryPath();
-                        if (selectedDirectory == null) {
-                          return;
-                        }
-                        final result = await ref
-                            .read(managedLibraryServiceProvider)
-                            .repairAccess(folder.id, selectedDirectory);
-                        ref.read(statusMessageProvider.notifier).set(
-                          switch (result.status) {
-                            ManagedLibraryRepairStatus.repaired =>
-                              'Folder access repaired.',
-                            ManagedLibraryRepairStatus.pathMismatch =>
-                              'Select the same folder to repair access.',
-                            ManagedLibraryRepairStatus.bookmarkUnavailable =>
-                              'Could not repair folder access.',
-                            ManagedLibraryRepairStatus.notFound =>
-                              'Library no longer exists.',
-                          },
-                        );
-                      },
-                    ),
-                    MovieManagerIconButton(
-                      label:
-                          'Remove this folder from the library. Files stay on disk.',
-                      icon: CupertinoIcons.trash,
-                      color: MovieManagerVisuals.errorColor(context),
-                      onPressed: () async {
-                        final result = await ref
-                            .read(maintenanceControllerProvider.notifier)
-                            .removeFolder(folder.id);
-                        ref
-                            .read(statusMessageProvider.notifier)
-                            .set(
-                              result.status ==
-                                      ManagedLibraryRemoveStatus.removed
-                                  ? 'Library removed. Files remain on disk.'
-                                  : 'Library no longer exists.',
+                        ),
+                        MovieManagerIconButton(
+                          label: folder.isPrivate
+                              ? 'Private library. Click to make videos visible by default.'
+                              : 'Public library. Click to require authentication before videos appear.',
+                          icon: folder.isPrivate
+                              ? CupertinoIcons.lock
+                              : CupertinoIcons.lock_open,
+                          selected: folder.isPrivate,
+                          onPressed: () async {
+                            final nextIsPrivate = !folder.isPrivate;
+                            final result = await ref
+                                .read(managedLibraryServiceProvider)
+                                .setPrivacy(
+                                  folder.id,
+                                  isPrivate: nextIsPrivate,
+                                );
+                            ref.read(statusMessageProvider.notifier).set(
+                              switch (result.status) {
+                                ManagedLibraryPrivacyStatus.madePrivate =>
+                                  'Library is now private.',
+                                ManagedLibraryPrivacyStatus.madePublic =>
+                                  'Library is now visible by default.',
+                                ManagedLibraryPrivacyStatus
+                                    .authenticationCancelled =>
+                                  'Authentication cancelled. Library remains private.',
+                                ManagedLibraryPrivacyStatus.notFound =>
+                                  'Library no longer exists.',
+                                ManagedLibraryPrivacyStatus.unchanged =>
+                                  folder.isPrivate
+                                      ? 'Library remains private.'
+                                      : 'Library remains visible by default.',
+                              },
                             );
-                      },
+                          },
+                        ),
+                        MovieManagerIconButton(
+                          label: accessTooltip,
+                          icon: CupertinoIcons.exclamationmark_shield,
+                          color: storageStatus.needsRepair
+                              ? MacosColors.systemOrangeColor
+                              : storageStatus.isRemovableStorage
+                              ? MacosColors.systemBlueColor
+                              : MacosColors.systemGrayColor,
+                          onPressed: () async {
+                            final selectedDirectory = await FilePicker.platform
+                                .getDirectoryPath();
+                            if (selectedDirectory == null) {
+                              return;
+                            }
+                            final result = await ref
+                                .read(managedLibraryServiceProvider)
+                                .repairAccess(folder.id, selectedDirectory);
+                            ref.read(statusMessageProvider.notifier).set(
+                              switch (result.status) {
+                                ManagedLibraryRepairStatus.repaired =>
+                                  'Folder access repaired.',
+                                ManagedLibraryRepairStatus.pathMismatch =>
+                                  'Select the same folder to repair access.',
+                                ManagedLibraryRepairStatus
+                                    .bookmarkUnavailable =>
+                                  'Could not repair folder access.',
+                                ManagedLibraryRepairStatus.notFound =>
+                                  'Library no longer exists.',
+                              },
+                            );
+                          },
+                        ),
+                        MovieManagerIconButton(
+                          label:
+                              'Remove this folder from the library. Files stay on disk.',
+                          icon: CupertinoIcons.trash,
+                          color: MovieManagerVisuals.errorColor(context),
+                          onPressed: () async {
+                            final result = await ref
+                                .read(maintenanceControllerProvider.notifier)
+                                .removeFolder(folder.id);
+                            ref
+                                .read(statusMessageProvider.notifier)
+                                .set(
+                                  result.status ==
+                                          ManagedLibraryRemoveStatus.removed
+                                      ? 'Library removed. Files remain on disk.'
+                                      : 'Library no longer exists.',
+                                );
+                          },
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  );
+                },
+              ),
+            );
+          },
         );
       },
+    );
+  }
+}
+
+class _LibraryGroupsPanel extends ConsumerStatefulWidget {
+  const _LibraryGroupsPanel();
+
+  @override
+  ConsumerState<_LibraryGroupsPanel> createState() =>
+      _LibraryGroupsPanelState();
+}
+
+class _LibraryGroupsPanelState extends ConsumerState<_LibraryGroupsPanel> {
+  final _nameController = TextEditingController();
+  String? _message;
+  late Future<List<LibraryGroup>> _groupsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _groupsFuture = ref.read(libraryGroupsDaoProvider).getAllGroups();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addGroup() async {
+    final result = await ref
+        .read(managedLibraryServiceProvider)
+        .addGroup(_nameController.text);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _message = switch (result.status) {
+        ManagedLibraryGroupStatus.created => 'Group added.',
+        ManagedLibraryGroupStatus.blankName => 'Group name is required.',
+        ManagedLibraryGroupStatus.duplicateName => 'Group name must be unique.',
+        _ => 'Could not add group.',
+      };
+      if (result.status == ManagedLibraryGroupStatus.created) {
+        _nameController.clear();
+        _groupsFuture = ref.read(libraryGroupsDaoProvider).getAllGroups();
+        ref.read(libraryGroupsRefreshProvider.notifier).refresh();
+      }
+    });
+  }
+
+  Future<void> _removeGroup(String name) async {
+    final result = await ref
+        .read(managedLibraryServiceProvider)
+        .removeGroup(name);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _message = switch (result.status) {
+        ManagedLibraryGroupStatus.removed =>
+          'Group removed. Libraries moved to Default Group.',
+        ManagedLibraryGroupStatus.defaultGroup =>
+          'Default Group cannot be removed.',
+        ManagedLibraryGroupStatus.groupNotFound => 'Group no longer exists.',
+        _ => 'Could not remove group.',
+      };
+      if (result.status == ManagedLibraryGroupStatus.removed) {
+        _groupsFuture = ref.read(libraryGroupsDaoProvider).getAllGroups();
+        ref.read(libraryGroupsRefreshProvider.notifier).refresh();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<LibraryGroup>>(
+      future: _groupsFuture,
+      builder: (context, snapshot) {
+        final groups = List<LibraryGroup>.from(
+          snapshot.data ?? const <LibraryGroup>[],
+        )..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        if (!groups.any(
+          (group) => sameLibraryGroupName(group.name, defaultLibraryGroupName),
+        )) {
+          groups.insert(
+            0,
+            LibraryGroup(
+              id: 0,
+              name: defaultLibraryGroupName,
+              addedAt: DateTime.fromMillisecondsSinceEpoch(0),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Groups', style: MacosTheme.of(context).typography.headline),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: MovieManagerLabeledField(
+                    label: 'New group name',
+                    controller: _nameController,
+                    builder: (focusNode) => MacosTextField(
+                      key: const ValueKey('library-group-name-field'),
+                      controller: _nameController,
+                      focusNode: focusNode,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _addGroup(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                MovieManagerIconButton(
+                  key: const ValueKey('library-group-add-button'),
+                  label: 'Add group',
+                  icon: CupertinoIcons.add,
+                  onPressed: _addGroup,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final group in groups)
+                  Builder(
+                    builder: (context) {
+                      final isDefault = sameLibraryGroupName(
+                        group.name,
+                        defaultLibraryGroupName,
+                      );
+                      final theme = MacosTheme.of(context);
+                      return Container(
+                        key: ValueKey('library-group-chip-${group.id}'),
+                        padding: const EdgeInsets.only(left: 12, right: 4),
+                        decoration: BoxDecoration(
+                          color: theme.primaryColor.withValues(alpha: 0.12),
+                          border: Border.all(
+                            color: theme.primaryColor.withValues(alpha: 0.35),
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(group.name, textAlign: TextAlign.right),
+                            const SizedBox(width: 8),
+                            SizedBox.square(
+                              key: ValueKey(
+                                'library-group-action-slot-${group.id}',
+                              ),
+                              dimension:
+                                  MovieManagerControlMetrics.minimumTarget,
+                              child: isDefault
+                                  ? null
+                                  : MovieManagerIconButton(
+                                      key: ValueKey(
+                                        'library-group-remove-${group.id}',
+                                      ),
+                                      label:
+                                          'Remove ${group.name}. Libraries return to Default Group.',
+                                      icon: CupertinoIcons.trash,
+                                      onPressed: () => _removeGroup(group.name),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+            if (_message != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _message!,
+                style: MacosTheme.of(context).typography.caption1,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LibraryGroupSelector extends ConsumerWidget {
+  const _LibraryGroupSelector({required this.folder, required this.groupNames});
+
+  final Folder folder;
+  final List<String> groupNames;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final names = <String>[...groupNames];
+    final currentGroup = libraryGroupName(folder);
+    if (!names.any((name) => sameLibraryGroupName(name, currentGroup))) {
+      names.add(currentGroup);
+    }
+    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    return SizedBox(
+      width: 160,
+      child: MacosPopupButton<String>(
+        key: ValueKey('library-group-selector-${folder.id}'),
+        value: names.firstWhere(
+          (name) => sameLibraryGroupName(name, currentGroup),
+        ),
+        onChanged: (String? name) async {
+          if (name == null) {
+            return;
+          }
+          final result = await ref
+              .read(managedLibraryServiceProvider)
+              .assignGroup(folder.id, name);
+          ref.read(statusMessageProvider.notifier).set(switch (result.status) {
+            ManagedLibraryGroupStatus.assigned => 'Library group updated.',
+            ManagedLibraryGroupStatus.groupNotFound =>
+              'Group no longer exists.',
+            ManagedLibraryGroupStatus.folderNotFound =>
+              'Library no longer exists.',
+            _ => 'Library group unchanged.',
+          });
+        },
+        items: [
+          for (final name in names)
+            MacosPopupMenuItem(
+              value: name,
+              child: MacosTooltip(
+                message: name,
+                child: SizedBox(
+                  width: 96,
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -90,6 +90,71 @@ void main() {
     expect(find.text('Libraries: All'), findsOneWidget);
   });
 
+  testWidgets('group selection includes only public libraries', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'showPrivateLibrariesInFilter': true,
+    });
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 8, 8);
+    final container = ProviderContainer(
+      overrides: [
+        foldersDaoProvider.overrideWithValue(
+          _StaticFoldersDao(db, [
+            Folder(
+              id: 1,
+              path: '/Volumes/Public Cinema',
+              alias: 'Public Cinema',
+              groupName: 'Cinema',
+              securityScopedBookmark: 'public-bookmark',
+              isPrivate: false,
+              addedAt: now,
+            ),
+            Folder(
+              id: 2,
+              path: '/Volumes/Private Cinema',
+              alias: 'Private Cinema',
+              groupName: 'Cinema',
+              securityScopedBookmark: 'private-bookmark',
+              isPrivate: true,
+              addedAt: now,
+            ),
+          ]),
+        ),
+        privateLibraryAuthServiceProvider.overrideWithValue(
+          _FakePrivateLibraryAuthService(result: true),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MacosApp(
+          home: MacosWindow(
+            child: MacosScaffold(
+              children: [ContentArea(builder: _libraryFilterContentBuilder)],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Libraries: All'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Public Cinema')).dx,
+      greaterThan(tester.getTopLeft(find.text('Cinema')).dx),
+    );
+    await tester.tap(find.text('Cinema'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedLibraryFoldersControllerProvider), {1});
+    expect(find.text('Libraries: 1'), findsOneWidget);
+  });
+
   testWidgets('library filter unlocks private libraries before selection', (
     tester,
   ) async {
