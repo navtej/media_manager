@@ -10,6 +10,11 @@ import '../services/natural_language_service.dart';
 
 part 'ai_controller.g.dart';
 
+String aiTaggingProgressStatus({required int remaining, required int total}) {
+  final percentage = total == 0 ? 0 : ((remaining * 100) / total).round();
+  return 'AI Tagging: $remaining (${percentage.clamp(0, 100)}%) remaining';
+}
+
 @Riverpod(keepAlive: true)
 class AIStatus extends _$AIStatus {
   @override
@@ -46,6 +51,7 @@ class AIController extends _$AIController {
       final videoDao = ref.read(videosDaoProvider);
       final tagDao = ref.read(tagsDaoProvider);
       final db = ref.read(databaseProvider);
+      var totalPending = 0;
 
       while (!_isDisposed) {
         // Fetch fresh list of pending videos every loop
@@ -57,9 +63,17 @@ class AIController extends _$AIController {
           break;
         }
 
+        if (pending.length > totalPending) {
+          totalPending = pending.length;
+        }
         ref
             .read(aIStatusProvider.notifier)
-            .setStatus('AI Tagging: ${pending.length} remaining...');
+            .setStatus(
+              aiTaggingProgressStatus(
+                remaining: pending.length,
+                total: totalPending,
+              ),
+            );
 
         // Take a batch of up to 4
         final batchSize = pending.length >= 4 ? 4 : pending.length;
