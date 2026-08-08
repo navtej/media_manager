@@ -31,7 +31,7 @@ import '../widgets/private_library_auto_lock_control.dart';
 import '../widgets/empty_folder_cleanup_control.dart';
 import '../widgets/macos_preference_checkbox.dart';
 
-enum _SettingsTab { general, transcribe, summarization }
+enum _SettingsTab { general, transcriptionAndSummarization }
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -166,19 +166,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           child: Text('General'),
                         ),
-                        _SettingsTab.transcribe: Padding(
+                        _SettingsTab.transcriptionAndSummarization: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 6,
                           ),
-                          child: Text('Transcribe'),
-                        ),
-                        _SettingsTab.summarization: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          child: Text('Summarization'),
+                          child: Text('Transcription & Summarization'),
                         ),
                       },
                       onValueChanged: (_SettingsTab? value) {
@@ -196,12 +189,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           context,
                           settingsAsync,
                         ),
-                        _SettingsTab.transcribe => _buildTranscribeSettings(
-                          context,
-                          settingsAsync,
-                        ),
-                        _SettingsTab.summarization =>
-                          _buildSummarizationSettings(settingsAsync),
+                        _SettingsTab.transcriptionAndSummarization =>
+                          _buildTranscriptionAndSummarizationSettings(
+                            context,
+                            settingsAsync,
+                          ),
                       },
                     ),
                   ],
@@ -242,170 +234,175 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     BuildContext context,
     AsyncValue<AppSettings> settingsAsync,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              'Libraries',
-              style: MacosTheme.of(context).typography.headline,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ExcludeSemantics(
-                child: Text(
-                  'Show private libraries in the Library filter',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                ),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Libraries',
+                style: MacosTheme.of(context).typography.headline,
               ),
-            ),
-            const SizedBox(width: 6),
-            MacosPreferenceCheckbox(
-              key: const ValueKey('show-private-libraries-in-filter-checkbox'),
-              value:
-                  settingsAsync
-                      .value
-                      ?.privateLibraryAccess
-                      .showPrivateLibrariesInFilter ??
-                  PrivateLibraryAccessConfiguration
-                      .defaults
-                      .showPrivateLibrariesInFilter,
-              semanticLabel: 'Show private libraries in the Library filter',
-              onChanged: (value) => ref
-                  .read(settingsProvider.notifier)
-                  .updateShowPrivateLibrariesInFilter(value),
-            ),
-            const SizedBox(width: 8),
-            MovieManagerIconButton(
-              key: const ValueKey('settings-add-library-folder-button'),
-              label: 'Add Folder',
-              icon: CupertinoIcons.add,
-              onPressed: () {
-                _pickLibraryFolder();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Expanded(child: _FolderList()),
-        if (_libraryActionMessage != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            _libraryActionMessage!,
-            key: const ValueKey('settings-library-action-message'),
-            style: MacosTheme.of(context).typography.caption1,
+              const Spacer(),
+              MovieManagerIconButton(
+                key: const ValueKey('settings-add-library-folder-button'),
+                label: 'Add Folder',
+                icon: CupertinoIcons.add,
+                onPressed: () {
+                  _pickLibraryFolder();
+                },
+              ),
+            ],
           ),
-        ],
-        const SizedBox(height: 12),
-        const PrivateLibraryAutoLockControl(),
-        const SizedBox(height: 12),
-        const _OpenDataFolderWidget(),
-        const SizedBox(height: 20),
-        const Divider(),
-        const SizedBox(height: 20),
-        Text('Appearance', style: MacosTheme.of(context).typography.headline),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const SizedBox(width: 200, child: Text('Theme')),
-            MacosPopupButton<AppearanceThemeMode>(
-              value:
-                  settingsAsync.value?.appearance.themeMode ??
-                  AppearanceConfiguration.defaults.themeMode,
-              onChanged: (AppearanceThemeMode? mode) {
-                if (mode != null) {
-                  ref.read(settingsProvider.notifier).updateTheme(mode);
-                }
-              },
-              items: const [
-                MacosPopupMenuItem(
-                  value: AppearanceThemeMode.system,
-                  child: Text('System'),
-                ),
-                MacosPopupMenuItem(
-                  value: AppearanceThemeMode.light,
-                  child: Text('Light'),
-                ),
-                MacosPopupMenuItem(
-                  value: AppearanceThemeMode.dark,
-                  child: Text('Dark'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const Divider(),
-        const SizedBox(height: 20),
-        Row(
-          children: [
+          const SizedBox(height: 10),
+          const SizedBox(
+            height: 240,
+            child: _FolderList(key: ValueKey('settings-library-folder-list')),
+          ),
+          if (_libraryActionMessage != null) ...[
+            const SizedBox(height: 6),
             Text(
-              'Advanced Preferences',
-              style: MacosTheme.of(context).typography.headline,
+              _libraryActionMessage!,
+              key: const ValueKey('settings-library-action-message'),
+              style: MacosTheme.of(context).typography.caption1,
             ),
-            const SizedBox(width: 12),
-            MovieManagerIconButton(
-              label: 'Save advanced preferences',
-              icon: CupertinoIcons.floppy_disk,
-              onPressed: () {
-                final interval =
-                    int.tryParse(_intervalController.text) ??
-                    LibrarySynchronizationConfiguration
-                        .defaultScanIntervalMinutes;
-                final batch =
-                    int.tryParse(_batchSizeController.text) ??
-                    LibrarySynchronizationConfiguration.defaultBatchSize;
-                final pagination =
-                    int.tryParse(_paginationSizeController.text) ??
-                    CatalogBrowsingConfiguration.defaultPaginationSize;
-
-                ref
+          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ExcludeSemantics(
+                child: Text('Show private libraries in the Library filter'),
+              ),
+              const SizedBox(width: 6),
+              MacosPreferenceCheckbox(
+                key: const ValueKey(
+                  'show-private-libraries-in-filter-checkbox',
+                ),
+                value:
+                    settingsAsync
+                        .value
+                        ?.privateLibraryAccess
+                        .showPrivateLibrariesInFilter ??
+                    PrivateLibraryAccessConfiguration
+                        .defaults
+                        .showPrivateLibrariesInFilter,
+                semanticLabel: 'Show private libraries in the Library filter',
+                onChanged: (value) => ref
                     .read(settingsProvider.notifier)
-                    .updateSettings(interval, batch, pagination);
+                    .updateShowPrivateLibrariesInFilter(value),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const PrivateLibraryAutoLockControl(),
+          const SizedBox(height: 12),
+          const _OpenDataFolderWidget(),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 20),
+          Text('Appearance', style: MacosTheme.of(context).typography.headline),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const SizedBox(width: 200, child: Text('Theme')),
+              MacosPopupButton<AppearanceThemeMode>(
+                value:
+                    settingsAsync.value?.appearance.themeMode ??
+                    AppearanceConfiguration.defaults.themeMode,
+                onChanged: (AppearanceThemeMode? mode) {
+                  if (mode != null) {
+                    ref.read(settingsProvider.notifier).updateTheme(mode);
+                  }
+                },
+                items: const [
+                  MacosPopupMenuItem(
+                    value: AppearanceThemeMode.system,
+                    child: Text('System'),
+                  ),
+                  MacosPopupMenuItem(
+                    value: AppearanceThemeMode.light,
+                    child: Text('Light'),
+                  ),
+                  MacosPopupMenuItem(
+                    value: AppearanceThemeMode.dark,
+                    child: Text('Dark'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text(
+                'Advanced Preferences',
+                style: MacosTheme.of(context).typography.headline,
+              ),
+              const SizedBox(width: 12),
+              MovieManagerIconButton(
+                label: 'Save advanced preferences',
+                icon: CupertinoIcons.floppy_disk,
+                onPressed: () {
+                  final interval =
+                      int.tryParse(_intervalController.text) ??
+                      LibrarySynchronizationConfiguration
+                          .defaultScanIntervalMinutes;
+                  final batch =
+                      int.tryParse(_batchSizeController.text) ??
+                      LibrarySynchronizationConfiguration.defaultBatchSize;
+                  final pagination =
+                      int.tryParse(_paginationSizeController.text) ??
+                      CatalogBrowsingConfiguration.defaultPaginationSize;
 
-                ref
-                    .read(statusMessageProvider.notifier)
-                    .set('Preferences saved');
-                Navigator.pop(context);
-              },
-            ),
-            const Spacer(),
-            const EmptyFolderCleanupControl(),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPreferenceRow(
-                context,
-                'Scan Interval (min)',
-                _intervalController,
+                  ref
+                      .read(settingsProvider.notifier)
+                      .updateSettings(interval, batch, pagination);
+
+                  ref
+                      .read(statusMessageProvider.notifier)
+                      .set('Preferences saved');
+                  Navigator.pop(context);
+                },
               ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _buildPreferenceRow(
-                context,
-                'DB Batch Size',
-                _batchSizeController,
+              const Spacer(),
+              const EmptyFolderCleanupControl(),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPreferenceRow(
+                  context,
+                  'Scan Interval (min)',
+                  _intervalController,
+                ),
               ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _buildPreferenceRow(
-                context,
-                'Pagination Size',
-                _paginationSizeController,
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildPreferenceRow(
+                  context,
+                  'DB Batch Size',
+                  _batchSizeController,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-      ],
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildPreferenceRow(
+                  context,
+                  'Pagination Size',
+                  _paginationSizeController,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 
@@ -541,6 +538,46 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildTranscriptionAndSummarizationSettings(
+    BuildContext context,
+    AsyncValue<AppSettings> settingsAsync,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final transcriptionPane = _buildTranscribeSettings(
+          context,
+          settingsAsync,
+        );
+        final summarizationPane = _buildSummarizationSettings(settingsAsync);
+
+        if (constraints.maxWidth < 1200) {
+          return Column(
+            children: [
+              Expanded(child: transcriptionPane),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(),
+              ),
+              Expanded(child: summarizationPane),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: transcriptionPane),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: VerticalDivider(),
+            ),
+            Expanded(child: summarizationPane),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildSummarizationSettings(AsyncValue<AppSettings> settingsAsync) {
     final configuration =
         settingsAsync.value?.videoSummary ?? VideoSummaryConfiguration.defaults;
@@ -604,6 +641,8 @@ class _OpenDataFolderWidget extends ConsumerWidget {
 }
 
 class _FolderList extends ConsumerWidget {
+  const _FolderList({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final foldersAsync = ref.watch(foldersDaoProvider).watchAllFolders();
