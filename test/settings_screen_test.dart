@@ -60,6 +60,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Libraries'), findsOneWidget);
+    expect(find.text('Transcription & Summarization'), findsOneWidget);
+    expect(find.text('Transcribe'), findsNothing);
+    expect(find.text('Summarization'), findsNothing);
     expect(
       find.byKey(const ValueKey('show-private-libraries-in-filter-checkbox')),
       findsOneWidget,
@@ -72,6 +75,49 @@ void main() {
     expect(
       find.byKey(const ValueKey('empty-folder-cleanup-interval-days-field')),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .getTopLeft(
+            find.byKey(
+              const ValueKey('show-private-libraries-in-filter-checkbox'),
+            ),
+          )
+          .dy,
+      greaterThan(
+        tester
+            .getBottomLeft(
+              find.byKey(const ValueKey('settings-library-folder-list')),
+            )
+            .dy,
+      ),
+    );
+    expect(
+      tester
+          .getTopLeft(
+            find.byKey(
+              const ValueKey('show-private-libraries-in-filter-checkbox'),
+            ),
+          )
+          .dy,
+      lessThan(
+        tester.getTopLeft(find.byType(PrivateLibraryAutoLockControl)).dy,
+      ),
+    );
+    expect(
+      tester
+              .getRect(
+                find.byKey(
+                  const ValueKey('show-private-libraries-in-filter-checkbox'),
+                ),
+              )
+              .left -
+          tester
+              .getRect(
+                find.text('Show private libraries in the Library filter'),
+              )
+              .right,
+      lessThanOrEqualTo(6),
     );
     expect(find.text('Library Folders'), findsNothing);
     expect(find.text('Show Offline Media'), findsNothing);
@@ -135,6 +181,7 @@ void main() {
         find.byKey(const ValueKey('show-private-libraries-in-filter-checkbox')),
       );
       await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 1));
 
       expect(
         container
