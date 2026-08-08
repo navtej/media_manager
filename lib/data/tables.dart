@@ -4,8 +4,17 @@ class Folders extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get path => text().unique()();
   TextColumn get alias => text().nullable()();
+  TextColumn get groupName => text().nullable()();
   TextColumn get securityScopedBookmark => text().nullable()();
   BoolColumn get isPrivate => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+const defaultLibraryGroupName = 'Default Group';
+
+class LibraryGroups extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().unique()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
 }
 

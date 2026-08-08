@@ -4,6 +4,7 @@ import 'package:macos_ui/macos_ui.dart';
 
 import '../../data/database.dart';
 import '../../logic/library_name.dart';
+import '../../logic/library_groups.dart';
 import '../../logic/private_library_controller.dart';
 import '../../logic/settings_provider.dart';
 
@@ -44,11 +45,23 @@ class LibraryFilterMenu extends ConsumerWidget {
             .where((folder) => showPrivateLibraries && folder.isPrivate)
             .toList(growable: false);
         final hasPrivateFolders = privateFolders.isNotEmpty;
-        MacosPulldownMenuItem folderItem(Folder folder) {
+        final publicGroups = <String, List<Folder>>{};
+        for (final folder in publicFolders) {
+          publicGroups
+              .putIfAbsent(libraryGroupName(folder), () => [])
+              .add(folder);
+        }
+        final publicGroupEntries = publicGroups.entries.toList()
+          ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+        MacosPulldownMenuItem folderItem(
+          Folder folder, {
+          bool indented = false,
+        }) {
           return MacosPulldownMenuItem(
             title: MacosTooltip(
               message: folder.path,
               child: _LibraryMenuRow(
+                indent: indented ? 20 : 0,
                 icon: selectedFolderIds.contains(folder.id)
                     ? CupertinoIcons.checkmark
                     : folder.isPrivate
@@ -60,6 +73,24 @@ class LibraryFilterMenu extends ConsumerWidget {
             ),
             label: libraryDisplayName(folder),
             onTap: () => _toggleFolder(ref, folder, privateAccess),
+          );
+        }
+
+        MacosPulldownMenuItem groupItem(String name, List<Folder> folders) {
+          final ids = folders.map((folder) => folder.id).toSet();
+          final isSelected =
+              ids.isNotEmpty && ids.every(selectedFolderIds.contains);
+          return MacosPulldownMenuItem(
+            title: _LibraryMenuRow(
+              icon: isSelected
+                  ? CupertinoIcons.checkmark
+                  : CupertinoIcons.folder_fill,
+              label: name,
+            ),
+            label: name,
+            onTap: () => ref
+                .read(selectedLibraryFoldersControllerProvider.notifier)
+                .toggleGroup(ids),
           );
         }
 
@@ -75,7 +106,11 @@ class LibraryFilterMenu extends ConsumerWidget {
                 .selectAllVisible(),
           ),
           const MacosPulldownMenuDivider(),
-          for (final folder in publicFolders) folderItem(folder),
+          for (final entry in publicGroupEntries) ...[
+            groupItem(entry.key, entry.value),
+            for (final folder in entry.value)
+              folderItem(folder, indented: true),
+          ],
           if (hasPrivateFolders) const MacosPulldownMenuDivider(),
           if (hasPrivateFolders)
             MacosPulldownMenuItem(
@@ -128,11 +163,17 @@ Future<void> _toggleFolder(
 }
 
 class _LibraryMenuRow extends StatelessWidget {
-  const _LibraryMenuRow({required this.label, this.icon, this.muted = false});
+  const _LibraryMenuRow({
+    required this.label,
+    this.icon,
+    this.muted = false,
+    this.indent = 0,
+  });
 
   final String label;
   final IconData? icon;
   final bool muted;
+  final double indent;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +181,7 @@ class _LibraryMenuRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SizedBox(width: indent),
         SizedBox(
           width: 18,
           child: icon == null

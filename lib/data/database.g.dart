@@ -40,6 +40,17 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _groupNameMeta = const VerificationMeta(
+    'groupName',
+  );
+  @override
+  late final GeneratedColumn<String> groupName = GeneratedColumn<String>(
+    'group_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _securityScopedBookmarkMeta =
       const VerificationMeta('securityScopedBookmark');
   @override
@@ -83,6 +94,7 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     id,
     path,
     alias,
+    groupName,
     securityScopedBookmark,
     isPrivate,
     addedAt,
@@ -114,6 +126,12 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
       context.handle(
         _aliasMeta,
         alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
+      );
+    }
+    if (data.containsKey('group_name')) {
+      context.handle(
+        _groupNameMeta,
+        groupName.isAcceptableOrUnknown(data['group_name']!, _groupNameMeta),
       );
     }
     if (data.containsKey('security_scoped_bookmark')) {
@@ -158,6 +176,10 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.string,
         data['${effectivePrefix}alias'],
       ),
+      groupName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_name'],
+      ),
       securityScopedBookmark: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}security_scoped_bookmark'],
@@ -183,6 +205,7 @@ class Folder extends DataClass implements Insertable<Folder> {
   final int id;
   final String path;
   final String? alias;
+  final String? groupName;
   final String? securityScopedBookmark;
   final bool isPrivate;
   final DateTime addedAt;
@@ -190,6 +213,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     required this.id,
     required this.path,
     this.alias,
+    this.groupName,
     this.securityScopedBookmark,
     required this.isPrivate,
     required this.addedAt,
@@ -201,6 +225,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     map['path'] = Variable<String>(path);
     if (!nullToAbsent || alias != null) {
       map['alias'] = Variable<String>(alias);
+    }
+    if (!nullToAbsent || groupName != null) {
+      map['group_name'] = Variable<String>(groupName);
     }
     if (!nullToAbsent || securityScopedBookmark != null) {
       map['security_scoped_bookmark'] = Variable<String>(
@@ -219,6 +246,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       alias: alias == null && nullToAbsent
           ? const Value.absent()
           : Value(alias),
+      groupName: groupName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(groupName),
       securityScopedBookmark: securityScopedBookmark == null && nullToAbsent
           ? const Value.absent()
           : Value(securityScopedBookmark),
@@ -236,6 +266,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       id: serializer.fromJson<int>(json['id']),
       path: serializer.fromJson<String>(json['path']),
       alias: serializer.fromJson<String?>(json['alias']),
+      groupName: serializer.fromJson<String?>(json['groupName']),
       securityScopedBookmark: serializer.fromJson<String?>(
         json['securityScopedBookmark'],
       ),
@@ -250,6 +281,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       'id': serializer.toJson<int>(id),
       'path': serializer.toJson<String>(path),
       'alias': serializer.toJson<String?>(alias),
+      'groupName': serializer.toJson<String?>(groupName),
       'securityScopedBookmark': serializer.toJson<String?>(
         securityScopedBookmark,
       ),
@@ -262,6 +294,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     int? id,
     String? path,
     Value<String?> alias = const Value.absent(),
+    Value<String?> groupName = const Value.absent(),
     Value<String?> securityScopedBookmark = const Value.absent(),
     bool? isPrivate,
     DateTime? addedAt,
@@ -269,6 +302,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     id: id ?? this.id,
     path: path ?? this.path,
     alias: alias.present ? alias.value : this.alias,
+    groupName: groupName.present ? groupName.value : this.groupName,
     securityScopedBookmark: securityScopedBookmark.present
         ? securityScopedBookmark.value
         : this.securityScopedBookmark,
@@ -280,6 +314,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       id: data.id.present ? data.id.value : this.id,
       path: data.path.present ? data.path.value : this.path,
       alias: data.alias.present ? data.alias.value : this.alias,
+      groupName: data.groupName.present ? data.groupName.value : this.groupName,
       securityScopedBookmark: data.securityScopedBookmark.present
           ? data.securityScopedBookmark.value
           : this.securityScopedBookmark,
@@ -294,6 +329,7 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('alias: $alias, ')
+          ..write('groupName: $groupName, ')
           ..write('securityScopedBookmark: $securityScopedBookmark, ')
           ..write('isPrivate: $isPrivate, ')
           ..write('addedAt: $addedAt')
@@ -302,8 +338,15 @@ class Folder extends DataClass implements Insertable<Folder> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, path, alias, securityScopedBookmark, isPrivate, addedAt);
+  int get hashCode => Object.hash(
+    id,
+    path,
+    alias,
+    groupName,
+    securityScopedBookmark,
+    isPrivate,
+    addedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -311,6 +354,7 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.id == this.id &&
           other.path == this.path &&
           other.alias == this.alias &&
+          other.groupName == this.groupName &&
           other.securityScopedBookmark == this.securityScopedBookmark &&
           other.isPrivate == this.isPrivate &&
           other.addedAt == this.addedAt);
@@ -320,6 +364,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<int> id;
   final Value<String> path;
   final Value<String?> alias;
+  final Value<String?> groupName;
   final Value<String?> securityScopedBookmark;
   final Value<bool> isPrivate;
   final Value<DateTime> addedAt;
@@ -327,6 +372,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.id = const Value.absent(),
     this.path = const Value.absent(),
     this.alias = const Value.absent(),
+    this.groupName = const Value.absent(),
     this.securityScopedBookmark = const Value.absent(),
     this.isPrivate = const Value.absent(),
     this.addedAt = const Value.absent(),
@@ -335,6 +381,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.id = const Value.absent(),
     required String path,
     this.alias = const Value.absent(),
+    this.groupName = const Value.absent(),
     this.securityScopedBookmark = const Value.absent(),
     this.isPrivate = const Value.absent(),
     this.addedAt = const Value.absent(),
@@ -343,6 +390,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<int>? id,
     Expression<String>? path,
     Expression<String>? alias,
+    Expression<String>? groupName,
     Expression<String>? securityScopedBookmark,
     Expression<bool>? isPrivate,
     Expression<DateTime>? addedAt,
@@ -351,6 +399,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (id != null) 'id': id,
       if (path != null) 'path': path,
       if (alias != null) 'alias': alias,
+      if (groupName != null) 'group_name': groupName,
       if (securityScopedBookmark != null)
         'security_scoped_bookmark': securityScopedBookmark,
       if (isPrivate != null) 'is_private': isPrivate,
@@ -362,6 +411,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<int>? id,
     Value<String>? path,
     Value<String?>? alias,
+    Value<String?>? groupName,
     Value<String?>? securityScopedBookmark,
     Value<bool>? isPrivate,
     Value<DateTime>? addedAt,
@@ -370,6 +420,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       id: id ?? this.id,
       path: path ?? this.path,
       alias: alias ?? this.alias,
+      groupName: groupName ?? this.groupName,
       securityScopedBookmark:
           securityScopedBookmark ?? this.securityScopedBookmark,
       isPrivate: isPrivate ?? this.isPrivate,
@@ -388,6 +439,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     }
     if (alias.present) {
       map['alias'] = Variable<String>(alias.value);
+    }
+    if (groupName.present) {
+      map['group_name'] = Variable<String>(groupName.value);
     }
     if (securityScopedBookmark.present) {
       map['security_scoped_bookmark'] = Variable<String>(
@@ -409,8 +463,257 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('id: $id, ')
           ..write('path: $path, ')
           ..write('alias: $alias, ')
+          ..write('groupName: $groupName, ')
           ..write('securityScopedBookmark: $securityScopedBookmark, ')
           ..write('isPrivate: $isPrivate, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LibraryGroupsTable extends LibraryGroups
+    with TableInfo<$LibraryGroupsTable, LibraryGroup> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LibraryGroupsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> addedAt = GeneratedColumn<DateTime>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, addedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'library_groups';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LibraryGroup> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['added_at']!, _addedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LibraryGroup map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LibraryGroup(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LibraryGroupsTable createAlias(String alias) {
+    return $LibraryGroupsTable(attachedDatabase, alias);
+  }
+}
+
+class LibraryGroup extends DataClass implements Insertable<LibraryGroup> {
+  final int id;
+  final String name;
+  final DateTime addedAt;
+  const LibraryGroup({
+    required this.id,
+    required this.name,
+    required this.addedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['added_at'] = Variable<DateTime>(addedAt);
+    return map;
+  }
+
+  LibraryGroupsCompanion toCompanion(bool nullToAbsent) {
+    return LibraryGroupsCompanion(
+      id: Value(id),
+      name: Value(name),
+      addedAt: Value(addedAt),
+    );
+  }
+
+  factory LibraryGroup.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LibraryGroup(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      addedAt: serializer.fromJson<DateTime>(json['addedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'addedAt': serializer.toJson<DateTime>(addedAt),
+    };
+  }
+
+  LibraryGroup copyWith({int? id, String? name, DateTime? addedAt}) =>
+      LibraryGroup(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        addedAt: addedAt ?? this.addedAt,
+      );
+  LibraryGroup copyWithCompanion(LibraryGroupsCompanion data) {
+    return LibraryGroup(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryGroup(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('addedAt: $addedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, addedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LibraryGroup &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.addedAt == this.addedAt);
+}
+
+class LibraryGroupsCompanion extends UpdateCompanion<LibraryGroup> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<DateTime> addedAt;
+  const LibraryGroupsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.addedAt = const Value.absent(),
+  });
+  LibraryGroupsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.addedAt = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<LibraryGroup> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<DateTime>? addedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (addedAt != null) 'added_at': addedAt,
+    });
+  }
+
+  LibraryGroupsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<DateTime>? addedAt,
+  }) {
+    return LibraryGroupsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      addedAt: addedAt ?? this.addedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (addedAt.present) {
+      map['added_at'] = Variable<DateTime>(addedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LibraryGroupsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
           ..write('addedAt: $addedAt')
           ..write(')'))
         .toString();
@@ -2650,6 +2953,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $FoldersTable folders = $FoldersTable(this);
+  late final $LibraryGroupsTable libraryGroups = $LibraryGroupsTable(this);
   late final $VideosTable videos = $VideosTable(this);
   late final $TagsTable tags = $TagsTable(this);
   late final $TagDefinitionsTable tagDefinitions = $TagDefinitionsTable(this);
@@ -2657,6 +2961,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $VideoSummariesTable videoSummaries = $VideoSummariesTable(this);
   late final VideosDao videosDao = VideosDao(this as AppDatabase);
   late final FoldersDao foldersDao = FoldersDao(this as AppDatabase);
+  late final LibraryGroupsDao libraryGroupsDao = LibraryGroupsDao(
+    this as AppDatabase,
+  );
   late final TagsDao tagsDao = TagsDao(this as AppDatabase);
   late final VideoSummariesDao videoSummariesDao = VideoSummariesDao(
     this as AppDatabase,
@@ -2667,6 +2974,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     folders,
+    libraryGroups,
     videos,
     tags,
     tagDefinitions,
@@ -2718,6 +3026,7 @@ typedef $$FoldersTableCreateCompanionBuilder =
       Value<int> id,
       required String path,
       Value<String?> alias,
+      Value<String?> groupName,
       Value<String?> securityScopedBookmark,
       Value<bool> isPrivate,
       Value<DateTime> addedAt,
@@ -2727,6 +3036,7 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<int> id,
       Value<String> path,
       Value<String?> alias,
+      Value<String?> groupName,
       Value<String?> securityScopedBookmark,
       Value<bool> isPrivate,
       Value<DateTime> addedAt,
@@ -2777,6 +3087,11 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<String> get alias => $composableBuilder(
     column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get groupName => $composableBuilder(
+    column: $table.groupName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2845,6 +3160,11 @@ class $$FoldersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get groupName => $composableBuilder(
+    column: $table.groupName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get securityScopedBookmark => $composableBuilder(
     column: $table.securityScopedBookmark,
     builder: (column) => ColumnOrderings(column),
@@ -2878,6 +3198,9 @@ class $$FoldersTableAnnotationComposer
 
   GeneratedColumn<String> get alias =>
       $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get groupName =>
+      $composableBuilder(column: $table.groupName, builder: (column) => column);
 
   GeneratedColumn<String> get securityScopedBookmark => $composableBuilder(
     column: $table.securityScopedBookmark,
@@ -2947,6 +3270,7 @@ class $$FoldersTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> path = const Value.absent(),
                 Value<String?> alias = const Value.absent(),
+                Value<String?> groupName = const Value.absent(),
                 Value<String?> securityScopedBookmark = const Value.absent(),
                 Value<bool> isPrivate = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
@@ -2954,6 +3278,7 @@ class $$FoldersTableTableManager
                 id: id,
                 path: path,
                 alias: alias,
+                groupName: groupName,
                 securityScopedBookmark: securityScopedBookmark,
                 isPrivate: isPrivate,
                 addedAt: addedAt,
@@ -2963,6 +3288,7 @@ class $$FoldersTableTableManager
                 Value<int> id = const Value.absent(),
                 required String path,
                 Value<String?> alias = const Value.absent(),
+                Value<String?> groupName = const Value.absent(),
                 Value<String?> securityScopedBookmark = const Value.absent(),
                 Value<bool> isPrivate = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
@@ -2970,6 +3296,7 @@ class $$FoldersTableTableManager
                 id: id,
                 path: path,
                 alias: alias,
+                groupName: groupName,
                 securityScopedBookmark: securityScopedBookmark,
                 isPrivate: isPrivate,
                 addedAt: addedAt,
@@ -3021,6 +3348,159 @@ typedef $$FoldersTableProcessedTableManager =
       (Folder, $$FoldersTableReferences),
       Folder,
       PrefetchHooks Function({bool videosRefs})
+    >;
+typedef $$LibraryGroupsTableCreateCompanionBuilder =
+    LibraryGroupsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<DateTime> addedAt,
+    });
+typedef $$LibraryGroupsTableUpdateCompanionBuilder =
+    LibraryGroupsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<DateTime> addedAt,
+    });
+
+class $$LibraryGroupsTableFilterComposer
+    extends Composer<_$AppDatabase, $LibraryGroupsTable> {
+  $$LibraryGroupsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LibraryGroupsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LibraryGroupsTable> {
+  $$LibraryGroupsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get addedAt => $composableBuilder(
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LibraryGroupsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LibraryGroupsTable> {
+  $$LibraryGroupsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get addedAt =>
+      $composableBuilder(column: $table.addedAt, builder: (column) => column);
+}
+
+class $$LibraryGroupsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LibraryGroupsTable,
+          LibraryGroup,
+          $$LibraryGroupsTableFilterComposer,
+          $$LibraryGroupsTableOrderingComposer,
+          $$LibraryGroupsTableAnnotationComposer,
+          $$LibraryGroupsTableCreateCompanionBuilder,
+          $$LibraryGroupsTableUpdateCompanionBuilder,
+          (
+            LibraryGroup,
+            BaseReferences<_$AppDatabase, $LibraryGroupsTable, LibraryGroup>,
+          ),
+          LibraryGroup,
+          PrefetchHooks Function()
+        > {
+  $$LibraryGroupsTableTableManager(_$AppDatabase db, $LibraryGroupsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LibraryGroupsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LibraryGroupsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LibraryGroupsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> addedAt = const Value.absent(),
+              }) =>
+                  LibraryGroupsCompanion(id: id, name: name, addedAt: addedAt),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<DateTime> addedAt = const Value.absent(),
+              }) => LibraryGroupsCompanion.insert(
+                id: id,
+                name: name,
+                addedAt: addedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LibraryGroupsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LibraryGroupsTable,
+      LibraryGroup,
+      $$LibraryGroupsTableFilterComposer,
+      $$LibraryGroupsTableOrderingComposer,
+      $$LibraryGroupsTableAnnotationComposer,
+      $$LibraryGroupsTableCreateCompanionBuilder,
+      $$LibraryGroupsTableUpdateCompanionBuilder,
+      (
+        LibraryGroup,
+        BaseReferences<_$AppDatabase, $LibraryGroupsTable, LibraryGroup>,
+      ),
+      LibraryGroup,
+      PrefetchHooks Function()
     >;
 typedef $$VideosTableCreateCompanionBuilder =
     VideosCompanion Function({
@@ -5132,6 +5612,8 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$FoldersTableTableManager get folders =>
       $$FoldersTableTableManager(_db, _db.folders);
+  $$LibraryGroupsTableTableManager get libraryGroups =>
+      $$LibraryGroupsTableTableManager(_db, _db.libraryGroups);
   $$VideosTableTableManager get videos =>
       $$VideosTableTableManager(_db, _db.videos);
   $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
@@ -5151,6 +5633,9 @@ mixin _$VideosDaoMixin on DatabaseAccessor<AppDatabase> {
 }
 mixin _$FoldersDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
+}
+mixin _$LibraryGroupsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $LibraryGroupsTable get libraryGroups => attachedDatabase.libraryGroups;
 }
 mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;

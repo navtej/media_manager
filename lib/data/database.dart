@@ -9,15 +9,23 @@ import 'tables.dart';
 part 'database.g.dart';
 
 @DriftDatabase(
-  tables: [Folders, Videos, Tags, TagDefinitions, VideoTags, VideoSummaries],
-  daos: [VideosDao, FoldersDao, TagsDao, VideoSummariesDao],
+  tables: [
+    Folders,
+    LibraryGroups,
+    Videos,
+    Tags,
+    TagDefinitions,
+    VideoTags,
+    VideoSummaries,
+  ],
+  daos: [VideosDao, FoldersDao, LibraryGroupsDao, TagsDao, VideoSummariesDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -86,9 +94,23 @@ class AppDatabase extends _$AppDatabase {
             print('MIGRATION INFO: isPrivate already exists or error: $e');
           }
         }
+        if (from < 10) {
+          await m.addColumn(folders, folders.groupName);
+          await m.createTable(libraryGroups);
+          await customStatement(
+            "INSERT OR IGNORE INTO library_groups (name) VALUES ('$defaultLibraryGroupName')",
+          );
+          await customStatement(
+            "UPDATE folders SET group_name = '$defaultLibraryGroupName' "
+            "WHERE group_name IS NULL OR trim(group_name) = ''",
+          );
+        }
       },
       beforeOpen: (details) async {
         await customStatement('PRAGMA foreign_keys = ON');
+        await customStatement(
+          "INSERT OR IGNORE INTO library_groups (name) VALUES ('$defaultLibraryGroupName')",
+        );
         // Only migrate tags if we are just now upgrading to 6
         if (details.wasCreated == false &&
             details.versionBefore != null &&
@@ -215,8 +237,34 @@ class FoldersDao extends DatabaseAccessor<AppDatabase> with _$FoldersDaoMixin {
     );
   }
 
+  Future<void> updateFolderGroup(int id, String groupName) {
+    return (update(folders)..where((tbl) => tbl.id.equals(id))).write(
+      FoldersCompanion(groupName: Value(groupName)),
+    );
+  }
+
+  Future<void> moveFoldersToGroup(String from, String to) {
+    return (update(folders)..where((tbl) => tbl.groupName.equals(from))).write(
+      FoldersCompanion(groupName: Value(to)),
+    );
+  }
+
   Future<void> deleteFolder(int id) =>
       (delete(folders)..where((tbl) => tbl.id.equals(id))).go();
+}
+
+@DriftAccessor(tables: [LibraryGroups])
+class LibraryGroupsDao extends DatabaseAccessor<AppDatabase>
+    with _$LibraryGroupsDaoMixin {
+  LibraryGroupsDao(AppDatabase db) : super(db);
+
+  Future<List<LibraryGroup>> getAllGroups() => select(libraryGroups).get();
+
+  Future<int> insertGroup(LibraryGroupsCompanion group) =>
+      into(libraryGroups).insert(group, mode: InsertMode.insertOrIgnore);
+
+  Future<void> deleteGroup(String name) =>
+      (delete(libraryGroups)..where((tbl) => tbl.name.equals(name))).go();
 }
 
 @DriftAccessor(

@@ -115,8 +115,15 @@ class _EmptyFolderCleanupControlState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(width: 150, child: Text('Remove empty folders')),
+            SizedBox(
+              width: 200,
+              child: Text(
+                'Remove empty folders',
+                style: MacosTheme.of(context).typography.subheadline,
+              ),
+            ),
             MacosPreferenceCheckbox(
               key: const ValueKey('empty-folder-cleanup-checkbox'),
               value: value?.enabled ?? true,
@@ -127,11 +134,21 @@ class _EmptyFolderCleanupControlState
                 }
               },
             ),
-            const SizedBox(width: 16),
-            const Text('Every'),
-            const SizedBox(width: 8),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             SizedBox(
-              width: 72,
+              width: 200,
+              child: Text(
+                'Cleanup interval (days)',
+                style: MacosTheme.of(context).typography.subheadline,
+              ),
+            ),
+            SizedBox(
+              width: 120,
               child: MovieManagerLabeledField(
                 label: 'Empty folder cleanup interval in days',
                 controller: _controller,
@@ -152,21 +169,16 @@ class _EmptyFolderCleanupControlState
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            const Text('days'),
           ],
         ),
         if (_errorMessage != null) ...[
           const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 150),
-            child: Text(
-              _errorMessage!,
-              key: const ValueKey('empty-folder-cleanup-validation-error'),
-              style: const TextStyle(
-                color: CupertinoColors.systemRed,
-                fontSize: 12,
-              ),
+          Text(
+            _errorMessage!,
+            key: const ValueKey('empty-folder-cleanup-validation-error'),
+            style: const TextStyle(
+              color: CupertinoColors.systemRed,
+              fontSize: 12,
             ),
           ),
         ],

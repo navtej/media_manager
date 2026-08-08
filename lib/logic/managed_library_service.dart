@@ -4,9 +4,11 @@ import 'package:path/path.dart' as p;
 
 import '../data/database.dart';
 import '../data/providers.dart';
+import '../data/tables.dart';
 import '../services/library_access_service.dart';
 import '../services/private_library_auth_service.dart';
 import 'library_name.dart';
+import 'library_groups.dart';
 
 enum ManagedLibraryAddStatus { created, existing, bookmarkRefreshed }
 
@@ -47,6 +49,30 @@ class ManagedLibraryPrivacyResult {
   final Folder? folder;
 }
 
+enum ManagedLibraryGroupStatus {
+  created,
+  assigned,
+  removed,
+  unchanged,
+  blankName,
+  duplicateName,
+  defaultGroup,
+  groupNotFound,
+  folderNotFound,
+}
+
+class ManagedLibraryGroupResult {
+  const ManagedLibraryGroupResult({
+    required this.status,
+    this.groupName,
+    this.folder,
+  });
+
+  final ManagedLibraryGroupStatus status;
+  final String? groupName;
+  final Folder? folder;
+}
+
 enum ManagedLibraryRepairStatus {
   repaired,
   pathMismatch,
@@ -78,15 +104,18 @@ class ManagedLibraryRemoveResult {
 class ManagedLibraryService {
   ManagedLibraryService({
     required FoldersDao foldersDao,
+    required LibraryGroupsDao libraryGroupsDao,
     required Future<int> Function(int folderId) catalogVideoCount,
     required LibraryAccessService libraryAccessService,
     required PrivateLibraryAuthService privateLibraryAuthService,
   }) : _foldersDao = foldersDao,
+       _libraryGroupsDao = libraryGroupsDao,
        _catalogVideoCount = catalogVideoCount,
        _libraryAccessService = libraryAccessService,
        _privateLibraryAuthService = privateLibraryAuthService;
 
   final FoldersDao _foldersDao;
+  final LibraryGroupsDao _libraryGroupsDao;
   final Future<int> Function(int folderId) _catalogVideoCount;
   final LibraryAccessService _libraryAccessService;
   final PrivateLibraryAuthService _privateLibraryAuthService;
@@ -97,6 +126,7 @@ class ManagedLibraryService {
   }
 
   Future<ManagedLibraryAddResult> _addOrRefresh(String path) async {
+    await _ensureDefaultGroup();
     final normalizedPath = _normalizePath(path);
     final bookmark = await _libraryAccessService.createBookmark(normalizedPath);
     final folders = await _foldersDao.getAllFolders();
@@ -110,6 +140,7 @@ class ManagedLibraryService {
       FoldersCompanion(
         path: drift.Value(normalizedPath),
         alias: drift.Value(uniqueLibraryNameForPath(normalizedPath, folders)),
+        groupName: const drift.Value(defaultLibraryGroupName),
         securityScopedBookmark: drift.Value(bookmark),
       ),
     );
@@ -217,6 +248,116 @@ class ManagedLibraryService {
     required bool isPrivate,
   }) {
     return _serialize(() => _setPrivacy(folderId, isPrivate: isPrivate));
+  }
+
+  Future<ManagedLibraryGroupResult> addGroup(String name) {
+    return _serialize(() => _addGroup(name));
+  }
+
+  Future<ManagedLibraryGroupResult> _addGroup(String name) async {
+    await _ensureDefaultGroup();
+    final normalizedName = normalizeLibraryGroupName(name);
+    if (normalizedName.isEmpty) {
+      return const ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.blankName,
+      );
+    }
+
+    final groups = await _libraryGroupsDao.getAllGroups();
+    if (groups.any(
+      (group) => sameLibraryGroupName(group.name, normalizedName),
+    )) {
+      return ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.duplicateName,
+        groupName: normalizedName,
+      );
+    }
+
+    final id = await _libraryGroupsDao.insertGroup(
+      LibraryGroupsCompanion(name: drift.Value(normalizedName)),
+    );
+    if (id == 0) {
+      return ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.duplicateName,
+        groupName: normalizedName,
+      );
+    }
+    return ManagedLibraryGroupResult(
+      status: ManagedLibraryGroupStatus.created,
+      groupName: normalizedName,
+    );
+  }
+
+  Future<ManagedLibraryGroupResult> assignGroup(int folderId, String name) {
+    return _serialize(() => _assignGroup(folderId, name));
+  }
+
+  Future<ManagedLibraryGroupResult> _assignGroup(
+    int folderId,
+    String name,
+  ) async {
+    await _ensureDefaultGroup();
+    final folder = await _foldersDao.getFolderById(folderId);
+    if (folder == null) {
+      return const ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.folderNotFound,
+      );
+    }
+
+    final group = _findGroup(await _libraryGroupsDao.getAllGroups(), name);
+    if (group == null) {
+      return ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.groupNotFound,
+        folder: folder,
+      );
+    }
+    if (sameLibraryGroupName(libraryGroupName(folder), group.name)) {
+      return ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.unchanged,
+        groupName: group.name,
+        folder: folder,
+      );
+    }
+
+    await _foldersDao.updateFolderGroup(folderId, group.name);
+    return ManagedLibraryGroupResult(
+      status: ManagedLibraryGroupStatus.assigned,
+      groupName: group.name,
+      folder: folder.copyWith(groupName: drift.Value(group.name)),
+    );
+  }
+
+  Future<ManagedLibraryGroupResult> removeGroup(String name) {
+    return _serialize(() => _removeGroup(name));
+  }
+
+  Future<ManagedLibraryGroupResult> _removeGroup(String name) async {
+    await _ensureDefaultGroup();
+    final normalizedName = normalizeLibraryGroupName(name);
+    if (sameLibraryGroupName(normalizedName, defaultLibraryGroupName)) {
+      return const ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.defaultGroup,
+        groupName: defaultLibraryGroupName,
+      );
+    }
+
+    final group = _findGroup(
+      await _libraryGroupsDao.getAllGroups(),
+      normalizedName,
+    );
+    if (group == null) {
+      return ManagedLibraryGroupResult(
+        status: ManagedLibraryGroupStatus.groupNotFound,
+        groupName: normalizedName,
+      );
+    }
+
+    await _foldersDao.moveFoldersToGroup(group.name, defaultLibraryGroupName);
+    await _libraryGroupsDao.deleteGroup(group.name);
+    return ManagedLibraryGroupResult(
+      status: ManagedLibraryGroupStatus.removed,
+      groupName: group.name,
+    );
   }
 
   Future<ManagedLibraryPrivacyResult> _setPrivacy(
@@ -339,6 +480,19 @@ class ManagedLibraryService {
     );
   }
 
+  Future<void> _ensureDefaultGroup() async {
+    final groups = await _libraryGroupsDao.getAllGroups();
+    if (!groups.any(
+      (group) => sameLibraryGroupName(group.name, defaultLibraryGroupName),
+    )) {
+      await _libraryGroupsDao.insertGroup(
+        const LibraryGroupsCompanion(
+          name: drift.Value(defaultLibraryGroupName),
+        ),
+      );
+    }
+  }
+
   Folder? _findByPath(Iterable<Folder> folders, String path) {
     for (final folder in folders) {
       if (_normalizePath(folder.path) == path) {
@@ -352,6 +506,15 @@ class ManagedLibraryService {
     for (final folder in folders) {
       if (folder.id == id) {
         return folder;
+      }
+    }
+    return null;
+  }
+
+  LibraryGroup? _findGroup(Iterable<LibraryGroup> groups, String name) {
+    for (final group in groups) {
+      if (sameLibraryGroupName(group.name, name)) {
+        return group;
       }
     }
     return null;
@@ -372,6 +535,7 @@ class ManagedLibraryService {
 final managedLibraryServiceProvider = Provider<ManagedLibraryService>((ref) {
   return ManagedLibraryService(
     foldersDao: ref.watch(foldersDaoProvider),
+    libraryGroupsDao: ref.watch(libraryGroupsDaoProvider),
     catalogVideoCount: (folderId) async {
       final videos = await ref
           .read(videosDaoProvider)
