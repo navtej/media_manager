@@ -95,8 +95,21 @@ class AppDatabase extends _$AppDatabase {
           }
         }
         if (from < 10) {
-          await m.addColumn(folders, folders.groupName);
-          await m.createTable(libraryGroups);
+          final folderColumns = await customSelect(
+            'PRAGMA table_info(folders)',
+          ).get();
+          if (!folderColumns.any(
+            (column) => column.read<String>('name') == 'group_name',
+          )) {
+            await m.addColumn(folders, folders.groupName);
+          }
+          final groupTable = await customSelect(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'library_groups'",
+          ).get();
+          if (groupTable.isEmpty) {
+            await m.createTable(libraryGroups);
+          }
           await customStatement(
             "INSERT OR IGNORE INTO library_groups (name) VALUES ('$defaultLibraryGroupName')",
           );
