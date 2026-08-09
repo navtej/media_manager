@@ -278,35 +278,16 @@ void main() {
 
     await tester.tap(find.byType(MacosPulldownButton));
     await tester.pumpAndSettle();
-    for (final label in [
-      'Info',
-      'Reveal in Finder',
-      'Video Summary',
-      'Delete',
-      'Clear Tags',
-    ]) {
+    for (final label in ['Reveal in Finder', 'Delete', 'Clear Tags']) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.text('Info'), findsNothing);
+    expect(find.text('Video Summary'), findsNothing);
+    expect(find.byType(MacosPulldownMenuDivider), findsNothing);
 
-    await tester.tap(find.text('Info'));
-    await tester.pumpAndSettle();
-    expect(find.text('Video Information'), findsOneWidget);
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('video-more-1')));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Reveal in Finder'));
     await tester.pumpAndSettle();
     expect(playbackController.revealedVideoIds, [1]);
-
-    await tester.tap(find.byKey(const ValueKey('video-more-1')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Video Summary'));
-    await tester.pumpAndSettle();
-    expect(find.text('Summary: ${video.title}'), findsOneWidget);
-    await tester.tap(find.text('Close'));
-    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('video-more-1')));
     await tester.pumpAndSettle();
