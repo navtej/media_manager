@@ -663,18 +663,9 @@ class _VideoGridItemState extends State<VideoGridItem> {
                 menuAlignment: PulldownMenuAlignment.right,
                 items: [
                   MacosPulldownMenuItem(
-                    title: const Text('Info'),
-                    onTap: () => _showInfo(context, widget.video),
-                  ),
-                  MacosPulldownMenuItem(
                     title: const Text('Reveal in Finder'),
                     onTap: () => _revealVideo(ref, widget.video),
                   ),
-                  MacosPulldownMenuItem(
-                    title: const Text('Video Summary'),
-                    onTap: () => _showSummaryDialog(context, ref, widget.video),
-                  ),
-                  const MacosPulldownMenuDivider(),
                   MacosPulldownMenuItem(
                     title: const Text('Delete'),
                     onTap: () => _confirmDelete(ref),
