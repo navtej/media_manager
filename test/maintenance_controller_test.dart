@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
@@ -7,12 +8,112 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/maintenance_controller.dart';
+import 'package:movie_manager/logic/library_operation_controller.dart';
+import 'package:movie_manager/services/data_compaction_service.dart';
 import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/media_deletion_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
+import 'package:movie_manager/services/thumbnail_service.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  test(
+    'compactDataFolder owns cleanup lock until compaction completes',
+    () async {
+      final started = Completer<void>();
+      final completion = Completer<DataCompactionResult>();
+      final fixture = await _MaintenanceFixture.create(
+        dataCompactionRunner: () {
+          started.complete();
+          return completion.future;
+        },
+      );
+      addTearDown(fixture.dispose);
+
+      final future = fixture.container
+          .read(maintenanceControllerProvider.notifier)
+          .compactDataFolder();
+      await started.future;
+
+      expect(
+        fixture.container.read(libraryOperationControllerProvider).isCleaning,
+        isTrue,
+      );
+      expect(
+        fixture.container
+            .read(libraryOperationControllerProvider.notifier)
+            .beginScan(),
+        isFalse,
+      );
+
+      completion.complete(
+        const DataCompactionResult(
+          status: DataCompactionStatus.completed,
+          beforeBytes: 200,
+          afterBytes: 100,
+          removedThumbnailCount: 2,
+        ),
+      );
+
+      expect((await future).status, DataCompactionStatus.completed);
+      expect(
+        fixture.container.read(libraryOperationControllerProvider).isBusy,
+        isFalse,
+      );
+    },
+  );
+
+  test('compactDataFolder rejects a busy Library operation', () async {
+    var calls = 0;
+    final fixture = await _MaintenanceFixture.create(
+      dataCompactionRunner: () async {
+        calls += 1;
+        return const DataCompactionResult(
+          status: DataCompactionStatus.completed,
+          beforeBytes: 1,
+          afterBytes: 1,
+          removedThumbnailCount: 0,
+        );
+      },
+    );
+    addTearDown(fixture.dispose);
+    fixture.container
+        .read(libraryOperationControllerProvider.notifier)
+        .beginMove();
+
+    final result = await fixture.container
+        .read(maintenanceControllerProvider.notifier)
+        .compactDataFolder();
+
+    expect(result.status, DataCompactionStatus.busy);
+    expect(calls, 0);
+    expect(
+      fixture.container.read(libraryOperationControllerProvider).isMoving,
+      isTrue,
+    );
+  });
+
+  test(
+    'compactDataFolder releases cleanup lock when the runner throws',
+    () async {
+      final fixture = await _MaintenanceFixture.create(
+        dataCompactionRunner: () async => throw StateError('fixture failure'),
+      );
+      addTearDown(fixture.dispose);
+
+      final result = await fixture.container
+          .read(maintenanceControllerProvider.notifier)
+          .compactDataFolder();
+
+      expect(result.status, DataCompactionStatus.failed);
+      expect(result.errorMessage, 'Failed while compacting the data folder.');
+      expect(
+        fixture.container.read(libraryOperationControllerProvider).isBusy,
+        isFalse,
+      );
+    },
+  );
+
   test('deleteVideo starts folder access before deleting media', () async {
     final fixture = await _MaintenanceFixture.create();
     addTearDown(fixture.dispose);
@@ -105,6 +206,7 @@ void main() {
 
     expect(await fixture.videoFile.exists(), isTrue);
     expect(await fixture.subtitleFile.exists(), isTrue);
+    expect(await fixture.thumbnailFile.exists(), isFalse);
     expect(
       await fixture.db.foldersDao.getFolderById(fixture.video.folderId),
       isNull,
@@ -157,6 +259,7 @@ class _MaintenanceFixture {
     required this.root,
     required this.videoFile,
     required this.subtitleFile,
+    required this.thumbnailFile,
     required this.video,
     required this.events,
     required this.auth,
@@ -167,6 +270,7 @@ class _MaintenanceFixture {
   final Directory root;
   final File videoFile;
   final File subtitleFile;
+  final File thumbnailFile;
   final Video video;
   final List<String> events;
   final _FakePrivateLibraryAuthService auth;
@@ -175,6 +279,7 @@ class _MaintenanceFixture {
     bool canAccessFolder = true,
     bool isPrivate = false,
     bool authenticationResult = true,
+    DataCompactionRunner? dataCompactionRunner,
   }) async {
     final root = await Directory.systemTemp.createTemp(
       'maintenance-controller-test',
@@ -183,6 +288,15 @@ class _MaintenanceFixture {
     await videoFile.writeAsBytes(const <int>[1, 2, 3]);
     final subtitleFile = File(p.join(root.path, 'video.en.vtt'));
     await subtitleFile.writeAsString('WEBVTT');
+    final supportDirectory = await Directory(
+      p.join(root.path, 'application-support'),
+    ).create();
+    final thumbnailService = ThumbnailService(
+      applicationSupportDirectory: () async => supportDirectory,
+    );
+    final thumbnailFile = File(
+      await thumbnailService.saveThumbnail('video.jpg', const [4, 5, 6]),
+    );
 
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     final folderId = await db.foldersDao.insertFolder(
@@ -197,6 +311,7 @@ class _MaintenanceFixture {
         folderId: folderId,
         absolutePath: videoFile.path,
         title: 'video',
+        thumbnailPath: drift.Value(thumbnailFile.path),
       ),
     );
     final video = (await db.videosDao.getVideoByPath(videoFile.path))!;
@@ -206,6 +321,9 @@ class _MaintenanceFixture {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        thumbnailServiceProvider.overrideWithValue(thumbnailService),
+        if (dataCompactionRunner != null)
+          dataCompactionRunnerProvider.overrideWithValue(dataCompactionRunner),
         privateLibraryAuthServiceProvider.overrideWithValue(auth),
         libraryAccessServiceProvider.overrideWithValue(
           LibraryAccessService(
@@ -224,6 +342,7 @@ class _MaintenanceFixture {
       root: root,
       videoFile: videoFile,
       subtitleFile: subtitleFile,
+      thumbnailFile: thumbnailFile,
       video: video,
       events: events,
       auth: auth,

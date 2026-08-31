@@ -15,6 +15,7 @@ import '../../logic/folder_storage_status.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/library_groups.dart';
 import '../../logic/library_name.dart';
+import '../../logic/library_operation_controller.dart';
 import '../../logic/managed_library_service.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
@@ -23,6 +24,7 @@ import '../../logic/whisper_model_catalog.dart';
 import '../../logic/whisper_model_catalog_controller.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/natural_language_service.dart';
+import '../../services/data_compaction_service.dart';
 import '../../services/whisper_runtime_service.dart';
 import '../../logic/stats_provider.dart';
 import '../library_result_messages.dart';
@@ -655,6 +657,7 @@ class _OpenDataFolderWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sizeAsync = ref.watch(dataFolderSizeProvider);
+    final isLibraryBusy = ref.watch(libraryOperationControllerProvider).isBusy;
     return Padding(
       padding: const EdgeInsets.only(left: 4.0),
       child: Row(
@@ -686,7 +689,126 @@ class _OpenDataFolderWidget extends ConsumerWidget {
                 const SizedBox(width: 12, height: 12, child: ProgressCircle()),
             error: (error, stackTrace) => const SizedBox(),
           ),
+          const SizedBox(width: 12),
+          PushButton(
+            key: const ValueKey('compact-data-folder-button'),
+            controlSize: ControlSize.regular,
+            onPressed: isLibraryBusy
+                ? null
+                : () => _confirmCompaction(context, ref),
+            child: const Text('Compact'),
+          ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _confirmCompaction(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showMacosAlertDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.archivebox),
+        title: const Text('Compact Data Folder?'),
+        message: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This removes unreferenced thumbnails and compacts the catalog database.',
+            ),
+            SizedBox(height: 8),
+            Text('Downloaded models and media files are not deleted.'),
+          ],
+        ),
+        primaryButton: PushButton(
+          key: const ValueKey('confirm-compact-data-folder-button'),
+          controlSize: ControlSize.large,
+          child: const Text('Compact'),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+        ),
+        secondaryButton: PushButton(
+          controlSize: ControlSize.large,
+          secondary: true,
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+        ),
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final progressFuture = showMacosAlertDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: MacosAlertDialog(
+          appIcon: SizedBox(width: 24, height: 24, child: ProgressCircle()),
+          title: Text('Compacting data folder...'),
+          message: Text('Media Manager cannot be used until this finishes.'),
+          primaryButton: PushButton(
+            controlSize: ControlSize.large,
+            onPressed: null,
+            child: Text('Working...'),
+          ),
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final result = await ref
+        .read(maintenanceControllerProvider.notifier)
+        .compactDataFolder();
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+    await progressFuture;
+    if (!context.mounted) {
+      return;
+    }
+    _showCompactionResult(context, result);
+  }
+
+  void _showCompactionResult(
+    BuildContext context,
+    DataCompactionResult result,
+  ) {
+    final (title, message) = switch (result.status) {
+      DataCompactionStatus.completed => (
+        'Data folder compacted',
+        'Data folder changed from ${LibraryStats.formatSize(result.beforeBytes)} '
+            'to ${LibraryStats.formatSize(result.afterBytes)}.\n'
+            'Reclaimed ${LibraryStats.formatSize(result.reclaimedBytes)} and '
+            'removed ${result.removedThumbnailCount} thumbnails.',
+      ),
+      DataCompactionStatus.busy => (
+        'Cannot compact data folder',
+        result.errorMessage ?? 'Finish current Library work and try again.',
+      ),
+      DataCompactionStatus.failed => (
+        'Could not compact data folder',
+        '${result.errorMessage ?? 'Compaction stopped early.'} '
+            'Any removed thumbnails were unreferenced.',
+      ),
+    };
+    showMacosAlertDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: MacosIcon(
+          result.status == DataCompactionStatus.completed
+              ? CupertinoIcons.check_mark_circled
+              : CupertinoIcons.exclamationmark_triangle,
+        ),
+        title: Text(title),
+        message: Text(message),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('OK'),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
       ),
     );
   }

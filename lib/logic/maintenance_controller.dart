@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/providers.dart';
+import '../services/data_compaction_service.dart';
 import '../services/empty_folder_cleanup_service.dart';
 import '../services/media_deletion_service.dart';
 import '../services/thumbnail_service.dart';
@@ -13,6 +14,7 @@ import 'managed_library_service.dart';
 import 'private_library_controller.dart';
 import 'settings_provider.dart';
 import 'status_message_provider.dart';
+import 'stats_provider.dart';
 
 part 'maintenance_controller.g.dart';
 
@@ -216,11 +218,53 @@ class MaintenanceController extends _$MaintenanceController {
     }
   }
 
+  Future<DataCompactionResult> compactDataFolder() async {
+    final operation = ref.read(libraryOperationControllerProvider.notifier);
+    if (!operation.beginCleanup()) {
+      return const DataCompactionResult(
+        status: DataCompactionStatus.busy,
+        beforeBytes: 0,
+        afterBytes: 0,
+        removedThumbnailCount: 0,
+        errorMessage: 'Finish current Library work and try again.',
+      );
+    }
+
+    ref
+        .read(scanStatusProvider.notifier)
+        .setStatus('Compacting data folder...');
+    try {
+      return await ref.read(dataCompactionRunnerProvider)();
+    } catch (_) {
+      return const DataCompactionResult(
+        status: DataCompactionStatus.failed,
+        beforeBytes: 0,
+        afterBytes: 0,
+        removedThumbnailCount: 0,
+        errorMessage: 'Failed while compacting the data folder.',
+      );
+    } finally {
+      operation.endCleanup();
+      ref.read(scanStatusProvider.notifier).setStatus('');
+      ref.invalidate(dataFolderSizeProvider);
+    }
+  }
+
   Future<ManagedLibraryRemoveResult> removeFolder(int folderId) async {
+    final videos = await ref
+        .read(videosDaoProvider)
+        .getVideosByFolder(folderId);
     final result = await ref
         .read(managedLibraryServiceProvider)
         .remove(folderId);
     if (result.status == ManagedLibraryRemoveStatus.removed) {
+      try {
+        await ref
+            .read(thumbnailServiceProvider)
+            .deleteManagedFiles(videos.map((video) => video.thumbnailPath));
+      } catch (error) {
+        print('Could not remove thumbnails for deleted Library: $error');
+      }
       print(
         'DEBUG: Removed folder $folderId and '
         '${result.removedVideoCount} videos',

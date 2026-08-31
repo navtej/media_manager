@@ -6,14 +6,19 @@ import 'package:path/path.dart' as p;
 
 /// Service to handle persistent storage of thumbnails
 class ThumbnailService {
+  ThumbnailService({Future<Directory> Function()? applicationSupportDirectory})
+    : _applicationSupportDirectory =
+          applicationSupportDirectory ?? getApplicationSupportDirectory;
+
+  final Future<Directory> Function() _applicationSupportDirectory;
   Directory? _thumbnailsDir;
 
   Future<void> init() async {
     if (_thumbnailsDir != null) return;
-    
-    final appDir = await getApplicationSupportDirectory();
+
+    final appDir = await _applicationSupportDirectory();
     _thumbnailsDir = Directory(p.join(appDir.path, 'thumbnails'));
-    
+
     if (!await _thumbnailsDir!.exists()) {
       await _thumbnailsDir!.create(recursive: true);
     }
@@ -47,6 +52,27 @@ class ThumbnailService {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  Future<int> deleteManagedFiles(Iterable<String?> paths) async {
+    final directoryPath = p.normalize(p.absolute(await _ensureInit()));
+    var removed = 0;
+    for (final path in paths) {
+      if (path == null || path.isEmpty) {
+        continue;
+      }
+      final normalizedPath = p.normalize(p.absolute(path));
+      if (p.dirname(normalizedPath) != directoryPath) {
+        continue;
+      }
+      if (await FileSystemEntity.type(normalizedPath, followLinks: false) !=
+          FileSystemEntityType.file) {
+        continue;
+      }
+      await File(normalizedPath).delete();
+      removed += 1;
+    }
+    return removed;
   }
 }
 

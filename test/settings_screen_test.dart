@@ -16,6 +16,7 @@ import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/stats_provider.dart';
 import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/private_library_auth_service.dart';
+import 'package:movie_manager/services/data_compaction_service.dart';
 import 'package:movie_manager/ui/screens/settings_screen.dart';
 import 'package:movie_manager/ui/widgets/private_library_auto_lock_control.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +24,69 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/library_access_test_adapter.dart';
 
 void main() {
+  testWidgets('data folder compaction confirms, blocks, and reports result', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final completion = Completer<DataCompactionResult>();
+    var compactionCalls = 0;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          settingsProvider.overrideWith(_TestSettings.new),
+          dataFolderSizeProvider.overrideWith((ref) async => 1024),
+          dataCompactionRunnerProvider.overrideWithValue(() {
+            compactionCalls += 1;
+            return completion.future;
+          }),
+        ],
+        child: const MacosApp(home: MacosWindow(child: SettingsScreen())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('compact-data-folder-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Compact Data Folder?'), findsOneWidget);
+    expect(
+      find.text('Downloaded models and media files are not deleted.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('confirm-compact-data-folder-button')),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(compactionCalls, 1);
+    expect(find.text('Compacting data folder...'), findsOneWidget);
+    expect(find.text('Working...'), findsOneWidget);
+
+    completion.complete(
+      const DataCompactionResult(
+        status: DataCompactionStatus.completed,
+        beforeBytes: 2048,
+        afterBytes: 1024,
+        removedThumbnailCount: 3,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Data folder compacted'), findsOneWidget);
+    expect(
+      find.textContaining('Reclaimed 1.0 KB and removed 3 thumbnails.'),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
   testWidgets('settings labels libraries and saves inline name edits', (
     tester,
   ) async {

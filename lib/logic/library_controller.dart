@@ -157,6 +157,7 @@ class LibraryController extends _$LibraryController {
       print('DEBUG: syncAll found ${folders.length} folders');
 
       final toDelete = <int>[];
+      final toDeleteThumbnailPaths = <String?>[];
       final toMarkOffline = <int>[];
       final toMarkOnline = <int>[];
       final toUpdateSize = <int, int>{};
@@ -194,6 +195,7 @@ class LibraryController extends _$LibraryController {
 
                     if (!fileExists) {
                       toDelete.add(v.id);
+                      toDeleteThumbnailPaths.add(v.thumbnailPath);
                       continue;
                     }
 
@@ -248,6 +250,17 @@ class LibraryController extends _$LibraryController {
         });
 
         print('DEBUG: Transactional maintenance completed');
+        if (toDeleteThumbnailPaths.isNotEmpty) {
+          try {
+            await ref
+                .read(thumbnailServiceProvider)
+                .deleteManagedFiles(toDeleteThumbnailPaths);
+          } catch (error) {
+            print(
+              'Could not remove thumbnails for stale catalog videos: $error',
+            );
+          }
+        }
       }
 
       await tagDao.pruneEmptyTags();
@@ -358,7 +371,17 @@ class LibraryController extends _$LibraryController {
       ref.read(scanStatusProvider.notifier).setStatus('Rebuilding library...');
 
       final db = ref.read(databaseProvider);
+      final existingVideos = await ref.read(videosDaoProvider).getAllVideos();
       await db.clearAllData();
+      try {
+        await ref
+            .read(thumbnailServiceProvider)
+            .deleteManagedFiles(
+              existingVideos.map((video) => video.thumbnailPath),
+            );
+      } catch (error) {
+        print('Could not remove thumbnails for rebuilt Library: $error');
+      }
 
       print('DEBUG: Library cleared, starting full sync...');
 

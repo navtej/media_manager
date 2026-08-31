@@ -11,6 +11,8 @@ import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/library_operation_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
+import 'package:movie_manager/services/thumbnail_service.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -172,6 +174,106 @@ void main() {
       'start:${root.path}:bookmark',
       'stop:${root.path}',
     ]);
+  });
+
+  test('syncAll removes thumbnails for missing catalog videos', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final root = await Directory.systemTemp.createTemp(
+      'library-thumbnail-sync-test',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final folderId = await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: root.path,
+        securityScopedBookmark: const drift.Value('bookmark'),
+      ),
+    );
+    final thumbnailService = ThumbnailService(
+      applicationSupportDirectory: () async => root,
+    );
+    final thumbnail = File(
+      await thumbnailService.saveThumbnail('stale.jpg', [1, 2, 3]),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        thumbnailServiceProvider.overrideWithValue(thumbnailService),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: _RecordingLibraryAccessAdapter()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(libraryControllerProvider.future);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await _waitForScanIdle(container);
+    await db.videosDao.insertVideo(
+      VideosCompanion.insert(
+        folderId: folderId,
+        absolutePath: p.join(root.path, 'missing.mp4'),
+        title: 'Missing',
+        thumbnailPath: drift.Value(thumbnail.path),
+      ),
+    );
+
+    await container.read(libraryControllerProvider.notifier).syncAll();
+
+    expect(
+      await db.videosDao.getVideoByPath(p.join(root.path, 'missing.mp4')),
+      isNull,
+    );
+    expect(await thumbnail.exists(), isFalse);
+  });
+
+  test('rebuildLibrary removes thumbnails for cleared catalog rows', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final root = await Directory.systemTemp.createTemp(
+      'library-thumbnail-rebuild-test',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final folderId = await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(path: root.path),
+    );
+    final thumbnailService = ThumbnailService(
+      applicationSupportDirectory: () async => root,
+    );
+    final thumbnail = File(
+      await thumbnailService.saveThumbnail('rebuild.jpg', [1, 2, 3]),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        thumbnailServiceProvider.overrideWithValue(thumbnailService),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(libraryControllerProvider.future);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await _waitForScanIdle(container);
+    await db.videosDao.insertVideo(
+      VideosCompanion.insert(
+        folderId: folderId,
+        absolutePath: p.join(root.path, 'removed-by-rebuild.mp4'),
+        title: 'Removed by rebuild',
+        thumbnailPath: drift.Value(thumbnail.path),
+      ),
+    );
+
+    await container.read(libraryControllerProvider.notifier).rebuildLibrary();
+
+    expect(
+      await db.videosDao.getVideoByPath(
+        p.join(root.path, 'removed-by-rebuild.mp4'),
+      ),
+      isNull,
+    );
+    expect(await thumbnail.exists(), isFalse);
   });
 }
 
