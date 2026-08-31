@@ -767,10 +767,6 @@ class _FolderList extends ConsumerWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 12),
-                                  _LibraryGroupSelector(
-                                    folder: folder,
-                                    groupNames: groupNames,
-                                  ),
                                 ],
                               ),
                               if (statusLabel != null)
@@ -785,6 +781,11 @@ class _FolderList extends ConsumerWidget {
                                 ),
                             ],
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        _LibraryGroupSelector(
+                          folder: folder,
+                          groupNames: groupNames,
                         ),
                         MovieManagerIconButton(
                           label: folder.isPrivate

@@ -411,6 +411,13 @@ void main() {
 
     final selector = find.byKey(ValueKey('library-group-selector-$folderId'));
     await tester.ensureVisible(selector);
+    final removeLibraryButton = find.bySemanticsLabel(
+      'Remove this folder from the library. Files stay on disk.',
+    );
+    expect(
+      tester.getCenter(selector).dy,
+      closeTo(tester.getCenter(removeLibraryButton).dy, 0.1),
+    );
     await tester.tap(selector);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cinema').last);
