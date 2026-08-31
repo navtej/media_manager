@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:macos_ui/macos_ui.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
+import '../../logic/playback_controller.dart';
+import '../../logic/private_library_controller.dart';
 import '../../logic/settings_provider.dart';
 import '../widgets/video_grid.dart';
 import '../widgets/status_footer.dart';
@@ -23,6 +25,7 @@ import '../widgets/show_offline_media_control.dart';
 import '../widgets/video_move_dialog.dart';
 import '../library_result_messages.dart';
 import '../movie_manager_visual_system.dart';
+import '../../services/library_access_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -516,6 +519,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                 .notifier,
                                           )
                                           .selectLoaded(loadedVideoIds),
+                                onPlay: _playSelectedVideos,
                                 onMove: () {
                                   final selectedVideoIds = _selectedVideoIds();
                                   if (selectedVideoIds.isEmpty) return;
@@ -697,6 +701,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? 'Marked ${_videoCountText(selectedVideoIds.length)} as favorite.'
                 : 'Removed favorite from ${_videoCountText(selectedVideoIds.length)}.',
           );
+    });
+  }
+
+  Future<void> _playSelectedVideos() async {
+    final selectedVideoIds = _selectedVideoIds();
+    if (selectedVideoIds.isEmpty) {
+      return;
+    }
+
+    await _runBulkAction(() async {
+      try {
+        final opened = await ref
+            .read(privateLibraryAccessControllerProvider.notifier)
+            .runVideoAction<bool>(
+              videoIds: selectedVideoIds,
+              action: () => ref
+                  .read(playbackControllerProvider)
+                  .playPlaylist(selectedVideoIds),
+            );
+        ref
+            .read(statusMessageProvider.notifier)
+            .set(
+              opened == null
+                  ? 'Authentication cancelled.'
+                  : opened
+                  ? 'Playing ${_videoCountText(selectedVideoIds.length)}.'
+                  : 'Unable to open selected videos.',
+            );
+      } on LibraryAccessNeedsRepairException catch (error) {
+        ref.read(statusMessageProvider.notifier).set(error.message);
+      } on StateError catch (error) {
+        ref.read(statusMessageProvider.notifier).set(error.message);
+      }
     });
   }
 

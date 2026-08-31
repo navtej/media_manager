@@ -62,16 +62,6 @@ class NaturalLanguageService {
     }
   }
 
-  Future<bool> playVideo(String path) async {
-    try {
-      await _channel.invokeMethod('playVideo', {'path': path});
-      return true;
-    } on PlatformException catch (e) {
-      print("Failed to play video: '${e.message}'.");
-      return false;
-    }
-  }
-
   Future<String> transcribeAudio({
     required String audioPath,
     required String modelPath,

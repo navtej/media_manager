@@ -15,6 +15,7 @@ void main() {
             selectedCount: 0,
             isBusy: false,
             onSelectLoaded: () {},
+            onPlay: () {},
             onMove: () {},
             onDelete: () {},
             onFavorite: () {},
@@ -28,6 +29,7 @@ void main() {
 
     expect(find.text('Select Loaded'), findsOneWidget);
     expect(find.text('0 Selected'), findsOneWidget);
+    expect(find.text('Play'), findsOneWidget);
     expect(find.text('Move'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
     expect(find.text('Favorite'), findsOneWidget);
@@ -35,6 +37,18 @@ void main() {
     expect(find.text('Clear Tags'), findsOneWidget);
     expect(find.text('Clear Selection'), findsOneWidget);
 
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Play'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Play'))
+          .secondary,
+      isTrue,
+    );
     expect(
       tester
           .widget<PushButton>(find.widgetWithText(PushButton, 'Select Loaded'))
@@ -46,6 +60,12 @@ void main() {
           .widget<PushButton>(find.widgetWithText(PushButton, 'Move'))
           .onPressed,
       isNull,
+    );
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Move'))
+          .secondary,
+      isTrue,
     );
     expect(
       tester
@@ -74,6 +94,7 @@ void main() {
             selectedCount: 3,
             isBusy: false,
             onSelectLoaded: () {},
+            onPlay: () {},
             onMove: () {},
             onDelete: () {},
             onFavorite: () {},
@@ -85,6 +106,26 @@ void main() {
       ),
     );
 
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Play'))
+          .secondary,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Move'))
+          .secondary,
+      isTrue,
+    );
+
+    expect(
+      find.descendant(
+        of: find.widgetWithText(PushButton, 'Play'),
+        matching: find.byIcon(CupertinoIcons.play_fill),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.descendant(
         of: find.widgetWithText(PushButton, 'Select Loaded'),
@@ -151,6 +192,7 @@ void main() {
             selectedCount: 2,
             isBusy: false,
             onSelectLoaded: () => calls.add('select-loaded'),
+            onPlay: () => calls.add('play'),
             onMove: () => calls.add('move'),
             onDelete: () => calls.add('delete'),
             onFavorite: () => calls.add('favorite'),
@@ -163,6 +205,7 @@ void main() {
     );
 
     await tester.tap(find.widgetWithText(PushButton, 'Select Loaded'));
+    await tester.tap(find.widgetWithText(PushButton, 'Play'));
     await tester.tap(find.widgetWithText(PushButton, 'Move'));
     await tester.tap(find.widgetWithText(PushButton, 'Delete'));
     await tester.tap(find.widgetWithText(PushButton, 'Favorite'));
@@ -172,6 +215,7 @@ void main() {
 
     expect(calls, [
       'select-loaded',
+      'play',
       'move',
       'delete',
       'favorite',

@@ -429,6 +429,41 @@ class MainFlutterWindow: NSWindow {
           return
         }
         result(nil)
+      } else if call.method == "playPlaylist" {
+        guard let args = call.arguments as? [String: Any],
+              let paths = args["paths"] as? [String],
+              !paths.isEmpty else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Video paths missing", details: nil))
+          return
+        }
+
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        guard let applicationURL = NSWorkspace.shared.urlForApplication(toOpen: urls[0]) else {
+          result(FlutterError(code: "PLAYBACK_ERROR", message: "No default media player is available.", details: nil))
+          return
+        }
+        let playlistURL = FileManager.default.temporaryDirectory
+          .appendingPathComponent("MovieManager-\(UUID().uuidString).m3u")
+        do {
+          try ("#EXTM3U\n" + urls.map(\.absoluteString).joined(separator: "\n"))
+            .write(to: playlistURL, atomically: true, encoding: .utf8)
+        } catch {
+          result(FlutterError(code: "PLAYBACK_ERROR", message: error.localizedDescription, details: nil))
+          return
+        }
+        NSWorkspace.shared.open(
+          [playlistURL],
+          withApplicationAt: applicationURL,
+          configuration: NSWorkspace.OpenConfiguration()
+        ) { _, error in
+          DispatchQueue.main.async {
+            if let error {
+              result(FlutterError(code: "PLAYBACK_ERROR", message: error.localizedDescription, details: nil))
+            } else {
+              result(nil)
+            }
+          }
+        }
       } else {
         result(FlutterMethodNotImplemented)
       }

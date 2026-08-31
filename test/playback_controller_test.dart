@@ -5,6 +5,7 @@ import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/logic/playback_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
 import 'package:movie_manager/services/natural_language_service.dart';
+import 'package:movie_manager/services/playback_service.dart';
 
 void main() {
   test(
@@ -33,6 +34,40 @@ void main() {
     );
 
     expect(fixture.events, isEmpty);
+  });
+
+  test('builds one playlist while all libraries are open', () async {
+    final fixture = await _PlaybackFixture.create();
+    addTearDown(fixture.dispose);
+    final secondFolderId = await fixture.db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: '/Archive',
+        securityScopedBookmark: const drift.Value('archive-bookmark'),
+      ),
+    );
+    await fixture.db.videosDao.insertVideo(
+      VideosCompanion.insert(
+        folderId: secondFolderId,
+        absolutePath: '/Archive/second.mp4',
+        title: 'second',
+      ),
+    );
+    final second = (await fixture.db.videosDao.getVideoByPath(
+      '/Archive/second.mp4',
+    ))!;
+
+    expect(
+      await fixture.controller.playPlaylist([second.id, fixture.video.id]),
+      isTrue,
+    );
+
+    expect(fixture.events, [
+      'start:/Archive:archive-bookmark',
+      'start:/Library:bookmark',
+      'playlist:/Archive/second.mp4,/Library/movie.mp4',
+      'stop:/Library',
+      'stop:/Archive',
+    ]);
   });
 }
 
@@ -70,10 +105,12 @@ class _PlaybackFixture {
     final events = <String>[];
     final controller = PlaybackController(
       foldersDao: db.foldersDao,
+      videosDao: db.videosDao,
       libraryAccessService: LibraryAccessService(
         adapter: _PlaybackLibraryAccessAdapter(events),
       ),
-      naturalLanguageService: _RecordingNaturalLanguageService(events),
+      playbackService: _RecordingPlaybackService(events),
+      naturalLanguageService: NaturalLanguageService(),
     );
 
     return _PlaybackFixture(
@@ -110,14 +147,20 @@ class _PlaybackLibraryAccessAdapter implements LibraryAccessAdapter {
   }
 }
 
-class _RecordingNaturalLanguageService extends NaturalLanguageService {
-  _RecordingNaturalLanguageService(this.events);
+class _RecordingPlaybackService extends PlaybackService {
+  _RecordingPlaybackService(this.events);
 
   final List<String> events;
 
   @override
   Future<bool> playVideo(String path) async {
     events.add('play:$path');
+    return true;
+  }
+
+  @override
+  Future<bool> playPlaylist(List<String> paths) async {
+    events.add('playlist:${paths.join(',')}');
     return true;
   }
 }

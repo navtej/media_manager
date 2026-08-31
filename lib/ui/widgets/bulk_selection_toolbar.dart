@@ -9,6 +9,7 @@ class BulkSelectionToolbar extends StatelessWidget {
     required this.selectedCount,
     required this.isBusy,
     required this.onSelectLoaded,
+    required this.onPlay,
     required this.onMove,
     required this.onDelete,
     required this.onFavorite,
@@ -20,6 +21,7 @@ class BulkSelectionToolbar extends StatelessWidget {
   final int selectedCount;
   final bool isBusy;
   final VoidCallback? onSelectLoaded;
+  final VoidCallback? onPlay;
   final VoidCallback? onMove;
   final VoidCallback? onDelete;
   final VoidCallback? onFavorite;
@@ -60,6 +62,17 @@ class BulkSelectionToolbar extends StatelessWidget {
           const SizedBox(width: 12),
           PushButton(
             controlSize: ControlSize.regular,
+            secondary: !hasSelection,
+            onPressed: canUseSelection ? onPlay : null,
+            child: const _ToolbarButtonLabel(
+              icon: Icon(CupertinoIcons.play_fill, size: 16),
+              label: 'Play',
+            ),
+          ),
+          const SizedBox(width: 8),
+          PushButton(
+            controlSize: ControlSize.regular,
+            secondary: true,
             onPressed: canUseSelection ? onMove : null,
             child: const _ToolbarButtonLabel(
               icon: Icon(CupertinoIcons.arrow_right_arrow_left, size: 16),
