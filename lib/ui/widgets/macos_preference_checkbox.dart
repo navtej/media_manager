@@ -10,11 +10,15 @@ class MacosPreferenceCheckbox extends StatefulWidget {
     required this.value,
     required this.onChanged,
     required this.semanticLabel,
+    this.emphasized = false,
+    this.lightBackground = false,
   });
 
   final bool value;
   final ValueChanged<bool>? onChanged;
   final String semanticLabel;
+  final bool emphasized;
+  final bool lightBackground;
 
   @override
   State<MacosPreferenceCheckbox> createState() =>
@@ -43,6 +47,12 @@ class _MacosPreferenceCheckboxState extends State<MacosPreferenceCheckbox> {
   Widget build(BuildContext context) {
     final theme = MacosTheme.of(context);
     final enabled = widget.onChanged != null;
+    final borderColor = widget.value || widget.emphasized
+        ? theme.primaryColor
+        : MacosDynamicColor.resolve(
+            MacosColors.systemGrayColor,
+            context,
+          ).withValues(alpha: 0.55);
     return Semantics(
       checked: widget.value,
       enabled: enabled,
@@ -90,15 +100,14 @@ class _MacosPreferenceCheckboxState extends State<MacosPreferenceCheckbox> {
                     borderRadius: BorderRadius.circular(4),
                     color: widget.value
                         ? theme.primaryColor
+                        : widget.lightBackground
+                        ? MacosColors.white
+                        : widget.emphasized
+                        ? theme.canvasColor.withValues(alpha: 0.92)
                         : MacosColors.transparent,
                     border: Border.all(
-                      color: widget.value
-                          ? theme.primaryColor
-                          : MacosDynamicColor.resolve(
-                              MacosColors.systemGrayColor,
-                              context,
-                            ).withValues(alpha: 0.55),
-                      width: 1.5,
+                      color: borderColor,
+                      width: widget.emphasized ? 2 : 1.5,
                     ),
                   ),
                   child: widget.value

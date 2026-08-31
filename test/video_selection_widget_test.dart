@@ -71,6 +71,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final checkboxBox = find.descendant(
+      of: find.byKey(const ValueKey('video-selection-1')),
+      matching: find.byType(Container),
+    );
+    final decoration =
+        tester.widget<Container>(checkboxBox).decoration! as BoxDecoration;
+    expect(decoration.color, isNot(MacosColors.transparent));
+    expect(decoration.border!.top.width, 2);
+
     await tester.tap(find.byKey(const ValueKey('video-selection-1')));
     await tester.pumpAndSettle();
 

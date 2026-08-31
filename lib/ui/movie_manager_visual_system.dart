@@ -137,7 +137,6 @@ class MovieManagerIconButton extends StatefulWidget {
 
 class _MovieManagerIconButtonState extends State<MovieManagerIconButton> {
   late final FocusNode _focusNode;
-  bool _showFocus = false;
 
   @override
   void initState() {
@@ -169,9 +168,7 @@ class _MovieManagerIconButtonState extends State<MovieManagerIconButton> {
         child: FocusableActionDetector(
           enabled: enabled,
           focusNode: _focusNode,
-          onShowFocusHighlight: (value) {
-            if (_showFocus != value) setState(() => _showFocus = value);
-          },
+          onShowFocusHighlight: (_) => setState(() {}),
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
             SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
@@ -186,31 +183,20 @@ class _MovieManagerIconButtonState extends State<MovieManagerIconButton> {
           },
           child: SizedBox.square(
             dimension: MovieManagerControlMetrics.minimumTarget,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: _showFocus
-                    ? Border.all(
-                        color: MacosTheme.of(context).primaryColor,
-                        width: 2,
-                      )
-                    : null,
-                borderRadius: BorderRadius.circular(MovieManagerRadii.control),
+            child: MacosIconButton(
+              semanticLabel: widget.label,
+              boxConstraints: const BoxConstraints.tightFor(
+                width: MovieManagerControlMetrics.minimumTarget,
+                height: MovieManagerControlMetrics.minimumTarget,
               ),
-              child: MacosIconButton(
-                semanticLabel: widget.label,
-                boxConstraints: const BoxConstraints.tightFor(
-                  width: MovieManagerControlMetrics.minimumTarget,
-                  height: MovieManagerControlMetrics.minimumTarget,
-                ),
-                padding: const EdgeInsets.all(MovieManagerSpacing.compact),
-                borderRadius: BorderRadius.circular(MovieManagerRadii.control),
-                icon: Icon(
-                  widget.icon,
-                  size: MovieManagerIconSizes.action,
-                  color: widget.color,
-                ),
-                onPressed: widget.onPressed,
+              padding: const EdgeInsets.all(MovieManagerSpacing.compact),
+              borderRadius: BorderRadius.circular(MovieManagerRadii.control),
+              icon: Icon(
+                widget.icon,
+                size: MovieManagerIconSizes.action,
+                color: widget.color,
               ),
+              onPressed: widget.onPressed,
             ),
           ),
         ),

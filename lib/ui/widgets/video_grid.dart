@@ -372,6 +372,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
                                 child: _VideoSelectionCheckbox(
                                   key: ValueKey('video-selection-${video.id}'),
                                   selected: isSelected,
+                                  lightBackground: _isThumbnailHovering,
                                   onPressed: () =>
                                       selectionController.toggle(video.id),
                                 ),
@@ -394,9 +395,14 @@ class _VideoGridItemState extends State<VideoGridItem> {
                               const SizedBox(height: 2),
                               Row(
                                 children: [
-                                  _buildCompactActions(
-                                    ref,
-                                    includeTagAction: false,
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: _buildCompactActions(
+                                        ref,
+                                        includeTagAction: false,
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   ExcludeSemantics(
@@ -651,6 +657,13 @@ class _VideoGridItemState extends State<VideoGridItem> {
           color: hasFreshSummary ? MacosColors.systemGreenColor : null,
           onPressed: () => _showSummaryDialog(context, ref, widget.video),
         ),
+        MovieManagerIconButton(
+          key: ValueKey('video-delete-${widget.video.id}'),
+          label: 'Delete',
+          icon: CupertinoIcons.trash,
+          color: MovieManagerVisuals.errorColor(context),
+          onPressed: () => _confirmDelete(ref),
+        ),
         MergeSemantics(
           child: Semantics(
             label: 'More actions',
@@ -665,10 +678,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
                   MacosPulldownMenuItem(
                     title: const Text('Reveal in Finder'),
                     onTap: () => _revealVideo(ref, widget.video),
-                  ),
-                  MacosPulldownMenuItem(
-                    title: const Text('Delete'),
-                    onTap: () => _confirmDelete(ref),
                   ),
                   MacosPulldownMenuItem(
                     title: const Text('Clear Tags'),
@@ -1097,10 +1106,12 @@ class _VideoSelectionCheckbox extends StatelessWidget {
   const _VideoSelectionCheckbox({
     super.key,
     required this.selected,
+    this.lightBackground = false,
     required this.onPressed,
   });
 
   final bool selected;
+  final bool lightBackground;
   final VoidCallback onPressed;
 
   @override
@@ -1108,6 +1119,8 @@ class _VideoSelectionCheckbox extends StatelessWidget {
     return MacosPreferenceCheckbox(
       value: selected,
       semanticLabel: selected ? 'Deselect video' : 'Select video',
+      emphasized: true,
+      lightBackground: lightBackground,
       onChanged: (_) => onPressed(),
     );
   }

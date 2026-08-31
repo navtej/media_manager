@@ -14,6 +14,7 @@ import 'package:movie_manager/logic/settings_provider.dart';
 import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/playback_controller.dart';
+import 'package:movie_manager/services/playback_service.dart';
 import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:movie_manager/ui/screens/home_screen.dart';
 import 'package:movie_manager/ui/widgets/catalog_presentation.dart';
@@ -186,6 +187,7 @@ void main() {
     );
     final playbackController = _RecordingPlaybackController(
       foldersDao: _TestFoldersDao(db, [folder]),
+      videosDao: videosDao,
     );
 
     await tester.pumpWidget(
@@ -278,7 +280,7 @@ void main() {
 
     await tester.tap(find.byType(MacosPulldownButton));
     await tester.pumpAndSettle();
-    for (final label in ['Reveal in Finder', 'Delete', 'Clear Tags']) {
+    for (final label in ['Reveal in Finder', 'Clear Tags']) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('Info'), findsNothing);
@@ -289,9 +291,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(playbackController.revealedVideoIds, [1]);
 
-    await tester.tap(find.byKey(const ValueKey('video-more-1')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.byKey(const ValueKey('video-delete-1')));
     await tester.pumpAndSettle();
     expect(find.text('Delete Video?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
@@ -699,12 +699,14 @@ class _TestTagsDao extends TagsDao {
 }
 
 class _RecordingPlaybackController extends PlaybackController {
-  _RecordingPlaybackController({required FoldersDao foldersDao})
-    : super(
-        foldersDao: foldersDao,
-        libraryAccessService: LibraryAccessService(),
-        naturalLanguageService: NaturalLanguageService(),
-      );
+  _RecordingPlaybackController({
+    required super.foldersDao,
+    required super.videosDao,
+  }) : super(
+         libraryAccessService: LibraryAccessService(),
+         playbackService: PlaybackService(),
+         naturalLanguageService: NaturalLanguageService(),
+       );
 
   final List<int> playedVideoIds = [];
   final List<int> revealedVideoIds = [];

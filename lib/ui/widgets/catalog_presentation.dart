@@ -197,7 +197,6 @@ class _PresentationButton extends StatefulWidget {
 
 class _PresentationButtonState extends State<_PresentationButton> {
   final FocusNode _focusNode = FocusNode();
-  bool _focused = false;
 
   @override
   void dispose() {
@@ -222,7 +221,7 @@ class _PresentationButtonState extends State<_PresentationButton> {
         message: widget.label,
         child: FocusableActionDetector(
           focusNode: _focusNode,
-          onShowFocusHighlight: (value) => setState(() => _focused = value),
+          onShowFocusHighlight: (_) => setState(() {}),
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
             SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
@@ -239,9 +238,6 @@ class _PresentationButtonState extends State<_PresentationButton> {
             decoration: BoxDecoration(
               color: widget.selected
                   ? theme.primaryColor.withValues(alpha: 0.18)
-                  : null,
-              border: _focused
-                  ? Border.all(color: theme.primaryColor, width: 2)
                   : null,
               borderRadius: BorderRadius.circular(5),
             ),
