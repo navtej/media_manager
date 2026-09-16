@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
@@ -11,6 +12,8 @@ import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/library_controller.dart';
 import 'package:movie_manager/logic/library_operation_controller.dart';
 import 'package:movie_manager/services/library_access_service.dart';
+import 'package:movie_manager/services/media_service.dart';
+import 'package:movie_manager/services/scanner_service.dart';
 import 'package:movie_manager/services/thumbnail_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +67,63 @@ void main() {
     ).fetch(_criteria(folderId: folderId));
     expect(catalog.loadedVideos, isEmpty);
     expect(catalog.totalCount, 0);
+  });
+
+  test('scan skips a candidate that disappears during preparation', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final root = await Directory.systemTemp.createTemp(
+      'library-scan-missing-candidate-test',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final survivingFile = File(p.join(root.path, 'नाम ｜ video.mp4'));
+    await survivingFile.writeAsBytes(const <int>[1, 2, 3]);
+    final missingPath = p.join(root.path, 'gone-？-video.mp4');
+
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final folderId = await db.foldersDao.insertFolder(
+      FoldersCompanion.insert(
+        path: root.path,
+        securityScopedBookmark: const drift.Value('bookmark'),
+      ),
+    );
+    final messages = <String>[];
+    final adapter = _RecordingLibraryAccessAdapter();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        scannerServiceProvider.overrideWithValue(
+          _FixedBatchScannerService(<String>[missingPath, survivingFile.path]),
+        ),
+        mediaServiceProvider.overrideWithValue(_StubMediaService()),
+        libraryAccessServiceProvider.overrideWithValue(
+          LibraryAccessService(adapter: adapter),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await runZoned(
+      () async {
+        await container.read(libraryControllerProvider.future);
+        await adapter.started;
+        await _waitForScanIdle(container);
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (self, parent, zone, line) => messages.add(line),
+      ),
+    );
+
+    expect(
+      (await db.videosDao.getVideosByFolder(
+        folderId,
+      )).map((video) => video.absolutePath),
+      [survivingFile.path],
+    );
+    expect(
+      messages.where((message) => message.contains('Error preparing')),
+      isEmpty,
+    );
   });
 
   test('startup scan retries after Library maintenance finishes', () async {
@@ -340,6 +400,30 @@ class _RecordingLibraryAccessAdapter implements LibraryAccessAdapter {
   Future<void> stopAccessing(String path) async {
     events.add('stop:$path');
   }
+}
+
+class _FixedBatchScannerService extends ScannerService {
+  _FixedBatchScannerService(this.paths);
+
+  final List<String> paths;
+
+  @override
+  Stream<List<String>> scanPaths(List<String> rootPaths) async* {
+    yield paths;
+  }
+}
+
+class _StubMediaService extends MediaService {
+  @override
+  Future<Map<String, dynamic>> getMetadata(String path) async => const {
+    'duration': 0.0,
+  };
+
+  @override
+  Future<Uint8List?> generateThumbnail(
+    String path,
+    double durationSeconds,
+  ) async => null;
 }
 
 Future<void> _waitForScanIdle(ProviderContainer container) async {

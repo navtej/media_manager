@@ -42,7 +42,7 @@ final class ModelDownloadControllerProvider
 }
 
 String _$modelDownloadControllerHash() =>
-    r'de8e288555e0d993316cdf93eef9ed4a31ca11d1';
+    r'b7d4dcd29d62b14db22d8420d9c780171e3284dd';
 
 abstract class _$ModelDownloadController extends $Notifier<ModelDownloadState> {
   ModelDownloadState build();

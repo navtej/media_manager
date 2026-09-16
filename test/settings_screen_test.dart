@@ -364,9 +364,10 @@ void main() {
     final selectedDirectory = Directory('${root.path}/Settings Library');
     selectedDirectory.createSync();
 
+    final previousFilePicker = FilePickerPlatform.instance;
     final filePicker = _FakeFilePicker(selectedDirectory.path);
-    FilePicker.platform = filePicker;
-    addTearDown(FilePickerIO.registerWith);
+    FilePickerPlatform.instance = filePicker;
+    addTearDown(() => FilePickerPlatform.instance = previousFilePicker);
 
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -510,9 +511,10 @@ void main() {
   testWidgets('settings presents the managed Library add outcome', (
     tester,
   ) async {
+    final previousFilePicker = FilePickerPlatform.instance;
     final filePicker = _FakeFilePicker('/Volumes/Selected Library');
-    FilePicker.platform = filePicker;
-    addTearDown(FilePickerIO.registerWith);
+    FilePickerPlatform.instance = filePicker;
+    addTearDown(() => FilePickerPlatform.instance = previousFilePicker);
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
 
@@ -932,7 +934,7 @@ class _FakePrivateLibraryAuthService extends PrivateLibraryAuthService {
   }
 }
 
-class _FakeFilePicker extends FilePicker {
+class _FakeFilePicker extends FilePickerPlatform {
   _FakeFilePicker(this.selectedDirectory);
 
   final String? selectedDirectory;
@@ -941,8 +943,11 @@ class _FakeFilePicker extends FilePicker {
   @override
   Future<String?> getDirectoryPath({
     String? dialogTitle,
-    bool lockParentWindow = false,
     String? initialDirectory,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
   }) async {
     directoryPickCount += 1;
     return selectedDirectory;

@@ -15,6 +15,7 @@ void main() {
             selectedCount: 0,
             isBusy: false,
             onSelectLoaded: () {},
+            onCopyYoutubeUrls: () {},
             onPlay: () {},
             onMove: () {},
             onDelete: () {},
@@ -27,7 +28,17 @@ void main() {
       ),
     );
 
-    expect(find.text('Select Loaded'), findsOneWidget);
+    expect(find.text('Loaded'), findsOneWidget);
+    expect(find.text('Select Loaded'), findsNothing);
+    expect(find.byKey(const ValueKey('bulk-selection-group')), findsOneWidget);
+    expect(find.text('Select'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('bulk-selection-group')),
+        matching: find.text('Loaded'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('0 Selected'), findsOneWidget);
     expect(find.text('Play'), findsOneWidget);
     expect(find.text('Move'), findsOneWidget);
@@ -51,7 +62,7 @@ void main() {
     );
     expect(
       tester
-          .widget<PushButton>(find.widgetWithText(PushButton, 'Select Loaded'))
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Loaded'))
           .onPressed,
       isNotNull,
     );
@@ -94,6 +105,7 @@ void main() {
             selectedCount: 3,
             isBusy: false,
             onSelectLoaded: () {},
+            onCopyYoutubeUrls: () {},
             onPlay: () {},
             onMove: () {},
             onDelete: () {},
@@ -128,7 +140,7 @@ void main() {
     );
     expect(
       find.descendant(
-        of: find.widgetWithText(PushButton, 'Select Loaded'),
+        of: find.widgetWithText(PushButton, 'Loaded'),
         matching: find.byIcon(CupertinoIcons.check_mark_circled),
       ),
       findsOneWidget,
@@ -178,7 +190,7 @@ void main() {
   });
 
   testWidgets('bulk toolbar dispatches selected actions', (tester) async {
-    tester.view.physicalSize = const Size(1400, 600);
+    tester.view.physicalSize = const Size(2400, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -192,6 +204,7 @@ void main() {
             selectedCount: 2,
             isBusy: false,
             onSelectLoaded: () => calls.add('select-loaded'),
+            onCopyYoutubeUrls: () => calls.add('copy-youtube-urls'),
             onPlay: () => calls.add('play'),
             onMove: () => calls.add('move'),
             onDelete: () => calls.add('delete'),
@@ -204,7 +217,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(PushButton, 'Select Loaded'));
+    await tester.tap(find.widgetWithText(PushButton, 'Loaded'));
     await tester.tap(find.widgetWithText(PushButton, 'Play'));
     await tester.tap(find.widgetWithText(PushButton, 'Move'));
     await tester.tap(find.widgetWithText(PushButton, 'Delete'));
@@ -212,6 +225,7 @@ void main() {
     await tester.tap(find.widgetWithText(PushButton, 'Unfavorite'));
     await tester.tap(find.widgetWithText(PushButton, 'Clear Tags'));
     await tester.tap(find.widgetWithText(PushButton, 'Clear Selection'));
+    await tester.tap(find.widgetWithText(PushButton, 'Copy YouTube URLs'));
 
     expect(calls, [
       'select-loaded',
@@ -222,6 +236,137 @@ void main() {
       'unfavorite',
       'clear-tags',
       'clear-selection',
+      'copy-youtube-urls',
     ]);
+  });
+
+  testWidgets('bulk toolbar selects a bounded random count and copies URLs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2400, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final randomCounts = <int>[];
+    var copyCalls = 0;
+
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: BulkSelectionToolbar(
+            selectedCount: 2,
+            isBusy: false,
+            maxLoadedVideoCount: 5,
+            onSelectLoaded: () {},
+            onSelectRandom: randomCounts.add,
+            onCopyYoutubeUrls: () => copyCalls++,
+            onPlay: () {},
+            onMove: () {},
+            onDelete: () {},
+            onFavorite: () {},
+            onUnfavorite: () {},
+            onClearTags: () {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Select'), findsOneWidget);
+    expect(find.text('Loaded'), findsOneWidget);
+    expect(find.text('Select Loaded'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('bulk-random-count-field')),
+      findsOneWidget,
+    );
+    expect(find.text('Random'), findsOneWidget);
+    expect(find.text('Copy YouTube URLs'), findsOneWidget);
+    expect(
+      tester
+          .widget<MacosTextField>(
+            find.byKey(const ValueKey('bulk-random-count-field')),
+          )
+          .controller!
+          .text,
+      '1',
+    );
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Random'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<PushButton>(
+            find.widgetWithText(PushButton, 'Copy YouTube URLs'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester.getCenter(find.widgetWithText(PushButton, 'Copy YouTube URLs')).dx,
+      greaterThan(
+        tester.getCenter(find.widgetWithText(PushButton, 'Clear Selection')).dx,
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('bulk-random-count-field')),
+      '3',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<MacosTextField>(
+            find.byKey(const ValueKey('bulk-random-count-field')),
+          )
+          .controller!
+          .text,
+      '3',
+    );
+    expect(
+      tester
+          .widget<PushButton>(find.widgetWithText(PushButton, 'Random'))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.widgetWithText(PushButton, 'Random'));
+    await tester.tap(find.widgetWithText(PushButton, 'Copy YouTube URLs'));
+
+    expect(randomCounts, [3]);
+    expect(copyCalls, 1);
+  });
+
+  testWidgets('bulk toolbar caps random count at loaded video count', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: BulkSelectionToolbar(
+            selectedCount: 0,
+            isBusy: false,
+            maxLoadedVideoCount: 2,
+            onSelectLoaded: () {},
+            onSelectRandom: (_) {},
+            onCopyYoutubeUrls: () {},
+            onPlay: () {},
+            onMove: () {},
+            onDelete: () {},
+            onFavorite: () {},
+            onUnfavorite: () {},
+            onClearTags: () {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('bulk-random-count-field'));
+    await tester.enterText(field, '9');
+
+    expect(tester.widget<MacosTextField>(field).controller!.text, '2');
   });
 }

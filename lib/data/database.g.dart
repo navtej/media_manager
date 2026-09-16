@@ -5630,21 +5630,90 @@ mixin _$VideosDaoMixin on DatabaseAccessor<AppDatabase> {
   $VideosTable get videos => attachedDatabase.videos;
   $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
   $VideoTagsTable get videoTags => attachedDatabase.videoTags;
+  VideosDaoManager get managers => VideosDaoManager(this);
 }
+
+class VideosDaoManager {
+  final _$VideosDaoMixin _db;
+  VideosDaoManager(this._db);
+  $$FoldersTableTableManager get folders =>
+      $$FoldersTableTableManager(_db.attachedDatabase, _db.folders);
+  $$VideosTableTableManager get videos =>
+      $$VideosTableTableManager(_db.attachedDatabase, _db.videos);
+  $$TagDefinitionsTableTableManager get tagDefinitions =>
+      $$TagDefinitionsTableTableManager(
+        _db.attachedDatabase,
+        _db.tagDefinitions,
+      );
+  $$VideoTagsTableTableManager get videoTags =>
+      $$VideoTagsTableTableManager(_db.attachedDatabase, _db.videoTags);
+}
+
 mixin _$FoldersDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
+  FoldersDaoManager get managers => FoldersDaoManager(this);
 }
+
+class FoldersDaoManager {
+  final _$FoldersDaoMixin _db;
+  FoldersDaoManager(this._db);
+  $$FoldersTableTableManager get folders =>
+      $$FoldersTableTableManager(_db.attachedDatabase, _db.folders);
+}
+
 mixin _$LibraryGroupsDaoMixin on DatabaseAccessor<AppDatabase> {
   $LibraryGroupsTable get libraryGroups => attachedDatabase.libraryGroups;
+  LibraryGroupsDaoManager get managers => LibraryGroupsDaoManager(this);
 }
+
+class LibraryGroupsDaoManager {
+  final _$LibraryGroupsDaoMixin _db;
+  LibraryGroupsDaoManager(this._db);
+  $$LibraryGroupsTableTableManager get libraryGroups =>
+      $$LibraryGroupsTableTableManager(_db.attachedDatabase, _db.libraryGroups);
+}
+
 mixin _$TagsDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
   $TagDefinitionsTable get tagDefinitions => attachedDatabase.tagDefinitions;
   $VideoTagsTable get videoTags => attachedDatabase.videoTags;
+  TagsDaoManager get managers => TagsDaoManager(this);
 }
+
+class TagsDaoManager {
+  final _$TagsDaoMixin _db;
+  TagsDaoManager(this._db);
+  $$FoldersTableTableManager get folders =>
+      $$FoldersTableTableManager(_db.attachedDatabase, _db.folders);
+  $$VideosTableTableManager get videos =>
+      $$VideosTableTableManager(_db.attachedDatabase, _db.videos);
+  $$TagDefinitionsTableTableManager get tagDefinitions =>
+      $$TagDefinitionsTableTableManager(
+        _db.attachedDatabase,
+        _db.tagDefinitions,
+      );
+  $$VideoTagsTableTableManager get videoTags =>
+      $$VideoTagsTableTableManager(_db.attachedDatabase, _db.videoTags);
+}
+
 mixin _$VideoSummariesDaoMixin on DatabaseAccessor<AppDatabase> {
   $FoldersTable get folders => attachedDatabase.folders;
   $VideosTable get videos => attachedDatabase.videos;
   $VideoSummariesTable get videoSummaries => attachedDatabase.videoSummaries;
+  VideoSummariesDaoManager get managers => VideoSummariesDaoManager(this);
+}
+
+class VideoSummariesDaoManager {
+  final _$VideoSummariesDaoMixin _db;
+  VideoSummariesDaoManager(this._db);
+  $$FoldersTableTableManager get folders =>
+      $$FoldersTableTableManager(_db.attachedDatabase, _db.folders);
+  $$VideosTableTableManager get videos =>
+      $$VideosTableTableManager(_db.attachedDatabase, _db.videos);
+  $$VideoSummariesTableTableManager get videoSummaries =>
+      $$VideoSummariesTableTableManager(
+        _db.attachedDatabase,
+        _db.videoSummaries,
+      );
 }

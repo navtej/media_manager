@@ -118,8 +118,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _pickSummaryModel() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
-    final path = result?.files.single.path;
+    final pickedFile = await FilePicker.pickFile();
+    final path = pickedFile?.path;
     if (path == null || path.isEmpty) {
       return;
     }
@@ -137,7 +137,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _pickLibraryFolder() async {
-    final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    final selectedDirectory = await FilePicker.getDirectoryPath();
     if (selectedDirectory == null || selectedDirectory.isEmpty) {
       return;
     }
@@ -953,8 +953,8 @@ class _FolderList extends ConsumerWidget {
                               ? MacosColors.systemBlueColor
                               : MacosColors.systemGrayColor,
                           onPressed: () async {
-                            final selectedDirectory = await FilePicker.platform
-                                .getDirectoryPath();
+                            final selectedDirectory =
+                                await FilePicker.getDirectoryPath();
                             if (selectedDirectory == null) {
                               return;
                             }

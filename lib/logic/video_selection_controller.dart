@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class VideoSelectionState {
@@ -92,6 +94,25 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     }
     final next = Set<int>.from(state.selectedIds)..addAll(ids);
     state = state.copyWith(selectedIds: next, anchorVideoId: ids.last);
+  }
+
+  void selectRandom(Iterable<int> videoIds, int count, {Random? random}) {
+    final ids = videoIds.toSet().toList(growable: false);
+    if (ids.isEmpty) {
+      return;
+    }
+    final requestedCount = count.clamp(0, ids.length).toInt();
+    if (requestedCount == 0) {
+      state = const VideoSelectionState();
+      return;
+    }
+
+    final shuffled = List<int>.from(ids)..shuffle(random);
+    final selectedIds = shuffled.take(requestedCount).toSet();
+    state = VideoSelectionState(
+      selectedIds: selectedIds,
+      anchorVideoId: shuffled[requestedCount - 1],
+    );
   }
 
   void removeIds(Iterable<int> videoIds) {

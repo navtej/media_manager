@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:macos_ui/macos_ui.dart';
+import '../../data/providers.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/library_controller.dart';
 import '../../logic/playback_controller.dart';
@@ -16,6 +17,7 @@ import '../../logic/catalog_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
+import '../../logic/youtube_url.dart';
 import 'settings_screen.dart';
 import 'tag_management_screen.dart';
 import '../widgets/bulk_selection_toolbar.dart';
@@ -511,6 +513,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: BulkSelectionToolbar(
                                 selectedCount: moveSelection.count,
                                 isBusy: isBulkBusy,
+                                maxLoadedVideoCount: loadedVideoIds.length,
                                 onSelectLoaded: loadedVideoIds.isEmpty
                                     ? null
                                     : () => ref
@@ -519,6 +522,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                 .notifier,
                                           )
                                           .selectLoaded(loadedVideoIds),
+                                onSelectRandom: loadedVideoIds.isEmpty
+                                    ? null
+                                    : (count) => ref
+                                          .read(
+                                            videoSelectionControllerProvider
+                                                .notifier,
+                                          )
+                                          .selectRandom(loadedVideoIds, count),
+                                onCopyYoutubeUrls: _copyYoutubeUrlsForSelected,
                                 onPlay: _playSelectedVideos,
                                 onMove: () {
                                   final selectedVideoIds = _selectedVideoIds();
@@ -704,6 +716,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  Future<void> _copyYoutubeUrlsForSelected() async {
+    final selectedVideoIds = _selectedVideoIds();
+    if (selectedVideoIds.isEmpty) {
+      return;
+    }
+
+    await _runBulkAction(() async {
+      final videos = await ref
+          .read(videosDaoProvider)
+          .getVideosByIds(selectedVideoIds);
+      final videosById = {for (final video in videos) video.id: video};
+      final urls = youtubeUrlsFromTitles([
+        for (final videoId in selectedVideoIds)
+          if (videosById[videoId] case final video?) video.title,
+      ]);
+
+      if (urls.isEmpty) {
+        ref
+            .read(statusMessageProvider.notifier)
+            .set('No YouTube URLs found for the selected videos.');
+        return;
+      }
+
+      await Clipboard.setData(ClipboardData(text: urls.join('\n')));
+      ref
+          .read(statusMessageProvider.notifier)
+          .set('Copied ${urls.length} YouTube URLs.');
+    });
+  }
+
   Future<void> _playSelectedVideos() async {
     final selectedVideoIds = _selectedVideoIds();
     if (selectedVideoIds.isEmpty) {
@@ -843,8 +885,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _pickFolder() async {
     print('DEBUG: _pickFolder called');
-    final String? selectedDirectory = await FilePicker.platform
-        .getDirectoryPath();
+    final String? selectedDirectory = await FilePicker.getDirectoryPath();
     print('DEBUG: FilePicker returned: $selectedDirectory');
     if (selectedDirectory != null) {
       final result = await ref

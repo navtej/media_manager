@@ -431,7 +431,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
   }
 
   Future<void> _addDestinationFolder() async {
-    final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    final selectedDirectory = await FilePicker.getDirectoryPath();
     if (selectedDirectory == null || selectedDirectory.isEmpty) {
       return;
     }

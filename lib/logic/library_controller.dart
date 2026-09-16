@@ -528,8 +528,15 @@ class LibraryController extends _$LibraryController {
 
     try {
       final file = File(filePath);
-      final size = file.lengthSync();
-      final stat = file.statSync();
+      // Directory.list() is a live stream. A removable volume, downloader,
+      // or another process can make a candidate disappear before we process
+      // it. Read both values from one async stat and treat that as a normal
+      // per-file scan miss instead of reporting a startup error.
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file) {
+        return null;
+      }
+      final size = stat.size;
 
       // 1. Metadata
       final meta = await mediaService.getMetadata(filePath);
@@ -564,6 +571,12 @@ class LibraryController extends _$LibraryController {
         metadataJson: drift.Value(jsonEncode(meta)),
         aiProcessed: const drift.Value(false),
       );
+    } on FileSystemException catch (error) {
+      if (_isIgnorableScanFileSystemError(error)) {
+        return null;
+      }
+      print('Error preparing $filePath: $error');
+      return null;
     } catch (e) {
       print('Error preparing $filePath: $e');
       return null;
@@ -571,6 +584,20 @@ class LibraryController extends _$LibraryController {
   }
 
   // AI Logic moved to ai_controller.dart
+}
+
+bool _isIgnorableScanFileSystemError(FileSystemException error) {
+  final code = error.osError?.errorCode;
+  // ENOENT is what a file that disappeared between directory enumeration and
+  // preparation reports on macOS/Linux. Include the platform equivalents for
+  // missing path and overlong-name failures so one bad candidate cannot abort
+  // the rest of a scan.
+  return code == 2 || // POSIX ENOENT
+      code == 3 || // Windows ERROR_PATH_NOT_FOUND
+      code == 20 || // POSIX ENOTDIR
+      code == 36 || // Linux ENAMETOOLONG
+      code == 63 || // macOS ENAMETOOLONG
+      code == 206; // Windows ERROR_FILENAME_EXCED_RANGE
 }
 
 String _operationBlockedMessage(LibraryOperationState state) {

@@ -47,7 +47,7 @@ final class WhisperModelCatalogControllerProvider
 }
 
 String _$whisperModelCatalogControllerHash() =>
-    r'77e146a63e2d89c56f5252b8dbd6f03e973db906';
+    r'59c90e16a6d4e8fdcbd81a9b88993ad932627d08';
 
 abstract class _$WhisperModelCatalogController
     extends $Notifier<WhisperModelCatalogState> {
