@@ -24,6 +24,8 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.executor);
 
+  Future<void>? _closeFuture;
+
   @override
   int get schemaVersion => 10;
 
@@ -171,8 +173,13 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   Future<void> close() {
+    final closeFuture = _closeFuture;
+    if (closeFuture != null) {
+      return closeFuture;
+    }
+
     print('DEBUG: AppDatabase.close() called');
-    return super.close();
+    return _closeFuture = super.close();
   }
 }
 
