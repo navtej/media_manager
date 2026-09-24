@@ -100,6 +100,24 @@ class _MovieManagerAppState extends ConsumerState<MovieManagerApp> {
             ),
           ],
         ),
+        PlatformMenu(
+          label: 'Window',
+          menus: [
+            PlatformMenuItemGroup(
+              members: [
+                PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.minimizeWindow,
+                ),
+                PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.zoomWindow,
+                ),
+                PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.arrangeWindowsInFront,
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
       child: MacosApp(
         navigatorKey: _navigatorKey,

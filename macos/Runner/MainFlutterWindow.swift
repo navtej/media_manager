@@ -266,13 +266,27 @@ private func authenticatePrivateLibrary(result: @escaping FlutterResult) {
 class MainFlutterWindow: NSWindow {
   static let minimumContentSize = NSSize(width: 800, height: 600)
 
+  @objc func fillWindow(_ sender: Any?) {
+    guard let screen else { return }
+    setFrame(screen.visibleFrame, display: true, animate: true)
+  }
+
+  @objc func centerWindow(_ sender: Any?) {
+    center()
+  }
+
   override func awakeFromNib() {
     super.awakeFromNib()
     print("DEBUG SWIFT: awakeFromNib started")
 
     // Force window onto current space and disable state restoration
     self.isRestorable = false
-    self.collectionBehavior = [.managed, .participatesInCycle]
+    self.collectionBehavior = [
+      .managed,
+      .participatesInCycle,
+      .fullScreenPrimary,
+      .fullScreenAllowsTiling,
+    ]
     self.level = .normal
     self.contentMinSize = Self.minimumContentSize
     
@@ -374,6 +388,16 @@ class MainFlutterWindow: NSWindow {
           return
         }
         NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "")
+        result(nil)
+      } else if call.method == "openFilesInFinder" {
+        guard let args = call.arguments as? [String: Any],
+              let paths = args["paths"] as? [String],
+              !paths.isEmpty else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Video paths missing", details: nil))
+          return
+        }
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
         result(nil)
       } else if call.method == "openFolder" {
         guard let args = call.arguments as? [String: Any],

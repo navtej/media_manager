@@ -54,6 +54,15 @@ class NaturalLanguageService {
     }
   }
 
+  Future<void> openFilesInFinder(List<String> paths) async {
+    if (paths.isEmpty) return;
+    try {
+      await _channel.invokeMethod('openFilesInFinder', {'paths': paths});
+    } on PlatformException catch (e) {
+      print("Failed to open videos in Finder: '${e.message}'.");
+    }
+  }
+
   Future<void> openFolder(String path) async {
     try {
       await _channel.invokeMethod('openFolder', {'path': path});

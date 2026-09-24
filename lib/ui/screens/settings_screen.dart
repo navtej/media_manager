@@ -432,26 +432,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           const EmptyFolderCleanupControl(),
           const SizedBox(height: 16),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ExcludeSemantics(
-                child: Text('Enable Copy YouTube URLs button'),
-              ),
-              const SizedBox(width: 6),
-              MacosPreferenceCheckbox(
-                key: const ValueKey('copy-youtube-urls-checkbox'),
-                value:
-                    settingsAsync.value?.miscellaneous.copyYoutubeUrlsEnabled ??
-                    MiscellaneousConfiguration.defaults.copyYoutubeUrlsEnabled,
-                semanticLabel: 'Enable Copy YouTube URLs button',
-                onChanged: (value) => ref
-                    .read(settingsProvider.notifier)
-                    .updateCopyYoutubeUrlsEnabled(value),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
           _buildPreferenceRow(
             context,
             'Scan Interval (min)',
@@ -474,6 +454,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _paginationSizeController,
             _paginationSizeFocusNode,
             const ValueKey('pagination-size-preference-field'),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ExcludeSemantics(
+                child: Text(
+                  'Enable Copy YouTube URLs button',
+                  style: MacosTheme.of(context).typography.subheadline,
+                ),
+              ),
+              const SizedBox(width: 6),
+              MacosPreferenceCheckbox(
+                key: const ValueKey('copy-youtube-urls-checkbox'),
+                value:
+                    settingsAsync.value?.miscellaneous.copyYoutubeUrlsEnabled ??
+                    MiscellaneousConfiguration.defaults.copyYoutubeUrlsEnabled,
+                semanticLabel: 'Enable Copy YouTube URLs button',
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .updateCopyYoutubeUrlsEnabled(value),
+              ),
+            ],
           ),
         ],
       ),

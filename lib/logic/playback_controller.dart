@@ -38,31 +38,11 @@ class PlaybackController {
       return false;
     }
 
-    final videosById = {
-      for (final video in await _videosDao.getVideosByIds(ids)) video.id: video,
-    };
-    final videos = [
-      for (final id in ids)
-        if (videosById[id] case final video?)
-          video
-        else
-          throw StateError('A selected video no longer exists.'),
-    ];
-    final foldersById = {
-      for (final folder in await _foldersDao.getAllFolders()) folder.id: folder,
-    };
+    final videos = await _getVideos(ids);
+    final libraries = await _getLibraryAccessRequests(videos);
 
     return _libraryAccessService.withAccessToAll(
-      libraries: [
-        for (final video in videos)
-          if (foldersById[video.folderId] case final folder?)
-            LibraryAccessRequest(
-              path: folder.path,
-              bookmark: folder.securityScopedBookmark,
-            )
-          else
-            throw StateError('Library folder is missing.'),
-      ],
+      libraries: libraries,
       action: () => _playbackService.playPlaylist(
         videos.map((video) => video.absolutePath).toList(growable: false),
       ),
@@ -74,6 +54,51 @@ class PlaybackController {
       video,
       () => _naturalLanguageService.openInFinder(video.absolutePath),
     );
+  }
+
+  Future<void> revealVideosInFinder(List<int> videoIds) async {
+    final ids = videoIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return;
+
+    final videos = await _getVideos(ids);
+    final libraries = await _getLibraryAccessRequests(videos);
+    await _libraryAccessService.withAccessToAll(
+      libraries: libraries,
+      action: () => _naturalLanguageService.openFilesInFinder(
+        videos.map((video) => video.absolutePath).toList(growable: false),
+      ),
+    );
+  }
+
+  Future<List<Video>> _getVideos(List<int> ids) async {
+    final videosById = {
+      for (final video in await _videosDao.getVideosByIds(ids)) video.id: video,
+    };
+    return [
+      for (final id in ids)
+        if (videosById[id] case final video?)
+          video
+        else
+          throw StateError('A selected video no longer exists.'),
+    ];
+  }
+
+  Future<List<LibraryAccessRequest>> _getLibraryAccessRequests(
+    List<Video> videos,
+  ) async {
+    final foldersById = {
+      for (final folder in await _foldersDao.getAllFolders()) folder.id: folder,
+    };
+    return [
+      for (final video in videos)
+        if (foldersById[video.folderId] case final folder?)
+          LibraryAccessRequest(
+            path: folder.path,
+            bookmark: folder.securityScopedBookmark,
+          )
+        else
+          throw StateError('Library folder is missing.'),
+    ];
   }
 
   Future<T> _withLibraryAccess<T>(

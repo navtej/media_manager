@@ -131,8 +131,9 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _SelectionGroupBox(
+          _ToolbarGroupBox(
             key: const ValueKey('bulk-selection-group'),
+            label: 'Selection',
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -175,17 +176,27 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
                   onPressed: canSelectRandom ? _selectRandom : null,
                   child: const Text('Random'),
                 ),
-                const SizedBox(width: 12),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    '${widget.selectedCount} Selected',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.typography.body,
-                  ),
-                ),
-                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                '${widget.selectedCount} Selected',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.typography.body,
+              ),
+            ),
+          ),
+          _ToolbarGroupBox(
+            key: const ValueKey('bulk-selected-group'),
+            label: 'Selected',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 PushButton(
                   key: const ValueKey('bulk-show-selected-button'),
                   controlSize: ControlSize.regular,
@@ -308,9 +319,10 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
   }
 }
 
-class _SelectionGroupBox extends StatelessWidget {
-  const _SelectionGroupBox({super.key, required this.child});
+class _ToolbarGroupBox extends StatelessWidget {
+  const _ToolbarGroupBox({super.key, required this.label, required this.child});
 
+  final String label;
   final Widget child;
 
   @override
@@ -318,7 +330,7 @@ class _SelectionGroupBox extends StatelessWidget {
     final theme = MacosTheme.of(context);
     return Semantics(
       container: true,
-      label: 'Selection',
+      label: label,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -340,7 +352,7 @@ class _SelectionGroupBox extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ExcludeSemantics(
-                    child: Text('Selection', style: theme.typography.caption2),
+                    child: Text(label, style: theme.typography.caption2),
                   ),
                 ),
               ),

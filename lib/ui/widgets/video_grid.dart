@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
@@ -14,6 +15,7 @@ import '../../logic/catalog_controller.dart';
 import '../../logic/library_name.dart';
 import '../../logic/maintenance_controller.dart';
 import '../../logic/playback_controller.dart';
+import '../../logic/private_library_controller.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_summary_controller.dart';
@@ -23,6 +25,19 @@ import '../../services/library_access_service.dart';
 import '../movie_manager_visual_system.dart';
 import 'catalog_presentation.dart';
 import 'macos_preference_checkbox.dart';
+
+enum _VideoCardContextAction {
+  information,
+  play,
+  toggleFavorite,
+  favorite,
+  unfavorite,
+  editTags,
+  summary,
+  delete,
+  revealInFinder,
+  clearTags,
+}
 
 class CatalogScrollView extends ConsumerWidget {
   const CatalogScrollView({super.key, required this.scrollController});
@@ -225,6 +240,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
   bool _isThumbnailHovering = false;
   bool _isFocused = false;
   bool _isPressed = false;
+  bool _isActionPointerDown = false;
   final FocusNode _focusNode = FocusNode(debugLabel: 'Video card');
   final TextEditingController _tagController = TextEditingController();
 
@@ -269,7 +285,10 @@ class _VideoGridItemState extends State<VideoGridItem> {
           label: video.title,
           value: _videoSemanticValue(video),
           onFocus: _focusNode.requestFocus,
-          onTap: () => _selectWithKeyboardIntent(selectionController),
+          onTap: () => _selectWithKeyboardIntent(
+            selectionController,
+            isSelected: isSelected,
+          ),
           child: FocusableActionDetector(
             focusNode: _focusNode,
             onShowHoverHighlight: (value) =>
@@ -282,14 +301,22 @@ class _VideoGridItemState extends State<VideoGridItem> {
             actions: {
               ActivateIntent: CallbackAction<ActivateIntent>(
                 onInvoke: (_) {
-                  _selectWithKeyboardIntent(selectionController);
+                  _selectWithKeyboardIntent(
+                    selectionController,
+                    isSelected: isSelected,
+                  );
                   return null;
                 },
               ),
             },
             child: GestureDetector(
               behavior: HitTestBehavior.deferToChild,
-              onTap: () => _selectWithKeyboardIntent(selectionController),
+              onTap: () => _selectWithKeyboardIntent(
+                selectionController,
+                isSelected: isSelected,
+              ),
+              onSecondaryTapUp: (details) =>
+                  _showCardContextMenu(ref, selection, details.globalPosition),
               child: Opacity(
                 opacity: video.isOffline ? 0.5 : 1.0,
                 child: Container(
@@ -459,7 +486,10 @@ class _VideoGridItemState extends State<VideoGridItem> {
       label: video.title,
       value: _videoSemanticValue(video),
       onFocus: _focusNode.requestFocus,
-      onTap: () => _selectWithKeyboardIntent(selectionController),
+      onTap: () => _selectWithKeyboardIntent(
+        selectionController,
+        isSelected: isSelected,
+      ),
       child: FocusableActionDetector(
         focusNode: _focusNode,
         onShowHoverHighlight: (value) => setState(() => _isHovering = value),
@@ -471,7 +501,10 @@ class _VideoGridItemState extends State<VideoGridItem> {
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
-              _selectWithKeyboardIntent(selectionController);
+              _selectWithKeyboardIntent(
+                selectionController,
+                isSelected: isSelected,
+              );
               return null;
             },
           ),
@@ -481,7 +514,15 @@ class _VideoGridItemState extends State<VideoGridItem> {
           onTapDown: (_) => setState(() => _isPressed = true),
           onTapCancel: () => setState(() => _isPressed = false),
           onTapUp: (_) => setState(() => _isPressed = false),
-          onTap: () => _selectWithKeyboardIntent(selectionController),
+          onTap: () => _selectWithKeyboardIntent(
+            selectionController,
+            isSelected: isSelected,
+          ),
+          onSecondaryTapUp: (details) => _showCardContextMenu(
+            ref,
+            ref.read(videoSelectionControllerProvider),
+            details.globalPosition,
+          ),
           child: Opacity(
             opacity: video.isOffline ? 0.62 : 1,
             child: Container(
@@ -592,8 +633,19 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  void _selectWithKeyboardIntent(VideoSelectionController selectionController) {
+  void _selectWithKeyboardIntent(
+    VideoSelectionController selectionController, {
+    required bool isSelected,
+  }) {
+    if (_isActionPointerDown) return;
     final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isShiftPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isControlPressed &&
+        isSelected) {
+      selectionController.setSelected(widget.video.id, false);
+      return;
+    }
     selectionController.selectWithIntent(
       videoId: widget.video.id,
       orderedVisibleVideoIds: widget.visibleVideoIds,
@@ -619,78 +671,499 @@ class _VideoGridItemState extends State<VideoGridItem> {
             ?.value
             .hasFreshSummary ==
         true;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        MovieManagerIconButton(
-          label: 'Video information',
-          icon: CupertinoIcons.info,
-          onPressed: () => _showInfo(context, widget.video),
-        ),
-        MovieManagerIconButton(
-          key: ValueKey('video-play-${widget.video.id}'),
-          label: 'Play',
-          icon: CupertinoIcons.play_fill,
-          onPressed: () => _playVideo(ref, widget.video),
-        ),
-        MovieManagerIconButton(
-          key: ValueKey('video-favorite-${widget.video.id}'),
-          label: widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
-          icon: widget.video.isFavorite
-              ? CupertinoIcons.heart_fill
-              : CupertinoIcons.heart,
-          color: widget.video.isFavorite
-              ? MovieManagerVisuals.errorColor(context)
-              : null,
-          onPressed: () => _toggleFavorite(ref),
-        ),
-        if (includeTagAction)
+    return Listener(
+      behavior: HitTestBehavior.deferToChild,
+      onPointerDown: (_) => _isActionPointerDown = true,
+      onPointerUp: (_) => scheduleMicrotask(() {
+        _isActionPointerDown = false;
+      }),
+      onPointerCancel: (_) => _isActionPointerDown = false,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           MovieManagerIconButton(
-            key: ValueKey('video-edit-tags-${widget.video.id}'),
-            label: 'Add or edit tags',
-            icon: CupertinoIcons.tag,
-            onPressed: () => _showTagEditor(ref),
+            label: 'Video information',
+            icon: CupertinoIcons.info,
+            onPressed: () => _showInfo(context, widget.video),
           ),
-        MovieManagerIconButton(
-          label: 'Video summary',
-          icon: CupertinoIcons.doc_text,
-          color: hasFreshSummary ? MacosColors.systemGreenColor : null,
-          onPressed: () => _showSummaryDialog(context, ref, widget.video),
-        ),
-        MovieManagerIconButton(
-          key: ValueKey('video-delete-${widget.video.id}'),
-          label: 'Delete',
-          icon: CupertinoIcons.trash,
-          color: MovieManagerVisuals.errorColor(context),
-          onPressed: () => _confirmDelete(ref),
-        ),
-        MergeSemantics(
-          child: Semantics(
-            label: 'More actions',
-            button: true,
-            child: MacosTooltip(
-              message: 'More actions',
-              child: MacosPulldownButton(
-                key: ValueKey('video-more-${widget.video.id}'),
-                icon: CupertinoIcons.ellipsis_circle,
-                menuAlignment: PulldownMenuAlignment.right,
-                items: [
-                  MacosPulldownMenuItem(
-                    title: const Text('Reveal in Finder'),
-                    onTap: () => _revealVideo(ref, widget.video),
-                  ),
-                  MacosPulldownMenuItem(
-                    title: const Text('Clear Tags'),
-                    onTap: () => _clearTags(ref),
-                  ),
-                ],
+          MovieManagerIconButton(
+            key: ValueKey('video-play-${widget.video.id}'),
+            label: 'Play',
+            icon: CupertinoIcons.play_fill,
+            onPressed: () => _playVideo(ref, widget.video),
+          ),
+          MovieManagerIconButton(
+            key: ValueKey('video-favorite-${widget.video.id}'),
+            label: widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
+            icon: widget.video.isFavorite
+                ? CupertinoIcons.heart_fill
+                : CupertinoIcons.heart,
+            color: widget.video.isFavorite
+                ? MovieManagerVisuals.errorColor(context)
+                : null,
+            onPressed: () => _toggleFavorite(ref),
+          ),
+          if (includeTagAction)
+            MovieManagerIconButton(
+              key: ValueKey('video-edit-tags-${widget.video.id}'),
+              label: 'Add or edit tags',
+              icon: CupertinoIcons.tag,
+              onPressed: () => _showTagEditor(ref),
+            ),
+          MovieManagerIconButton(
+            label: 'Video summary',
+            icon: CupertinoIcons.doc_text,
+            color: hasFreshSummary ? MacosColors.systemGreenColor : null,
+            onPressed: () => _showSummaryDialog(context, ref, widget.video),
+          ),
+          MovieManagerIconButton(
+            key: ValueKey('video-delete-${widget.video.id}'),
+            label: 'Delete',
+            icon: CupertinoIcons.trash,
+            color: MovieManagerVisuals.errorColor(context),
+            onPressed: () => _confirmDelete(ref),
+          ),
+          MergeSemantics(
+            child: Semantics(
+              label: 'More actions',
+              button: true,
+              child: MacosTooltip(
+                message: 'More actions',
+                child: MacosPulldownButton(
+                  key: ValueKey('video-more-${widget.video.id}'),
+                  icon: CupertinoIcons.ellipsis_circle,
+                  menuAlignment: PulldownMenuAlignment.right,
+                  items: [
+                    MacosPulldownMenuItem(
+                      title: const Text('Reveal in Finder'),
+                      onTap: () => _revealVideo(ref, widget.video),
+                    ),
+                    MacosPulldownMenuItem(
+                      title: const Text('Clear Tags'),
+                      onTap: () => _clearTags(ref),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCardContextMenu(
+    WidgetRef ref,
+    VideoSelectionState selection,
+    Offset globalPosition,
+  ) async {
+    final hasMultipleSelected = selection.selectedIds.length > 1;
+    final screenSize = MediaQuery.sizeOf(context);
+    final action = await showMenu<_VideoCardContextAction>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        screenSize.width - globalPosition.dx,
+        screenSize.height - globalPosition.dy,
+      ),
+      items: [
+        if (!hasMultipleSelected)
+          _contextMenuItem(
+            _VideoCardContextAction.information,
+            CupertinoIcons.info,
+            'Video Information',
+          ),
+        _contextMenuItem(
+          _VideoCardContextAction.play,
+          CupertinoIcons.play_fill,
+          'Play',
+        ),
+        if (hasMultipleSelected) ...[
+          _contextMenuItem(
+            _VideoCardContextAction.favorite,
+            CupertinoIcons.heart,
+            'Favorite',
+          ),
+          _contextMenuItem(
+            _VideoCardContextAction.unfavorite,
+            CupertinoIcons.heart_fill,
+            'Unfavorite',
+          ),
+        ] else
+          _contextMenuItem(
+            _VideoCardContextAction.toggleFavorite,
+            widget.video.isFavorite
+                ? CupertinoIcons.heart
+                : CupertinoIcons.heart_fill,
+            widget.video.isFavorite ? 'Unfavorite' : 'Favorite',
+          ),
+        if (!hasMultipleSelected) ...[
+          _contextMenuItem(
+            _VideoCardContextAction.editTags,
+            CupertinoIcons.tag,
+            'Add or edit tags',
+          ),
+          _contextMenuItem(
+            _VideoCardContextAction.summary,
+            CupertinoIcons.doc_text,
+            'Video Summary',
+          ),
+        ],
+        _contextMenuItem(
+          _VideoCardContextAction.delete,
+          CupertinoIcons.trash,
+          'Delete',
+        ),
+        const PopupMenuDivider(),
+        if (!hasMultipleSelected)
+          _contextMenuItem(
+            _VideoCardContextAction.revealInFinder,
+            CupertinoIcons.folder,
+            'Reveal in Finder',
+          ),
+        _contextMenuItem(
+          _VideoCardContextAction.clearTags,
+          CupertinoIcons.tag,
+          'Clear Tags',
         ),
       ],
     );
+    if (action == null || !mounted) {
+      return;
+    }
+
+    final requestedIds = hasMultipleSelected
+        ? selection.selectedIds.toList(growable: false)
+        : [widget.video.id];
+    final videosById = {
+      for (final video
+          in await ref.read(videosDaoProvider).getVideosByIds(requestedIds))
+        video.id: video,
+    };
+    final videos = requestedIds
+        .map((videoId) => videosById[videoId])
+        .whereType<Video>()
+        .toList(growable: false);
+    if (!mounted || videos.isEmpty) {
+      return;
+    }
+
+    final videoIds = videos.map((video) => video.id).toList(growable: false);
+    switch (action) {
+      case _VideoCardContextAction.information:
+        if (videos.length == 1) {
+          _showInfo(context, videos.single);
+        } else {
+          _showInfoForVideos(videos);
+        }
+        break;
+      case _VideoCardContextAction.play:
+        if (videos.length == 1) {
+          _playVideo(ref, videos.single);
+        } else {
+          await _playVideos(ref, videos);
+        }
+        break;
+      case _VideoCardContextAction.toggleFavorite:
+        await _toggleFavorite(ref);
+        break;
+      case _VideoCardContextAction.favorite:
+        await _setFavoriteForVideos(ref, videoIds, true);
+        break;
+      case _VideoCardContextAction.unfavorite:
+        await _setFavoriteForVideos(ref, videoIds, false);
+        break;
+      case _VideoCardContextAction.editTags:
+        if (videos.length == 1) {
+          _showTagEditor(ref);
+        } else {
+          _showTagEditorForVideos(ref, videos);
+        }
+        break;
+      case _VideoCardContextAction.summary:
+        for (final video in videos) {
+          if (!mounted) return;
+          await _showSummaryDialog(context, ref, video);
+        }
+        break;
+      case _VideoCardContextAction.delete:
+        if (videos.length == 1) {
+          _confirmDelete(ref);
+        } else {
+          _confirmDeleteVideos(ref, videos);
+        }
+        break;
+      case _VideoCardContextAction.revealInFinder:
+        if (videos.length == 1) {
+          await _revealVideo(ref, videos.single);
+        } else {
+          await _revealVideos(ref, videoIds);
+        }
+        break;
+      case _VideoCardContextAction.clearTags:
+        if (videos.length == 1) {
+          await _clearTags(ref);
+        } else {
+          await _clearTagsForVideos(ref, videoIds);
+        }
+        break;
+    }
   }
+
+  PopupMenuItem<_VideoCardContextAction> _contextMenuItem(
+    _VideoCardContextAction action,
+    IconData icon,
+    String label,
+  ) {
+    return PopupMenuItem<_VideoCardContextAction>(
+      value: action,
+      height: 32,
+      child: Row(
+        children: [Icon(icon, size: 15), const SizedBox(width: 8), Text(label)],
+      ),
+    );
+  }
+
+  Future<void> _playVideos(WidgetRef ref, List<Video> videos) async {
+    final videoIds = videos.map((video) => video.id).toList(growable: false);
+    try {
+      final opened = await ref
+          .read(privateLibraryAccessControllerProvider.notifier)
+          .runVideoAction<bool>(
+            videoIds: videoIds,
+            action: () =>
+                ref.read(playbackControllerProvider).playPlaylist(videoIds),
+          );
+      if (!mounted) return;
+      ref
+          .read(statusMessageProvider.notifier)
+          .set(
+            opened == null
+                ? 'Authentication cancelled.'
+                : opened
+                ? 'Playing ${_videoCountText(videos.length)}.'
+                : 'Unable to open selected videos.',
+          );
+    } on LibraryAccessNeedsRepairException catch (error) {
+      if (mounted) {
+        _showVideoAccessError(error.message);
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        _showVideoAccessError(error.message);
+      }
+    }
+  }
+
+  Future<void> _setFavoriteForVideos(
+    WidgetRef ref,
+    List<int> videoIds,
+    bool isFavorite,
+  ) async {
+    final actionCompleted = await ref
+        .read(maintenanceControllerProvider.notifier)
+        .setFavoriteForVideos(videoIds, isFavorite);
+    if (!mounted) return;
+    ref
+        .read(statusMessageProvider.notifier)
+        .set(
+          actionCompleted
+              ? isFavorite
+                    ? 'Marked ${_videoCountText(videoIds.length)} as favorite.'
+                    : 'Removed favorite from ${_videoCountText(videoIds.length)}.'
+              : 'Authentication cancelled.',
+        );
+  }
+
+  void _confirmDeleteVideos(WidgetRef ref, List<Video> videos) {
+    final videoIds = videos.map((video) => video.id).toList(growable: false);
+    showMacosAlertDialog<void>(
+      context: context,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.trash),
+        title: const Text('Delete Selected Videos?'),
+        message: Text(
+          'This will permanently delete ${_videoCountText(videos.length)} from disk.',
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('Delete'),
+          onPressed: () async {
+            Navigator.of(dialogContext).pop();
+            final result = await ref
+                .read(maintenanceControllerProvider.notifier)
+                .deleteVideos(videoIds);
+            if (!mounted) return;
+            if (result == null) {
+              ref
+                  .read(statusMessageProvider.notifier)
+                  .set('Authentication cancelled.');
+              return;
+            }
+            ref
+                .read(videoSelectionControllerProvider.notifier)
+                .removeIds(result.deletedVideoIds);
+            ref.read(statusMessageProvider.notifier).set(result.userMessage);
+          },
+        ),
+        secondaryButton: PushButton(
+          controlSize: ControlSize.large,
+          secondary: true,
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _clearTagsForVideos(WidgetRef ref, List<int> videoIds) async {
+    final actionCompleted = await ref
+        .read(maintenanceControllerProvider.notifier)
+        .clearTagsForVideos(videoIds);
+    if (!mounted) return;
+    ref
+        .read(statusMessageProvider.notifier)
+        .set(
+          actionCompleted
+              ? 'Cleared tags from ${_videoCountText(videoIds.length)}.'
+              : 'Authentication cancelled.',
+        );
+  }
+
+  Future<void> _revealVideos(WidgetRef ref, List<int> videoIds) async {
+    try {
+      final revealed = await ref
+          .read(privateLibraryAccessControllerProvider.notifier)
+          .runVideoAction<bool>(
+            videoIds: videoIds,
+            action: () async {
+              await ref
+                  .read(playbackControllerProvider)
+                  .revealVideosInFinder(videoIds);
+              return true;
+            },
+          );
+      if (!mounted) return;
+      if (revealed == null) {
+        ref
+            .read(statusMessageProvider.notifier)
+            .set('Authentication cancelled.');
+      }
+    } on LibraryAccessNeedsRepairException catch (error) {
+      if (mounted) {
+        _showVideoAccessError(
+          error.message,
+          title: 'Cannot Show Videos in Finder',
+        );
+      }
+    } on StateError catch (error) {
+      if (mounted) {
+        _showVideoAccessError(
+          error.message,
+          title: 'Cannot Show Videos in Finder',
+        );
+      }
+    }
+  }
+
+  void _showInfoForVideos(List<Video> videos) {
+    final message = videos
+        .map(
+          (video) =>
+              '${video.title}\nDrive: ${_getDriveName(video.absolutePath)}\n'
+              'Size: ${LibraryStats.formatSize(video.size)}\n'
+              'Full Path: ${video.absolutePath}',
+        )
+        .join('\n\n');
+    showMacosAlertDialog<void>(
+      context: context,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.info),
+        title: Text('Video Information (${videos.length})'),
+        message: SizedBox(
+          width: 520,
+          height: 280,
+          child: SingleChildScrollView(child: SelectableText(message)),
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('OK'),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+      ),
+    );
+  }
+
+  void _showTagEditorForVideos(WidgetRef ref, List<Video> videos) {
+    final textController = TextEditingController();
+    final videoIds = videos.map((video) => video.id).toList(growable: false);
+    showMacosAlertDialog<void>(
+      context: context,
+      builder: (dialogContext) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.tag),
+        title: const Text('Add Tags to Selected Videos'),
+        message: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Add comma-separated tags to ${_videoCountText(videos.length)}. Existing tags will be kept.',
+              ),
+              const SizedBox(height: 12),
+              MacosTextField(
+                controller: textController,
+                placeholder: 'Tag 1, Tag 2',
+              ),
+            ],
+          ),
+        ),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          child: const Text('Add Tags'),
+          onPressed: () async {
+            final tags = textController.text
+                .split(',')
+                .map((tag) => tag.trim())
+                .where((tag) => tag.isNotEmpty)
+                .toSet()
+                .toList(growable: false);
+            Navigator.of(dialogContext).pop();
+            if (tags.isEmpty) return;
+            final actionCompleted = await ref
+                .read(privateLibraryAccessControllerProvider.notifier)
+                .runVideoAction<bool>(
+                  videoIds: videoIds,
+                  action: () async {
+                    await ref
+                        .read(tagsDaoProvider)
+                        .addTagsToVideos(videoIds, tags);
+                    return true;
+                  },
+                );
+            if (!mounted) return;
+            ref
+                .read(statusMessageProvider.notifier)
+                .set(
+                  actionCompleted == null
+                      ? 'Authentication cancelled.'
+                      : 'Added tags to ${_videoCountText(videoIds.length)}.',
+                );
+          },
+        ),
+        secondaryButton: PushButton(
+          controlSize: ControlSize.large,
+          secondary: true,
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+      ),
+    ).whenComplete(textController.dispose);
+  }
+
+  String _videoCountText(int count) => count == 1 ? '1 video' : '$count videos';
 
   void _showTagEditor(WidgetRef ref) {
     showMacosAlertDialog<void>(
@@ -886,11 +1359,15 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  void _showSummaryDialog(BuildContext context, WidgetRef ref, Video video) {
+  Future<void> _showSummaryDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Video video,
+  ) async {
     ref.invalidate(videoSummaryStateProvider(video));
     ref.invalidate(videoSummarySubtitleAvailabilityProvider(video));
     bool? useVttForThisSummary;
-    showMacosAlertDialog(
+    await showMacosAlertDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (_, setDialogState) => Consumer(
