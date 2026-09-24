@@ -23,6 +23,7 @@ void main() {
       const Duration(minutes: 10),
     );
     expect(settings.privateLibraryAccess.showPrivateLibrariesInFilter, isFalse);
+    expect(settings.miscellaneous.copyYoutubeUrlsEnabled, isFalse);
     expect(settings.appearance.themeMode, AppearanceThemeMode.system);
     expect(settings.catalogBrowsing.paginationSize, 50);
     expect(settings.catalogBrowsing.showOfflineMedia, isTrue);
@@ -75,6 +76,7 @@ void main() {
         'catalogPresentation': 'list',
         'privateLibraryAutoLockMinutes': 45,
         'showPrivateLibrariesInFilter': true,
+        'copyYoutubeUrlsEnabled': true,
         'summaryModelSource': 'managed',
         'summaryModelPath': '/stale/model.bin',
         'summarySelectedModelId': 'medium',
@@ -103,6 +105,7 @@ void main() {
         settings.privateLibraryAccess.showPrivateLibrariesInFilter,
         isTrue,
       );
+      expect(settings.miscellaneous.copyYoutubeUrlsEnabled, isTrue);
       expect(
         settings.videoSummary.modelSource,
         SummaryModelSourceMode.managedDownload,
@@ -193,6 +196,7 @@ void main() {
     await notifier.updateCatalogPresentation(CatalogPresentation.list);
     await notifier.updatePrivateLibraryAutoLockMinutes(25);
     await notifier.updateShowPrivateLibrariesInFilter(true);
+    await notifier.updateCopyYoutubeUrlsEnabled(true);
     await notifier.updateTheme(AppearanceThemeMode.dark);
     await notifier.updateSummaryPreferVttSubtitles(false);
     await notifier.updateSummaryApiUrl('https://summary.example.test');
@@ -203,6 +207,10 @@ void main() {
     final privateLibrary = container
         .read(privateLibraryAccessConfigurationProvider)
         .requireValue;
+    final miscellaneous = container
+        .read(settingsProvider)
+        .requireValue
+        .miscellaneous;
     final appearance = container
         .read(appearanceConfigurationProvider)
         .requireValue;
@@ -217,6 +225,7 @@ void main() {
     expect(synchronization.batchSize, 6);
     expect(privateLibrary.autoLockDuration, const Duration(minutes: 25));
     expect(privateLibrary.showPrivateLibrariesInFilter, isTrue);
+    expect(miscellaneous.copyYoutubeUrlsEnabled, isTrue);
     expect(appearance.themeMode, AppearanceThemeMode.dark);
     expect(catalog.paginationSize, 80);
     expect(catalog.showOfflineMedia, isFalse);
@@ -231,6 +240,7 @@ void main() {
     expect(reloaded.librarySynchronization.batchSize, 6);
     expect(reloaded.privateLibraryAccess.autoLockMinutes, 25);
     expect(reloaded.privateLibraryAccess.showPrivateLibrariesInFilter, isTrue);
+    expect(reloaded.miscellaneous.copyYoutubeUrlsEnabled, isTrue);
     expect(reloaded.appearance.themeMode, AppearanceThemeMode.dark);
     expect(reloaded.catalogBrowsing.paginationSize, 80);
     expect(reloaded.catalogBrowsing.showOfflineMedia, isFalse);

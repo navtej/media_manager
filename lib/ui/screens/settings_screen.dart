@@ -432,6 +432,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           const EmptyFolderCleanupControl(),
           const SizedBox(height: 16),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ExcludeSemantics(
+                child: Text('Enable Copy YouTube URLs button'),
+              ),
+              const SizedBox(width: 6),
+              MacosPreferenceCheckbox(
+                key: const ValueKey('copy-youtube-urls-checkbox'),
+                value:
+                    settingsAsync.value?.miscellaneous.copyYoutubeUrlsEnabled ??
+                    MiscellaneousConfiguration.defaults.copyYoutubeUrlsEnabled,
+                semanticLabel: 'Enable Copy YouTube URLs button',
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .updateCopyYoutubeUrlsEnabled(value),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _buildPreferenceRow(
             context,
             'Scan Interval (min)',

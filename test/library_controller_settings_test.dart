@@ -57,6 +57,87 @@ void main() {
       }
     },
   );
+
+  test('periodic ticks do not replace an active scan status', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final foldersDao = _BlockingFoldersDao(database);
+    void Function(Timer)? timerCallback;
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        foldersDaoProvider.overrideWithValue(foldersDao),
+        periodicScanTimerFactoryProvider.overrideWithValue((_, callback) {
+          timerCallback = callback;
+          return _NoopTimer();
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(libraryControllerProvider.future);
+    await foldersDao.scanStarted.future;
+    expect(timerCallback, isNotNull);
+    expect(container.read(scanStatusProvider), 'Checking for updates...');
+
+    timerCallback!(_NoopTimer());
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(scanStatusProvider), 'Checking for updates...');
+
+    foldersDao.releaseScan();
+    await _waitForScanIdle(container);
+  });
+}
+
+class _BlockingFoldersDao extends FoldersDao {
+  _BlockingFoldersDao(super.db);
+
+  final scanStarted = Completer<void>();
+  final _scanRelease = Completer<void>();
+  var _getAllFoldersCalls = 0;
+
+  @override
+  Future<List<Folder>> getAllFolders() async {
+    _getAllFoldersCalls += 1;
+    if (_getAllFoldersCalls == 1) {
+      return <Folder>[];
+    }
+    if (!scanStarted.isCompleted) {
+      scanStarted.complete();
+    }
+    await _scanRelease.future;
+    return <Folder>[];
+  }
+
+  void releaseScan() {
+    if (!_scanRelease.isCompleted) {
+      _scanRelease.complete();
+    }
+  }
+}
+
+class _NoopTimer implements Timer {
+  @override
+  bool isActive = true;
+
+  @override
+  int get tick => 0;
+
+  @override
+  void cancel() {
+    isActive = false;
+  }
+}
+
+Future<void> _waitForScanIdle(ProviderContainer container) async {
+  for (var attempt = 0; attempt < 100; attempt += 1) {
+    if (!container.read(libraryOperationControllerProvider).isScanning) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw TimeoutException('Timed out waiting for scan to finish.');
 }
 
 class _RecordingTimer implements Timer {

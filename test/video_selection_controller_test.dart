@@ -37,4 +37,25 @@ void main() {
       2,
     });
   });
+
+  test('show-selected mode toggles independently and clear resets it', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      videoSelectionControllerProvider.notifier,
+    );
+    controller.selectLoaded([1, 2]);
+    controller.toggleShowSelectedOnly();
+
+    expect(
+      container.read(videoSelectionControllerProvider).showSelectedOnly,
+      isTrue,
+    );
+    controller.clear();
+    expect(
+      container.read(videoSelectionControllerProvider).showSelectedOnly,
+      isFalse,
+    );
+  });
 }

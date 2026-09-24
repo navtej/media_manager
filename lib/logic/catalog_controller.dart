@@ -7,6 +7,7 @@ import '../data/database.dart';
 import '../data/providers.dart';
 import 'private_library_controller.dart';
 import 'settings_provider.dart';
+import 'video_selection_controller.dart';
 
 enum LibraryCategory { all, favorites }
 
@@ -729,9 +730,21 @@ final catalogSnapshotProvider =
 final filteredVideosProvider = Provider.autoDispose<AsyncValue<List<Video>>>((
   ref,
 ) {
+  final showSelectedOnly = ref.watch(
+    videoSelectionControllerProvider.select((state) => state.showSelectedOnly),
+  );
+  final selectedIds = ref.watch(
+    videoSelectionControllerProvider.select((state) => state.selectedIds),
+  );
   return ref
       .watch(catalogSnapshotProvider)
-      .whenData((snapshot) => snapshot.loadedVideos);
+      .whenData(
+        (snapshot) => showSelectedOnly
+            ? snapshot.loadedVideos
+                  .where((video) => selectedIds.contains(video.id))
+                  .toList(growable: false)
+            : snapshot.loadedVideos,
+      );
 });
 
 final selectedVideoCountProvider = Provider.autoDispose<AsyncValue<int>>((ref) {

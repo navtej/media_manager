@@ -23,6 +23,7 @@ const _emptyFolderCleanupEnabledKey = 'emptyFolderCleanupEnabled';
 const _emptyFolderCleanupIntervalDaysKey = 'emptyFolderCleanupIntervalDays';
 const _privateLibraryAutoLockMinutesKey = 'privateLibraryAutoLockMinutes';
 const _showPrivateLibrariesInFilterKey = 'showPrivateLibrariesInFilter';
+const _copyYoutubeUrlsEnabledKey = 'copyYoutubeUrlsEnabled';
 const _summaryModelSourceKey = 'summaryModelSource';
 const _summaryModelPathKey = 'summaryModelPath';
 const _summarySelectedModelIdKey = 'summarySelectedModelId';
@@ -179,6 +180,16 @@ final showPrivateLibrariesInFilterProvider = Provider<bool>((ref) {
       PrivateLibraryAccessConfiguration.defaults.showPrivateLibrariesInFilter;
 });
 
+final copyYoutubeUrlsEnabledProvider = Provider<bool>((ref) {
+  return ref
+          .watch(settingsProvider)
+          .asData
+          ?.value
+          .miscellaneous
+          .copyYoutubeUrlsEnabled ??
+      MiscellaneousConfiguration.defaults.copyYoutubeUrlsEnabled;
+});
+
 @Riverpod(keepAlive: true)
 class Settings extends _$Settings {
   Future<AppSettings>? _loadingSettings;
@@ -224,6 +235,9 @@ class Settings extends _$Settings {
         showPrivateLibrariesInFilter: persistence.getBool(
           _showPrivateLibrariesInFilterKey,
         ),
+      ),
+      miscellaneous: MiscellaneousConfiguration.resolve(
+        copyYoutubeUrlsEnabled: persistence.getBool(_copyYoutubeUrlsEnabledKey),
       ),
       appearance: AppearanceConfiguration.resolve(
         themeMode: persistence.getString(_themeModeKey),
@@ -326,6 +340,16 @@ class Settings extends _$Settings {
     final persistence = await _persistence();
     await persistence.setBool(_showPrivateLibrariesInFilterKey, value);
     state = AsyncData(current.copyWith(privateLibraryAccess: configuration));
+  }
+
+  Future<void> updateCopyYoutubeUrlsEnabled(bool value) async {
+    final current = await _currentSettings();
+    final configuration = MiscellaneousConfiguration.resolve(
+      copyYoutubeUrlsEnabled: value,
+    );
+    final persistence = await _persistence();
+    await persistence.setBool(_copyYoutubeUrlsEnabledKey, value);
+    state = AsyncData(current.copyWith(miscellaneous: configuration));
   }
 
   Future<void> updateTheme(AppearanceThemeMode mode) async {

@@ -288,6 +288,177 @@ void main() {
     expect(await thumbnail.exists(), isFalse);
   });
 
+  test(
+    'syncAll retries thumbnails missing from existing catalog videos',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final root = await Directory.systemTemp.createTemp(
+        'library-thumbnail-repair-test',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final videoFile = File(p.join(root.path, 'clip.mp4'));
+      await videoFile.writeAsBytes(const <int>[1, 2, 3]);
+
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final folderId = await db.foldersDao.insertFolder(
+        FoldersCompanion.insert(
+          path: root.path,
+          securityScopedBookmark: const drift.Value('bookmark'),
+        ),
+      );
+      await db.videosDao.insertVideo(
+        VideosCompanion.insert(
+          folderId: folderId,
+          absolutePath: videoFile.path,
+          title: 'clip',
+          duration: const drift.Value(12),
+        ),
+      );
+      final thumbnailService = ThumbnailService(
+        applicationSupportDirectory: () async => root,
+      );
+      final mediaService = _StubMediaService(
+        thumbnailBytes: Uint8List.fromList(const <int>[4, 5, 6]),
+      );
+      final adapter = _RecordingLibraryAccessAdapter();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          mediaServiceProvider.overrideWithValue(mediaService),
+          thumbnailServiceProvider.overrideWithValue(thumbnailService),
+          libraryAccessServiceProvider.overrideWithValue(
+            LibraryAccessService(adapter: adapter),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(libraryControllerProvider.future);
+      await adapter.started;
+      await _waitForScanIdle(container);
+
+      final repaired = (await db.videosDao.getVideoByPath(videoFile.path))!;
+      expect(repaired.thumbnailPath, isNotNull);
+      expect(await File(repaired.thumbnailPath!).exists(), isTrue);
+      expect(mediaService.thumbnailRequests, [videoFile.path]);
+    },
+  );
+
+  test(
+    'syncAll retries existing catalog videos with empty thumbnail files',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final root = await Directory.systemTemp.createTemp(
+        'library-empty-thumbnail-repair-test',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final videoFile = File(p.join(root.path, 'clip.mp4'));
+      await videoFile.writeAsBytes(const <int>[1, 2, 3]);
+      final emptyThumbnail = File(p.join(root.path, 'empty.jpg'));
+      await emptyThumbnail.writeAsBytes(const <int>[]);
+
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final folderId = await db.foldersDao.insertFolder(
+        FoldersCompanion.insert(
+          path: root.path,
+          securityScopedBookmark: const drift.Value('bookmark'),
+        ),
+      );
+      await db.videosDao.insertVideo(
+        VideosCompanion.insert(
+          folderId: folderId,
+          absolutePath: videoFile.path,
+          title: 'clip',
+          duration: const drift.Value(12),
+          thumbnailPath: drift.Value(emptyThumbnail.path),
+        ),
+      );
+      final thumbnailService = ThumbnailService(
+        applicationSupportDirectory: () async => root,
+      );
+      final mediaService = _StubMediaService(
+        thumbnailBytes: Uint8List.fromList(const <int>[4, 5, 6]),
+      );
+      final adapter = _RecordingLibraryAccessAdapter();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          mediaServiceProvider.overrideWithValue(mediaService),
+          thumbnailServiceProvider.overrideWithValue(thumbnailService),
+          libraryAccessServiceProvider.overrideWithValue(
+            LibraryAccessService(adapter: adapter),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(libraryControllerProvider.future);
+      await adapter.started;
+      await _waitForScanIdle(container);
+
+      final repaired = (await db.videosDao.getVideoByPath(videoFile.path))!;
+      expect(repaired.thumbnailPath, isNot(emptyThumbnail.path));
+      expect(await File(repaired.thumbnailPath!).length(), greaterThan(0));
+      expect(mediaService.thumbnailRequests, [videoFile.path]);
+    },
+  );
+
+  test(
+    'syncAll skips zero-byte source files during thumbnail repair',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final root = await Directory.systemTemp.createTemp(
+        'library-zero-byte-thumbnail-repair-test',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final videoFile = File(p.join(root.path, 'placeholder.mp4'));
+      await videoFile.writeAsBytes(const <int>[]);
+
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final folderId = await db.foldersDao.insertFolder(
+        FoldersCompanion.insert(
+          path: root.path,
+          securityScopedBookmark: const drift.Value('bookmark'),
+        ),
+      );
+      await db.videosDao.insertVideo(
+        VideosCompanion.insert(
+          folderId: folderId,
+          absolutePath: videoFile.path,
+          title: 'placeholder',
+        ),
+      );
+      final mediaService = _StubMediaService(
+        thumbnailBytes: Uint8List.fromList(const <int>[4, 5, 6]),
+      );
+      final adapter = _RecordingLibraryAccessAdapter();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          mediaServiceProvider.overrideWithValue(mediaService),
+          thumbnailServiceProvider.overrideWithValue(
+            ThumbnailService(applicationSupportDirectory: () async => root),
+          ),
+          libraryAccessServiceProvider.overrideWithValue(
+            LibraryAccessService(adapter: adapter),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(libraryControllerProvider.future);
+      await adapter.started;
+      await _waitForScanIdle(container);
+
+      final unchanged = (await db.videosDao.getVideoByPath(videoFile.path))!;
+      expect(unchanged.thumbnailPath, isNull);
+      expect(mediaService.thumbnailRequests, isEmpty);
+    },
+  );
+
   test('rebuildLibrary removes thumbnails for cleared catalog rows', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final root = await Directory.systemTemp.createTemp(
@@ -414,6 +585,11 @@ class _FixedBatchScannerService extends ScannerService {
 }
 
 class _StubMediaService extends MediaService {
+  _StubMediaService({this.thumbnailBytes});
+
+  final Uint8List? thumbnailBytes;
+  final List<String> thumbnailRequests = <String>[];
+
   @override
   Future<Map<String, dynamic>> getMetadata(String path) async => const {
     'duration': 0.0,
@@ -423,7 +599,10 @@ class _StubMediaService extends MediaService {
   Future<Uint8List?> generateThumbnail(
     String path,
     double durationSeconds,
-  ) async => null;
+  ) async {
+    thumbnailRequests.add(path);
+    return thumbnailBytes;
+  }
 }
 
 Future<void> _waitForScanIdle(ProviderContainer container) async {

@@ -31,7 +31,7 @@ void main() {
     expect(find.text('Loaded'), findsOneWidget);
     expect(find.text('Select Loaded'), findsNothing);
     expect(find.byKey(const ValueKey('bulk-selection-group')), findsOneWidget);
-    expect(find.text('Select'), findsOneWidget);
+    expect(find.text('Selection'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('bulk-selection-group')),
@@ -46,7 +46,8 @@ void main() {
     expect(find.text('Favorite'), findsOneWidget);
     expect(find.text('Unfavorite'), findsOneWidget);
     expect(find.text('Clear Tags'), findsOneWidget);
-    expect(find.text('Clear Selection'), findsOneWidget);
+    expect(find.text('Clear'), findsOneWidget);
+    expect(find.text('Show Selected'), findsOneWidget);
 
     expect(
       tester
@@ -182,11 +183,67 @@ void main() {
     );
     expect(
       find.descendant(
-        of: find.widgetWithText(PushButton, 'Clear Selection'),
+        of: find.widgetWithText(PushButton, 'Clear'),
         matching: find.byIcon(CupertinoIcons.clear_circled),
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('bulk toolbar hides YouTube copying unless it is enabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: BulkSelectionToolbar(
+            selectedCount: 1,
+            isBusy: false,
+            onSelectLoaded: () {},
+            onPlay: () {},
+            onMove: () {},
+            onDelete: () {},
+            onFavorite: () {},
+            onUnfavorite: () {},
+            onClearTags: () {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Copy YouTube URLs'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('bulk-copy-youtube-urls-button')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('bulk toolbar toggles selected-only view', (tester) async {
+    var toggles = 0;
+    await tester.pumpWidget(
+      MacosApp(
+        home: MacosWindow(
+          child: BulkSelectionToolbar(
+            selectedCount: 1,
+            isBusy: false,
+            onSelectLoaded: () {},
+            onToggleShowSelectedOnly: () => toggles += 1,
+            onPlay: () {},
+            onMove: () {},
+            onDelete: () {},
+            onFavorite: () {},
+            onUnfavorite: () {},
+            onClearTags: () {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Show Selected'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('bulk-show-selected-button')));
+    expect(toggles, 1);
   });
 
   testWidgets('bulk toolbar dispatches selected actions', (tester) async {
@@ -224,7 +281,7 @@ void main() {
     await tester.tap(find.widgetWithText(PushButton, 'Favorite'));
     await tester.tap(find.widgetWithText(PushButton, 'Unfavorite'));
     await tester.tap(find.widgetWithText(PushButton, 'Clear Tags'));
-    await tester.tap(find.widgetWithText(PushButton, 'Clear Selection'));
+    await tester.tap(find.widgetWithText(PushButton, 'Clear'));
     await tester.tap(find.widgetWithText(PushButton, 'Copy YouTube URLs'));
 
     expect(calls, [
@@ -273,7 +330,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Select'), findsOneWidget);
+    expect(find.text('Selection'), findsOneWidget);
     expect(find.text('Loaded'), findsOneWidget);
     expect(find.text('Select Loaded'), findsNothing);
     expect(
@@ -308,7 +365,7 @@ void main() {
     expect(
       tester.getCenter(find.widgetWithText(PushButton, 'Copy YouTube URLs')).dx,
       greaterThan(
-        tester.getCenter(find.widgetWithText(PushButton, 'Clear Selection')).dx,
+        tester.getCenter(find.widgetWithText(PushButton, 'Clear')).dx,
       ),
     );
 

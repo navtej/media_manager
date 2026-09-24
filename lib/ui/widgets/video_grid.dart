@@ -854,20 +854,33 @@ class _VideoGridItemState extends State<VideoGridItem> {
 
     showMacosAlertDialog(
       context: context,
-      builder: (dialogContext) => MacosAlertDialog(
-        appIcon: const MacosIcon(CupertinoIcons.info),
-        title: Semantics(
-          container: true,
-          header: true,
-          child: const Text('Video Information'),
-        ),
-        message: SelectableText(
-          'Drive: $drive\nSize: $sizeStr\n\nFull Path: ${video.absolutePath}',
-        ),
-        primaryButton: PushButton(
-          controlSize: ControlSize.large,
-          child: const Text('OK'),
-          onPressed: () => Navigator.of(dialogContext).pop(),
+      builder: (dialogContext) => Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.escape ||
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+            Navigator.of(dialogContext).pop();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: MacosAlertDialog(
+          appIcon: const MacosIcon(CupertinoIcons.info),
+          title: Semantics(
+            container: true,
+            header: true,
+            child: const Text('Video Information'),
+          ),
+          message: SelectableText(
+            'Drive: $drive\nSize: $sizeStr\n\nFull Path: ${video.absolutePath}',
+          ),
+          primaryButton: PushButton(
+            controlSize: ControlSize.large,
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
         ),
       ),
     );

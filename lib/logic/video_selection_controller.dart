@@ -6,10 +6,12 @@ class VideoSelectionState {
   const VideoSelectionState({
     this.selectedIds = const <int>{},
     this.anchorVideoId,
+    this.showSelectedOnly = false,
   });
 
   final Set<int> selectedIds;
   final int? anchorVideoId;
+  final bool showSelectedOnly;
 
   bool get hasSelection => selectedIds.isNotEmpty;
   int get count => selectedIds.length;
@@ -20,10 +22,12 @@ class VideoSelectionState {
     Set<int>? selectedIds,
     int? anchorVideoId,
     bool clearAnchor = false,
+    bool? showSelectedOnly,
   }) {
     return VideoSelectionState(
       selectedIds: selectedIds ?? this.selectedIds,
       anchorVideoId: clearAnchor ? null : anchorVideoId ?? this.anchorVideoId,
+      showSelectedOnly: showSelectedOnly ?? this.showSelectedOnly,
     );
   }
 }
@@ -133,6 +137,15 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
           .where((videoId) => retainSet.contains(videoId))
           .toSet(),
     );
+  }
+
+  void toggleShowSelectedOnly() {
+    state = state.copyWith(showSelectedOnly: !state.showSelectedOnly);
+  }
+
+  void setShowSelectedOnly(bool value) {
+    if (state.showSelectedOnly == value) return;
+    state = state.copyWith(showSelectedOnly: value);
   }
 
   void clear() {

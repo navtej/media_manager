@@ -14,6 +14,8 @@ class BulkSelectionToolbar extends StatefulWidget {
     this.maxLoadedVideoCount = 0,
     this.onSelectRandom,
     this.onCopyYoutubeUrls,
+    this.showSelectedOnly = false,
+    this.onToggleShowSelectedOnly,
     required this.onPlay,
     required this.onMove,
     required this.onDelete,
@@ -29,6 +31,8 @@ class BulkSelectionToolbar extends StatefulWidget {
   final int maxLoadedVideoCount;
   final ValueChanged<int>? onSelectRandom;
   final VoidCallback? onCopyYoutubeUrls;
+  final bool showSelectedOnly;
+  final VoidCallback? onToggleShowSelectedOnly;
   final VoidCallback? onPlay;
   final VoidCallback? onMove;
   final VoidCallback? onDelete;
@@ -117,6 +121,10 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
         randomFieldEnabled &&
         _randomCount != null &&
         widget.onSelectRandom != null;
+    final canToggleShowSelectedOnly =
+        !widget.isBusy &&
+        (hasSelection || widget.showSelectedOnly) &&
+        widget.onToggleShowSelectedOnly != null;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -167,107 +175,131 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
                   onPressed: canSelectRandom ? _selectRandom : null,
                   child: const Text('Random'),
                 ),
+                const SizedBox(width: 12),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    '${widget.selectedCount} Selected',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.body,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  key: const ValueKey('bulk-show-selected-button'),
+                  controlSize: ControlSize.regular,
+                  secondary: !widget.showSelectedOnly,
+                  onPressed: canToggleShowSelectedOnly
+                      ? widget.onToggleShowSelectedOnly
+                      : null,
+                  child: _ToolbarButtonLabel(
+                    icon: Icon(
+                      widget.showSelectedOnly
+                          ? CupertinoIcons.eye
+                          : CupertinoIcons.eye_slash,
+                      size: 16,
+                    ),
+                    label: widget.showSelectedOnly
+                        ? 'Show All'
+                        : 'Show Selected',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onClearSelection : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(CupertinoIcons.clear_circled, size: 16),
+                    label: 'Clear',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: !hasSelection,
+                  onPressed: canUseSelection ? widget.onPlay : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(CupertinoIcons.play_fill, size: 16),
+                    label: 'Play',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onMove : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(CupertinoIcons.arrow_right_arrow_left, size: 16),
+                    label: 'Move',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onDelete : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(CupertinoIcons.trash, size: 16),
+                    label: 'Delete',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onFavorite : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(
+                      CupertinoIcons.heart_fill,
+                      color: MacosColors.appleRed,
+                      size: 16,
+                    ),
+                    label: 'Favorite',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onUnfavorite : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: Icon(CupertinoIcons.heart, size: 16),
+                    label: 'Unfavorite',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PushButton(
+                  controlSize: ControlSize.regular,
+                  secondary: true,
+                  onPressed: canUseSelection ? widget.onClearTags : null,
+                  child: const _ToolbarButtonLabel(
+                    icon: IconCraft(
+                      Icon(CupertinoIcons.tag, size: 16),
+                      Icon(CupertinoIcons.clear_thick, size: 10),
+                      alignment: Alignment(1.2, -1.1),
+                      secondaryIconSizeFactor: 0.5,
+                    ),
+                    label: 'Clear Tags',
+                  ),
+                ),
+                if (widget.onCopyYoutubeUrls != null) ...[
+                  const SizedBox(width: 8),
+                  PushButton(
+                    key: const ValueKey('bulk-copy-youtube-urls-button'),
+                    controlSize: ControlSize.regular,
+                    secondary: true,
+                    onPressed: canUseSelection
+                        ? widget.onCopyYoutubeUrls
+                        : null,
+                    child: const _ToolbarButtonLabel(
+                      icon: Icon(CupertinoIcons.doc_on_clipboard, size: 16),
+                      label: 'Copy YouTube URLs',
+                    ),
+                  ),
+                ],
               ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              '${widget.selectedCount} Selected',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.typography.body,
-            ),
-          ),
-          const SizedBox(width: 12),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: !hasSelection,
-            onPressed: canUseSelection ? widget.onPlay : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.play_fill, size: 16),
-              label: 'Play',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onMove : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.arrow_right_arrow_left, size: 16),
-              label: 'Move',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onDelete : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.trash, size: 16),
-              label: 'Delete',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onFavorite : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(
-                CupertinoIcons.heart_fill,
-                color: MacosColors.appleRed,
-                size: 16,
-              ),
-              label: 'Favorite',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onUnfavorite : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.heart, size: 16),
-              label: 'Unfavorite',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onClearTags : null,
-            child: const _ToolbarButtonLabel(
-              icon: IconCraft(
-                Icon(CupertinoIcons.tag, size: 16),
-                Icon(CupertinoIcons.clear_thick, size: 10),
-                alignment: Alignment(1.2, -1.1),
-                secondaryIconSizeFactor: 0.5,
-              ),
-              label: 'Clear Tags',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onClearSelection : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.clear_circled, size: 16),
-              label: 'Clear Selection',
-            ),
-          ),
-          const SizedBox(width: 8),
-          PushButton(
-            key: const ValueKey('bulk-copy-youtube-urls-button'),
-            controlSize: ControlSize.regular,
-            secondary: true,
-            onPressed: canUseSelection ? widget.onCopyYoutubeUrls : null,
-            child: const _ToolbarButtonLabel(
-              icon: Icon(CupertinoIcons.doc_on_clipboard, size: 16),
-              label: 'Copy YouTube URLs',
             ),
           ),
         ],
@@ -286,7 +318,7 @@ class _SelectionGroupBox extends StatelessWidget {
     final theme = MacosTheme.of(context);
     return Semantics(
       container: true,
-      label: 'Select',
+      label: 'Selection',
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -308,7 +340,7 @@ class _SelectionGroupBox extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: ExcludeSemantics(
-                    child: Text('Select', style: theme.typography.caption2),
+                    child: Text('Selection', style: theme.typography.caption2),
                   ),
                 ),
               ),

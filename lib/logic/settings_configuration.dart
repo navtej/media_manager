@@ -142,6 +142,24 @@ final class PrivateLibraryAccessConfiguration {
   }
 }
 
+final class MiscellaneousConfiguration {
+  const MiscellaneousConfiguration._({required this.copyYoutubeUrlsEnabled});
+
+  static const defaultCopyYoutubeUrlsEnabled = false;
+  static const defaults = MiscellaneousConfiguration._(
+    copyYoutubeUrlsEnabled: defaultCopyYoutubeUrlsEnabled,
+  );
+
+  factory MiscellaneousConfiguration.resolve({bool? copyYoutubeUrlsEnabled}) {
+    return MiscellaneousConfiguration._(
+      copyYoutubeUrlsEnabled:
+          copyYoutubeUrlsEnabled ?? defaultCopyYoutubeUrlsEnabled,
+    );
+  }
+
+  final bool copyYoutubeUrlsEnabled;
+}
+
 enum AppearanceThemeMode {
   system('system'),
   light('light'),
@@ -442,6 +460,7 @@ final class AppSettings {
     required this.librarySynchronization,
     required this.emptyFolderCleanup,
     required this.privateLibraryAccess,
+    required this.miscellaneous,
     required this.appearance,
     required this.catalogBrowsing,
     required this.videoSummary,
@@ -451,6 +470,7 @@ final class AppSettings {
     librarySynchronization: LibrarySynchronizationConfiguration.defaults,
     emptyFolderCleanup: EmptyFolderCleanupConfiguration.defaults,
     privateLibraryAccess: PrivateLibraryAccessConfiguration.defaults,
+    miscellaneous: MiscellaneousConfiguration.defaults,
     appearance: AppearanceConfiguration.defaults,
     catalogBrowsing: CatalogBrowsingConfiguration.defaults,
     videoSummary: VideoSummaryConfiguration.defaults,
@@ -459,6 +479,7 @@ final class AppSettings {
   final LibrarySynchronizationConfiguration librarySynchronization;
   final EmptyFolderCleanupConfiguration emptyFolderCleanup;
   final PrivateLibraryAccessConfiguration privateLibraryAccess;
+  final MiscellaneousConfiguration miscellaneous;
   final AppearanceConfiguration appearance;
   final CatalogBrowsingConfiguration catalogBrowsing;
   final VideoSummaryConfiguration videoSummary;
@@ -467,6 +488,7 @@ final class AppSettings {
     LibrarySynchronizationConfiguration? librarySynchronization,
     EmptyFolderCleanupConfiguration? emptyFolderCleanup,
     PrivateLibraryAccessConfiguration? privateLibraryAccess,
+    MiscellaneousConfiguration? miscellaneous,
     AppearanceConfiguration? appearance,
     CatalogBrowsingConfiguration? catalogBrowsing,
     VideoSummaryConfiguration? videoSummary,
@@ -476,6 +498,7 @@ final class AppSettings {
           librarySynchronization ?? this.librarySynchronization,
       emptyFolderCleanup: emptyFolderCleanup ?? this.emptyFolderCleanup,
       privateLibraryAccess: privateLibraryAccess ?? this.privateLibraryAccess,
+      miscellaneous: miscellaneous ?? this.miscellaneous,
       appearance: appearance ?? this.appearance,
       catalogBrowsing: catalogBrowsing ?? this.catalogBrowsing,
       videoSummary: videoSummary ?? this.videoSummary,

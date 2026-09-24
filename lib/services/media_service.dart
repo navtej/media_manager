@@ -63,36 +63,61 @@ class MediaService {
     String path,
     double durationSeconds,
   ) async {
-    final tempDir = await getTemporaryDirectory();
+    final tempDir = await _temporaryDirectory();
+    if (!await tempDir.exists()) {
+      await tempDir.create(recursive: true);
+    }
     final tempPath = p.join(
       tempDir.path,
-      'thumb_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      'thumb_${DateTime.now().microsecondsSinceEpoch}.jpg',
     );
 
     // 10% mark
     final timestamp = durationSeconds * 0.10;
-    // Format timestamp HH:MM:SS or just seconds might work for -ss depending on version,
-    // but typically seconds works.
+    final file = File(tempPath);
 
-    final command =
-        '-ss $timestamp -i "$path" -vframes 1 -vf scale=480:-1 -q:v 2 "$tempPath"';
+    try {
+      // Pass arguments directly so spaces, Unicode, and quote characters in a
+      // library path cannot be misinterpreted by FFmpegKit's command parser.
+      // Overwrite is explicit because a previous interrupted attempt may have
+      // left the same temporary file behind.
+      final session = await FFmpegKit.executeWithArguments([
+        '-y',
+        '-ss',
+        timestamp.toString(),
+        '-i',
+        path,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=480:-1',
+        '-q:v',
+        '2',
+        tempPath,
+      ]);
+      final returnCode = await session.getReturnCode();
 
-    final session = await FFmpegKit.execute(command);
-    final returnCode = await session.getReturnCode();
-
-    if (ReturnCode.isSuccess(returnCode)) {
-      final file = File(tempPath);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        await file.delete();
-        return bytes;
+      if (ReturnCode.isSuccess(returnCode) &&
+          await file.exists() &&
+          await file.length() > 0) {
+        return await file.readAsBytes();
       }
-    } else {
+
       print(
-        'Failed to generate thumbnail for $path: ${await session.getOutput()}',
+        'Failed to generate thumbnail for $path '
+        '(return code: ${returnCode?.getValue()}): '
+        '${await session.getOutput()}',
       );
+      return null;
+    } finally {
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } on FileSystemException catch (error) {
+        debugPrint('Failed to delete temporary thumbnail: $error');
+      }
     }
-    return null;
   }
 
   Future<String?> extractTranscriptionAudio(String path) async {

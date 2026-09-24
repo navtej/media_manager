@@ -225,6 +225,10 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const ValueKey('copy-youtube-urls-checkbox')),
+      findsOneWidget,
+    );
+    expect(
       (tester.getCenter(find.text('Theme')).dy -
               tester.getCenter(find.text('System')).dy)
           .abs(),

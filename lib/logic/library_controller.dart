@@ -106,16 +106,19 @@ class LibraryController extends _$LibraryController {
 
   // _checkAndMigrateThumbnails moved to maintenance_controller.dart
 
-  Future<void> syncAll() async {
+  Future<void> syncAll({bool showBusyStatus = true}) async {
     if (_isScanning) {
-      print('DEBUG: syncAll ignored, scan already in progress');
-      // Set status briefly to inform user why it was ignored if they clicked button
-      ref
-          .read(scanStatusProvider.notifier)
-          .setStatus('Scan already in progress');
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!_isScanning) ref.read(scanStatusProvider.notifier).setStatus('');
-      });
+      if (showBusyStatus) {
+        print('DEBUG: syncAll ignored, scan already in progress');
+        // Only an explicit request should replace the active scan status. A
+        // periodic tick is expected to overlap a long-running scan.
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus('Scan already in progress');
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_isScanning) ref.read(scanStatusProvider.notifier).setStatus('');
+        });
+      }
       return;
     }
 
@@ -125,14 +128,16 @@ class LibraryController extends _$LibraryController {
       if (!operationState.isScanning) {
         _scanPending = true;
       }
-      ref
-          .read(scanStatusProvider.notifier)
-          .setStatus(_operationBlockedMessage(operationState));
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!ref.read(libraryOperationControllerProvider).isBusy) {
-          ref.read(scanStatusProvider.notifier).setStatus('');
-        }
-      });
+      if (showBusyStatus) {
+        ref
+            .read(scanStatusProvider.notifier)
+            .setStatus(_operationBlockedMessage(operationState));
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!ref.read(libraryOperationControllerProvider).isBusy) {
+            ref.read(scanStatusProvider.notifier).setStatus('');
+          }
+        });
+      }
       return;
     }
     _scanPending = false;
@@ -290,8 +295,11 @@ class LibraryController extends _$LibraryController {
     _periodicTimer = ref.read(periodicScanTimerFactoryProvider)(
       Duration(minutes: interval),
       (_) {
+        if (_isScanning) {
+          return;
+        }
         print('DEBUG: Periodic scan timer triggered');
-        syncAll();
+        unawaited(syncAll(showBusyStatus: false));
       },
     );
   }
@@ -459,6 +467,7 @@ class LibraryController extends _$LibraryController {
 
     // 1. Get existing videos for this folder to skip them (Set for O(1) lookup)
     final existingVideos = await videoDao.getVideosByFolder(folderId);
+    await _repairMissingThumbnails(existingVideos);
     final existingPaths = existingVideos.map((v) => v.absolutePath).toSet();
 
     int processedCount = 0;
@@ -547,16 +556,12 @@ class LibraryController extends _$LibraryController {
       final duration = (meta['duration'] as num?)?.toInt() ?? 0;
 
       // 2. Thumbnail
-      String? thumbPath;
-      final thumbBytes = await mediaService.generateThumbnail(
+      final thumbPath = await _generateThumbnailPath(
         filePath,
         duration.toDouble(),
+        mediaService: mediaService,
+        thumbnailService: thumbnailService,
       );
-
-      if (thumbBytes != null) {
-        final fileName = thumbnailService.generateFileName();
-        thumbPath = await thumbnailService.saveThumbnail(fileName, thumbBytes);
-      }
 
       // 3. Prepare Companion
       return VideosCompanion(
@@ -581,6 +586,92 @@ class LibraryController extends _$LibraryController {
       print('Error preparing $filePath: $e');
       return null;
     }
+  }
+
+  Future<void> _repairMissingThumbnails(List<Video> videos) async {
+    final videosMissingThumbnails = <Video>[];
+    for (final video in videos) {
+      if (video.thumbnailBlob != null && video.thumbnailBlob!.isNotEmpty) {
+        continue;
+      }
+
+      final sourceFile = File(video.absolutePath);
+      try {
+        if (!await sourceFile.exists() || await sourceFile.length() == 0) {
+          continue;
+        }
+      } on FileSystemException {
+        continue;
+      }
+
+      final thumbnailPath = video.thumbnailPath;
+      if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+        try {
+          final thumbnailFile = File(thumbnailPath);
+          if (await thumbnailFile.exists() &&
+              await thumbnailFile.length() > 0) {
+            continue;
+          }
+        } on FileSystemException {
+          // Treat an unreadable thumbnail as missing so the source video is
+          // retried on the next scan.
+        }
+      }
+      videosMissingThumbnails.add(video);
+    }
+
+    if (videosMissingThumbnails.isEmpty) {
+      return;
+    }
+
+    final mediaService = ref.read(mediaServiceProvider);
+    final thumbnailService = ref.read(thumbnailServiceProvider);
+    final videoDao = ref.read(videosDaoProvider);
+    print(
+      'DEBUG: Retrying thumbnails for '
+      '${videosMissingThumbnails.length} existing videos',
+    );
+
+    for (var index = 0; index < videosMissingThumbnails.length; index++) {
+      final video = videosMissingThumbnails[index];
+      ref
+          .read(scanStatusProvider.notifier)
+          .setStatus(
+            'Generating thumbnail '
+            '${index + 1}/${videosMissingThumbnails.length}...',
+          );
+      try {
+        final thumbnailPath = await _generateThumbnailPath(
+          video.absolutePath,
+          video.duration.toDouble(),
+          mediaService: mediaService,
+          thumbnailService: thumbnailService,
+        );
+        if (thumbnailPath != null) {
+          await videoDao.updateVideoThumbnailPath(video.id, thumbnailPath);
+        }
+      } catch (error) {
+        print('Error repairing thumbnail for ${video.absolutePath}: $error');
+      }
+    }
+  }
+
+  Future<String?> _generateThumbnailPath(
+    String filePath,
+    double durationSeconds, {
+    required MediaService mediaService,
+    required ThumbnailService thumbnailService,
+  }) async {
+    final thumbBytes = await mediaService.generateThumbnail(
+      filePath,
+      durationSeconds,
+    );
+    if (thumbBytes == null || thumbBytes.isEmpty) {
+      return null;
+    }
+
+    final fileName = thumbnailService.generateFileName();
+    return thumbnailService.saveThumbnail(fileName, thumbBytes);
   }
 
   // AI Logic moved to ai_controller.dart

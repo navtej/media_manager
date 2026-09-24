@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:macos_ui/macos_ui.dart';
@@ -78,6 +79,30 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(CupertinoIcons.info));
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsNothing);
+
+    await tester.tap(find.byIcon(CupertinoIcons.info));
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsNothing);
+
+    await tester.tap(find.byIcon(CupertinoIcons.info));
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+    await tester.pumpAndSettle();
+    expect(find.text('Video Information'), findsNothing);
 
     await tester.tap(find.byIcon(CupertinoIcons.info));
     await tester.pumpAndSettle();

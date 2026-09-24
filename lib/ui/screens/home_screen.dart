@@ -89,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.watch(searchQueryProvider).isNotEmpty ||
         ref.watch(combinedSelectedTagsProvider).isNotEmpty;
     final moveSelection = ref.watch(videoSelectionControllerProvider);
+    final copyYoutubeUrlsEnabled = ref.watch(copyYoutubeUrlsEnabledProvider);
     final moveState = ref.watch(videoMoveControllerProvider);
     final isBulkBusy = moveState.isMoving || _isBulkActionRunning;
     final loadedVideoIds =
@@ -530,7 +531,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                 .notifier,
                                           )
                                           .selectRandom(loadedVideoIds, count),
-                                onCopyYoutubeUrls: _copyYoutubeUrlsForSelected,
+                                showSelectedOnly:
+                                    moveSelection.showSelectedOnly,
+                                onToggleShowSelectedOnly: () => ref
+                                    .read(
+                                      videoSelectionControllerProvider.notifier,
+                                    )
+                                    .toggleShowSelectedOnly(),
+                                onCopyYoutubeUrls: copyYoutubeUrlsEnabled
+                                    ? _copyYoutubeUrlsForSelected
+                                    : null,
                                 onPlay: _playSelectedVideos,
                                 onMove: () {
                                   final selectedVideoIds = _selectedVideoIds();

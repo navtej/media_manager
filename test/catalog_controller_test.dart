@@ -7,6 +7,7 @@ import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/catalog_controller.dart';
 import 'package:movie_manager/logic/private_library_controller.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
+import 'package:movie_manager/logic/video_selection_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/provider_test_utils.dart';
@@ -227,6 +228,22 @@ void main() {
       (await readAsyncValue(container, libraryStatsProvider)).totalCount,
       2,
     );
+    expect(
+      await readAsyncValue(container, filteredVideosProvider),
+      hasLength(2),
+    );
+
+    final selection = container.read(videoSelectionControllerProvider.notifier);
+    selection.selectLoaded([snapshot.loadedVideos.first.id]);
+    selection.toggleShowSelectedOnly();
+    expect(
+      (await readAsyncValue(
+        container,
+        filteredVideosProvider,
+      )).map((video) => video.id),
+      [snapshot.loadedVideos.first.id],
+    );
+    selection.toggleShowSelectedOnly();
     expect(
       await readAsyncValue(container, filteredVideosProvider),
       hasLength(2),

@@ -23,6 +23,36 @@ void main() {
     );
   });
 
+  test(
+    'copy YouTube URL button preference defaults off and persists',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      var settings = await container.read(settingsProvider.future);
+      expect(settings.miscellaneous.copyYoutubeUrlsEnabled, isFalse);
+      expect(container.read(copyYoutubeUrlsEnabledProvider), isFalse);
+
+      await container
+          .read(settingsProvider.notifier)
+          .updateCopyYoutubeUrlsEnabled(true);
+      settings = await container.read(settingsProvider.future);
+      expect(settings.miscellaneous.copyYoutubeUrlsEnabled, isTrue);
+      expect(container.read(copyYoutubeUrlsEnabledProvider), isTrue);
+
+      final reloaded = ProviderContainer();
+      addTearDown(reloaded.dispose);
+      expect(
+        (await reloaded.read(
+          settingsProvider.future,
+        )).miscellaneous.copyYoutubeUrlsEnabled,
+        isTrue,
+      );
+    },
+  );
+
   test('empty-folder cleanup defaults persist across reloads', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
 
