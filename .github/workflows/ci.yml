@@ -54,6 +54,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install Whisper build tools
+        if: matrix.mode == 'release'
+        run: command -v cmake || brew install cmake
+
+      - name: Prepare bundled Whisper runtime
+        if: matrix.mode == 'release'
+        run: ./scripts/prepare_whisper_runtime.sh
+
       - name: Build macOS ${{ matrix.mode }} app
         run: flutter build macos --${{ matrix.mode }}
 
