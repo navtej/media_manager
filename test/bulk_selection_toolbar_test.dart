@@ -119,6 +119,12 @@ void main() {
       ),
     );
 
+    final selectionGroupRect = tester.getRect(
+      find.byKey(const ValueKey('bulk-selection-group')),
+    );
+    final selectedCountRect = tester.getRect(find.text('3 Selected'));
+    expect(selectedCountRect.left, greaterThan(selectionGroupRect.right));
+
     expect(
       tester
           .widget<PushButton>(find.widgetWithText(PushButton, 'Play'))

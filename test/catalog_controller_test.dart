@@ -137,6 +137,45 @@ void main() {
     expect(_tagCounts(firstPage.relatedTags), {'common': 2, 'blue': 1});
   });
 
+  test(
+    'selection queries rank the full filtered pool and resolve unloaded IDs',
+    () async {
+      final fixture = await _CatalogFixture.create();
+      addTearDown(fixture.db.close);
+      final catalog = CatalogQueryModule(fixture.db);
+      final criteria = fixture.criteria(pageLimit: 1);
+
+      final largest = await catalog.selectVideoIds(
+        criteria: criteria,
+        mode: CatalogSelectionMode.sizeLargest,
+        count: 2,
+      );
+      final largestVideos = await fixture.db.videosDao.getVideosByIds(largest);
+      final largestById = {for (final video in largestVideos) video.id: video};
+      expect(largest.map((id) => largestById[id]!.title), ['Delta', 'Gamma']);
+
+      final shortest = await catalog.selectVideoIds(
+        criteria: criteria,
+        mode: CatalogSelectionMode.durationShortest,
+        count: 2,
+      );
+      final shortestVideos = await fixture.db.videosDao.getVideosByIds(
+        shortest,
+      );
+      final shortestById = {
+        for (final video in shortestVideos) video.id: video,
+      };
+      expect(shortest.map((id) => shortestById[id]!.title), ['Alpha', 'Beta']);
+
+      final full = await catalog.fetch(fixture.criteria());
+      final delta = full.loadedVideos.singleWhere(
+        (video) => video.title == 'Delta',
+      );
+      final selected = await catalog.fetchSelectedVideos(criteria, [delta.id]);
+      expect(selected.map((video) => video.title), ['Delta']);
+    },
+  );
+
   test('criteria changes update every derived catalog result', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'showOfflineMedia': false,

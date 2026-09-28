@@ -58,4 +58,27 @@ void main() {
       isFalse,
     );
   });
+
+  test('removing the anchor preserves survivors and clears empty mode', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      videoSelectionControllerProvider.notifier,
+    );
+    controller.replaceSelection([1, 2]);
+    controller.setShowSelectedOnly(true);
+    controller.removeIds([2]);
+
+    var state = container.read(videoSelectionControllerProvider);
+    expect(state.selectedIds, {1});
+    expect(state.anchorVideoId, isNull);
+    expect(state.showSelectedOnly, isTrue);
+
+    controller.removeIds([1]);
+    state = container.read(videoSelectionControllerProvider);
+    expect(state.selectedIds, isEmpty);
+    expect(state.anchorVideoId, isNull);
+    expect(state.showSelectedOnly, isFalse);
+  });
 }

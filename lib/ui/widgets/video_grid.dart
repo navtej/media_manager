@@ -48,6 +48,9 @@ class CatalogScrollView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
+        if (ref.read(videoSelectionControllerProvider).showSelectedOnly) {
+          return false;
+        }
         if (notification.depth != 0 ||
             notification is! ScrollUpdateNotification ||
             (notification.scrollDelta ?? 0) <= 0) {
@@ -76,6 +79,13 @@ class CatalogPaginationTail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(
+      videoSelectionControllerProvider.select(
+        (state) => state.showSelectedOnly,
+      ),
+    )) {
+      return const SliverToBoxAdapter();
+    }
     final presentationAsync = ref.watch(catalogPaginationProvider);
     if (presentationAsync is! AsyncData<CatalogPaginationState>) {
       return const SliverToBoxAdapter();
@@ -1001,9 +1011,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
                   .set('Authentication cancelled.');
               return;
             }
-            ref
-                .read(videoSelectionControllerProvider.notifier)
-                .removeIds(result.deletedVideoIds);
             ref.read(statusMessageProvider.notifier).set(result.userMessage);
           },
         ),
@@ -1282,6 +1289,8 @@ class _VideoGridItemState extends State<VideoGridItem> {
             final statusMessage = ref.read(statusMessageProvider.notifier);
             Navigator.of(dialogContext).pop();
             final result = await maintenanceController.deleteVideo(videoId);
+            // Maintenance reconciles successful/absent deletion with the
+            // selection controller even if this card is disposed meanwhile.
             statusMessage.set(result.userMessage);
           },
         ),

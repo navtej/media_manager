@@ -14,6 +14,7 @@ import '../widgets/video_grid.dart';
 import '../widgets/status_footer.dart';
 import '../widgets/filter_bar.dart';
 import '../../logic/catalog_controller.dart';
+import '../../logic/catalog_selection_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
@@ -89,14 +90,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.watch(searchQueryProvider).isNotEmpty ||
         ref.watch(combinedSelectedTagsProvider).isNotEmpty;
     final moveSelection = ref.watch(videoSelectionControllerProvider);
+    final selectionOperation = ref.watch(catalogSelectionControllerProvider);
     final copyYoutubeUrlsEnabled = ref.watch(copyYoutubeUrlsEnabledProvider);
     final moveState = ref.watch(videoMoveControllerProvider);
-    final isBulkBusy = moveState.isMoving || _isBulkActionRunning;
+    final isBulkBusy =
+        moveState.isMoving ||
+        selectionOperation.isLoading ||
+        _isBulkActionRunning;
+    final catalogSnapshot = ref.watch(catalogSnapshotProvider);
     final loadedVideoIds =
         ref
-            .watch(filteredVideosProvider)
+            .watch(catalogSnapshotProvider)
             .asData
             ?.value
+            .loadedVideos
             .map((video) => video.id)
             .toList(growable: false) ??
         const <int>[];
@@ -508,13 +515,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                             ),
                             Container(
-                              height: 44,
                               alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.fromLTRB(24, 0, 16, 8),
+                              padding: const EdgeInsets.fromLTRB(24, 4, 16, 8),
                               child: BulkSelectionToolbar(
                                 selectedCount: moveSelection.count,
                                 isBusy: isBulkBusy,
                                 maxLoadedVideoCount: loadedVideoIds.length,
+                                maxVideoCount:
+                                    catalogSnapshot.asData?.value.totalCount,
                                 onSelectLoaded: loadedVideoIds.isEmpty
                                     ? null
                                     : () => ref
@@ -523,14 +531,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                 .notifier,
                                           )
                                           .selectLoaded(loadedVideoIds),
-                                onSelectRandom: loadedVideoIds.isEmpty
+                                onSelectRandom: catalogSnapshot.asData == null
                                     ? null
                                     : (count) => ref
                                           .read(
-                                            videoSelectionControllerProvider
+                                            catalogSelectionControllerProvider
                                                 .notifier,
                                           )
-                                          .selectRandom(loadedVideoIds, count),
+                                          .select(
+                                            CatalogSelectionMode.random,
+                                            count,
+                                          ),
+                                onSelectMode: catalogSnapshot.asData == null
+                                    ? null
+                                    : (mode, count) {
+                                        ref
+                                            .read(
+                                              catalogSelectionControllerProvider
+                                                  .notifier,
+                                            )
+                                            .select(mode, count);
+                                      },
                                 showSelectedOnly:
                                     moveSelection.showSelectedOnly,
                                 onToggleShowSelectedOnly: () => ref
@@ -833,9 +854,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return;
       }
 
-      ref
-          .read(videoSelectionControllerProvider.notifier)
-          .removeIds(result.deletedVideoIds);
       ref.read(statusMessageProvider.notifier).set(result.userMessage);
     });
   }

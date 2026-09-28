@@ -15,6 +15,7 @@ import 'private_library_controller.dart';
 import 'settings_provider.dart';
 import 'status_message_provider.dart';
 import 'stats_provider.dart';
+import 'video_selection_controller.dart';
 
 part 'maintenance_controller.g.dart';
 
@@ -277,6 +278,7 @@ class MaintenanceController extends _$MaintenanceController {
     final result = await ref
         .read(mediaDeletionServiceProvider)
         .deleteVideo(videoId);
+    _reconcileDeletion(result);
     return result;
   }
 
@@ -289,9 +291,32 @@ class MaintenanceController extends _$MaintenanceController {
             final result = await ref
                 .read(mediaDeletionServiceProvider)
                 .deleteVideos(videoIds);
+            _reconcileDeletionBatch(result);
             return result;
           },
         );
+  }
+
+  void _reconcileDeletion(MediaDeletionResult result) {
+    if (result.status == MediaDeletionStatus.deleted ||
+        result.status == MediaDeletionStatus.notFound) {
+      ref.read(videoSelectionControllerProvider.notifier).removeIds([
+        result.videoId,
+      ]);
+    }
+  }
+
+  void _reconcileDeletionBatch(MediaDeletionBatchResult result) {
+    final resolved = result.results
+        .where(
+          (item) =>
+              item.status == MediaDeletionStatus.deleted ||
+              item.status == MediaDeletionStatus.notFound,
+        )
+        .map((item) => item.videoId)
+        .toList(growable: false);
+    if (resolved.isEmpty) return;
+    ref.read(videoSelectionControllerProvider.notifier).removeIds(resolved);
   }
 
   Future<bool> setFavoriteForVideos(List<int> videoIds, bool isFavorite) async {

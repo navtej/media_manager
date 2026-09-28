@@ -15,6 +15,15 @@ enum SortOption { title, duration, addedAt, size }
 
 enum SortDirection { asc, desc }
 
+/// The count-based replacement modes exposed by the home selection toolbar.
+enum CatalogSelectionMode {
+  random,
+  sizeLargest,
+  sizeSmallest,
+  durationShortest,
+  durationLongest,
+}
+
 final class CatalogCriteria {
   const CatalogCriteria({
     required this.searchQuery,
@@ -153,6 +162,129 @@ final class CatalogQueryModule {
     return database.transaction(() => _fetch(criteria));
   }
 
+  /// Returns only the IDs requested by a replacement selection operation.
+  ///
+  /// Unlike [fetch], this never materializes a catalog snapshot or video
+  /// payload.  The predicate is shared with browsing so selection cannot
+  /// escape the current filters or effective folder access scope.
+  Future<List<int>> selectVideoIds({
+    required CatalogCriteria criteria,
+    required CatalogSelectionMode mode,
+    required int count,
+  }) async {
+    if (count < 0) {
+      throw ArgumentError.value(count, 'count', 'must not be negative');
+    }
+    if (count == 0 || criteria.folderIds.isEmpty) {
+      return const <int>[];
+    }
+
+    final predicate = _CatalogPredicate(criteria);
+    final order = switch (mode) {
+      CatalogSelectionMode.random => 'ORDER BY RANDOM()',
+      CatalogSelectionMode.sizeLargest => 'ORDER BY v.size DESC, v.id ASC',
+      CatalogSelectionMode.sizeSmallest => 'ORDER BY v.size ASC, v.id ASC',
+      CatalogSelectionMode.durationShortest =>
+        'ORDER BY v.duration ASC, v.id ASC',
+      CatalogSelectionMode.durationLongest =>
+        'ORDER BY v.duration DESC, v.id ASC',
+    };
+    final metric = switch (mode) {
+      CatalogSelectionMode.random => null,
+      CatalogSelectionMode.sizeLargest ||
+      CatalogSelectionMode.sizeSmallest => 'v.size',
+      CatalogSelectionMode.durationShortest ||
+      CatalogSelectionMode.durationLongest => 'v.duration',
+    };
+    final metricClause = metric == null ? '' : ' AND $metric > 0';
+    final rows = await database
+        .customSelect(
+          'SELECT v.id FROM videos v ${predicate.whereClause}$metricClause '
+          '$order LIMIT ?',
+          variables: [...predicate.variables, Variable.withInt(count)],
+          readsFrom: {
+            database.videos,
+            database.videoTags,
+            database.tagDefinitions,
+          },
+        )
+        .get();
+    return rows.map((row) => row.read<int>('id')).toList(growable: false);
+  }
+
+  /// Watches the current filtered pool and resolves only selected records.
+  ///
+  /// The ID predicate is split into conservative chunks so a large selection
+  /// does not exceed SQLite's variable limit. Results are merged back into the
+  /// active catalog ordering.
+  Stream<List<Video>> watchSelectedVideos(
+    CatalogCriteria criteria,
+    Iterable<int> selectedIds,
+  ) {
+    final ids = selectedIds.toSet().toList(growable: false);
+    if (criteria.folderIds.isEmpty || ids.isEmpty) {
+      return Stream<List<Video>>.value(const <Video>[]);
+    }
+    return database
+        .customSelect(
+          'SELECT COUNT(*) AS watched_rows FROM videos',
+          readsFrom: {
+            database.videos,
+            database.videoTags,
+            database.tagDefinitions,
+          },
+        )
+        .watch()
+        .asyncMap((_) => fetchSelectedVideos(criteria, ids));
+  }
+
+  Future<List<Video>> fetchSelectedVideos(
+    CatalogCriteria criteria,
+    Iterable<int> selectedIds,
+  ) async {
+    final ids = selectedIds.toSet().toList(growable: false);
+    if (criteria.folderIds.isEmpty || ids.isEmpty) {
+      return const <Video>[];
+    }
+
+    return database.transaction(() async {
+      final predicateVariableCount = _CatalogPredicate(
+        criteria,
+      ).variables.length;
+      final chunkSize = (900 - predicateVariableCount).clamp(1, 900);
+      final byId = <int, Video>{};
+      for (var start = 0; start < ids.length; start += chunkSize) {
+        final end = (start + chunkSize).clamp(0, ids.length);
+        final chunk = ids.sublist(start, end);
+        final predicate = _CatalogPredicate(criteria);
+        final placeholders = chunk.map((_) => '?').join(',');
+        final rows = await database
+            .customSelect(
+              'SELECT v.* FROM videos v ${predicate.whereClause} '
+              'AND v.id IN ($placeholders)',
+              variables: [
+                ...predicate.variables,
+                ...chunk.map(Variable.withInt),
+              ],
+              readsFrom: {
+                database.videos,
+                database.videoTags,
+                database.tagDefinitions,
+              },
+            )
+            .get();
+        for (final row in rows) {
+          final video = database.videos.map(row.data);
+          byId[video.id] = video;
+        }
+      }
+
+      final videos = byId.values.toList(growable: false);
+      videos.sort((a, b) => _compareVideos(a, b, criteria));
+      return videos;
+    });
+  }
+
   Future<CatalogSnapshot> _fetch(CatalogCriteria criteria) async {
     final predicate = _CatalogPredicate(criteria);
     final rowsVariables = <Variable>[
@@ -255,6 +387,23 @@ final class CatalogQueryModule {
         ? 'ASC'
         : 'DESC';
     return 'ORDER BY $column $direction, v.id $direction';
+  }
+
+  int _compareVideos(Video a, Video b, CatalogCriteria criteria) {
+    final value = switch (criteria.sortBy) {
+      SortOption.title => a.title.compareTo(b.title),
+      SortOption.duration => a.duration.compareTo(b.duration),
+      SortOption.addedAt =>
+        (a.fileCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+          b.fileCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      SortOption.size => a.size.compareTo(b.size),
+    };
+    if (value != 0) {
+      return criteria.sortDirection == SortDirection.asc ? value : -value;
+    }
+    final idValue = a.id.compareTo(b.id);
+    return criteria.sortDirection == SortDirection.asc ? idValue : -idValue;
   }
 }
 
@@ -546,6 +695,15 @@ final catalogFetchProvider =
       (ref) => ref.watch(catalogQueryModuleProvider).fetch,
     );
 
+final catalogSelectVideoIdsProvider =
+    Provider<
+      Future<List<int>> Function({
+        required CatalogCriteria criteria,
+        required CatalogSelectionMode mode,
+        required int count,
+      })
+    >((ref) => ref.watch(catalogQueryModuleProvider).selectVideoIds);
+
 enum CatalogAppendPhase { idle, loading, failed }
 
 final class CatalogAppendState {
@@ -727,6 +885,16 @@ final catalogSnapshotProvider =
           .whenData((presentation) => presentation.snapshot),
     );
 
+final selectedVideosProvider = StreamProvider.autoDispose<List<Video>>((ref) {
+  final criteria = ref.watch(catalogBaseCriteriaProvider);
+  final selectedIds = ref.watch(
+    videoSelectionControllerProvider.select((state) => state.selectedIds),
+  );
+  return ref
+      .watch(catalogQueryModuleProvider)
+      .watchSelectedVideos(criteria, selectedIds);
+});
+
 final filteredVideosProvider = Provider.autoDispose<AsyncValue<List<Video>>>((
   ref,
 ) {
@@ -736,15 +904,18 @@ final filteredVideosProvider = Provider.autoDispose<AsyncValue<List<Video>>>((
   final selectedIds = ref.watch(
     videoSelectionControllerProvider.select((state) => state.selectedIds),
   );
+  if (showSelectedOnly) {
+    return ref
+        .watch(selectedVideosProvider)
+        .whenData(
+          (videos) => videos
+              .where((video) => selectedIds.contains(video.id))
+              .toList(growable: false),
+        );
+  }
   return ref
       .watch(catalogSnapshotProvider)
-      .whenData(
-        (snapshot) => showSelectedOnly
-            ? snapshot.loadedVideos
-                  .where((video) => selectedIds.contains(video.id))
-                  .toList(growable: false)
-            : snapshot.loadedVideos,
-      );
+      .whenData((snapshot) => snapshot.loadedVideos);
 });
 
 final selectedVideoCountProvider = Provider.autoDispose<AsyncValue<int>>((ref) {

@@ -41,7 +41,9 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     if (!next.add(videoId)) {
       next.remove(videoId);
     }
-    state = state.copyWith(selectedIds: next, anchorVideoId: videoId);
+    state = next.isEmpty
+        ? const VideoSelectionState()
+        : state.copyWith(selectedIds: next, anchorVideoId: videoId);
   }
 
   void setSelected(int videoId, bool selected) {
@@ -51,7 +53,9 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     } else {
       next.remove(videoId);
     }
-    state = state.copyWith(selectedIds: next, anchorVideoId: videoId);
+    state = next.isEmpty
+        ? const VideoSelectionState()
+        : state.copyWith(selectedIds: next, anchorVideoId: videoId);
   }
 
   void selectWithIntent({
@@ -101,21 +105,37 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
   }
 
   void selectRandom(Iterable<int> videoIds, int count, {Random? random}) {
+    if (count < 0) {
+      throw ArgumentError.value(count, 'count', 'must not be negative');
+    }
+    if (count == 0) {
+      state = const VideoSelectionState();
+      return;
+    }
     final ids = videoIds.toSet().toList(growable: false);
     if (ids.isEmpty) {
       return;
     }
     final requestedCount = count.clamp(0, ids.length).toInt();
-    if (requestedCount == 0) {
-      state = const VideoSelectionState();
-      return;
-    }
 
     final shuffled = List<int>.from(ids)..shuffle(random);
     final selectedIds = shuffled.take(requestedCount).toSet();
     state = VideoSelectionState(
       selectedIds: selectedIds,
       anchorVideoId: shuffled[requestedCount - 1],
+    );
+  }
+
+  /// Replaces the current selection with a bounded catalog result.
+  void replaceSelection(Iterable<int> videoIds) {
+    final ids = videoIds.toSet().toList(growable: false);
+    if (ids.isEmpty) {
+      state = const VideoSelectionState();
+      return;
+    }
+    state = VideoSelectionState(
+      selectedIds: ids.toSet(),
+      anchorVideoId: ids.last,
     );
   }
 
@@ -127,15 +147,32 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     final next = state.selectedIds
         .where((videoId) => !removeSet.contains(videoId))
         .toSet();
-    state = state.copyWith(selectedIds: next);
+    if (next.isEmpty) {
+      state = const VideoSelectionState();
+      return;
+    }
+    state = state.copyWith(
+      selectedIds: next,
+      clearAnchor:
+          state.anchorVideoId != null &&
+          removeSet.contains(state.anchorVideoId),
+    );
   }
 
   void retainIds(Iterable<int> videoIds) {
     final retainSet = videoIds.toSet();
+    final next = state.selectedIds
+        .where((videoId) => retainSet.contains(videoId))
+        .toSet();
+    if (next.isEmpty) {
+      state = const VideoSelectionState();
+      return;
+    }
     state = state.copyWith(
-      selectedIds: state.selectedIds
-          .where((videoId) => retainSet.contains(videoId))
-          .toSet(),
+      selectedIds: next,
+      clearAnchor:
+          state.anchorVideoId != null &&
+          !retainSet.contains(state.anchorVideoId),
     );
   }
 

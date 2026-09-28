@@ -8,6 +8,15 @@ import 'tables.dart';
 
 part 'database.g.dart';
 
+const _sqliteInChunkSize = 900;
+
+Iterable<List<T>> _chunkValues<T>(List<T> values) sync* {
+  for (var start = 0; start < values.length; start += _sqliteInChunkSize) {
+    final end = (start + _sqliteInChunkSize).clamp(0, values.length);
+    yield values.sublist(start, end);
+  }
+}
+
 @DriftDatabase(
   tables: [
     Folders,
@@ -299,9 +308,15 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     return (select(videos)..where((t) => t.folderId.equals(folderId))).get();
   }
 
-  Future<List<Video>> getVideosByIds(List<int> ids) {
-    if (ids.isEmpty) return Future.value(const []);
-    return (select(videos)..where((t) => t.id.isIn(ids))).get();
+  Future<List<Video>> getVideosByIds(List<int> ids) async {
+    if (ids.isEmpty) return const [];
+    final results = <Video>[];
+    for (final chunk in _chunkValues(ids.toSet().toList(growable: false))) {
+      results.addAll(
+        await (select(videos)..where((t) => t.id.isIn(chunk))).get(),
+      );
+    }
+    return results;
   }
 
   Future<Video?> getVideoById(int id) {
@@ -343,18 +358,27 @@ class VideosDao extends DatabaseAccessor<AppDatabase> with _$VideosDaoMixin {
     );
   }
 
-  Future<void> setFavoriteForVideos(List<int> ids, bool isFavorite) {
-    if (ids.isEmpty) return Future.value();
-    return (update(videos)..where((t) => t.id.isIn(ids))).write(
-      VideosCompanion(isFavorite: Value(isFavorite)),
-    );
+  Future<void> setFavoriteForVideos(List<int> ids, bool isFavorite) async {
+    if (ids.isEmpty) return;
+    await transaction(() async {
+      for (final chunk in _chunkValues(ids)) {
+        await (update(videos)..where((t) => t.id.isIn(chunk))).write(
+          VideosCompanion(isFavorite: Value(isFavorite)),
+        );
+      }
+    });
   }
 
   Future<void> deleteVideo(int id) =>
       (delete(videos)..where((t) => t.id.equals(id))).go();
 
-  Future<void> deleteVideosByIds(List<int> ids) {
-    return (delete(videos)..where((t) => t.id.isIn(ids))).go();
+  Future<void> deleteVideosByIds(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await transaction(() async {
+      for (final chunk in _chunkValues(ids)) {
+        await (delete(videos)..where((t) => t.id.isIn(chunk))).go();
+      }
+    });
   }
 
   Future<int> deleteAppleDoubleSidecarVideos() async {
@@ -506,7 +530,11 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
 
   Future<void> deleteAllTagsForVideos(List<int> videoIds) async {
     if (videoIds.isEmpty) return;
-    await (delete(videoTags)..where((t) => t.videoId.isIn(videoIds))).go();
+    await transaction(() async {
+      for (final chunk in _chunkValues(videoIds)) {
+        await (delete(videoTags)..where((t) => t.videoId.isIn(chunk))).go();
+      }
+    });
   }
 
   Future<void> deleteTagFromAllVideos(String tagText) async {
