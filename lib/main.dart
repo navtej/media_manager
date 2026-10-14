@@ -11,6 +11,7 @@ import 'ui/widgets/private_library_auto_lock_lifecycle.dart';
 
 import 'data/providers.dart';
 import 'logic/settings_provider.dart';
+import 'logic/video_conversion_controller.dart';
 
 void main() {
   runApp(const ProviderScope(child: MovieManagerApp()));
@@ -46,12 +47,24 @@ class _MovieManagerAppState extends ConsumerState<MovieManagerApp> {
       return;
     }
 
-    final closeFuture = ref.read(databaseProvider).close();
+    final closeFuture = _stopBackgroundWork().then(
+      (_) => ref.read(databaseProvider).close(),
+    );
     _terminationFuture = closeFuture;
     try {
       await closeFuture;
     } finally {
       _terminationFuture = null;
+    }
+  }
+
+  /// Cancels a running conversion and removes its partial output before the
+  /// database closes.
+  Future<void> _stopBackgroundWork() async {
+    try {
+      await ref.read(videoConversionControllerProvider.notifier).shutdown();
+    } catch (error) {
+      debugPrint('Could not stop video conversions before quitting: $error');
     }
   }
 

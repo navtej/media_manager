@@ -91,3 +91,22 @@ class VideoSummaries extends Table {
   @override
   Set<Column> get primaryKey => {videoId};
 }
+
+/// Every file of a converted video, including its primary (the row whose
+/// absolute path equals `videos.absolute_path`). A video without rows here
+/// was never converted and owns only the file in its `videos` row.
+@TableIndex(name: 'video_versions_video_id', columns: {#videoId})
+class VideoVersions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get videoId =>
+      integer().references(Videos, #id, onDelete: KeyAction.cascade)();
+  TextColumn get absolutePath => text().unique()();
+  IntColumn get width => integer().nullable()();
+  IntColumn get height => integer().nullable()();
+  IntColumn get duration =>
+      integer().withDefault(const Constant(0))(); // in seconds
+  IntColumn get size => integer().withDefault(const Constant(0))(); // in bytes
+  TextColumn get metadataJson => text().withDefault(const Constant('{}'))();
+  BoolColumn get isOriginal => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}

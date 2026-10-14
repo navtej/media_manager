@@ -266,6 +266,52 @@ final class VideoSummariesDaoProvider
 
 String _$videoSummariesDaoHash() => r'ee9a876602283d04ed6194466cdf78d6dc326939';
 
+@ProviderFor(videoVersionsDao)
+final videoVersionsDaoProvider = VideoVersionsDaoProvider._();
+
+final class VideoVersionsDaoProvider
+    extends
+        $FunctionalProvider<
+          VideoVersionsDao,
+          VideoVersionsDao,
+          VideoVersionsDao
+        >
+    with $Provider<VideoVersionsDao> {
+  VideoVersionsDaoProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'videoVersionsDaoProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$videoVersionsDaoHash();
+
+  @$internal
+  @override
+  $ProviderElement<VideoVersionsDao> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  VideoVersionsDao create(Ref ref) {
+    return videoVersionsDao(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(VideoVersionsDao value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<VideoVersionsDao>(value),
+    );
+  }
+}
+
+String _$videoVersionsDaoHash() => r'c170abea822423a37512ced754562fef172c19d2';
+
 @ProviderFor(allUniqueTags)
 final allUniqueTagsProvider = AllUniqueTagsProvider._();
 

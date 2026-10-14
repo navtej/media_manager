@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,7 @@ import '../services/library_access_service.dart';
 import '../services/media_service.dart';
 import 'settings_provider.dart';
 import '../services/thumbnail_service.dart';
+import '../services/video_version_service.dart';
 import 'ai_controller.dart';
 import 'maintenance_controller.dart';
 import 'library_operation_controller.dart';
@@ -152,6 +154,7 @@ class LibraryController extends _$LibraryController {
       final folderDao = ref.read(foldersDaoProvider);
       final videoDao = ref.read(videosDaoProvider);
       final tagDao = ref.read(tagsDaoProvider);
+      final versionDao = ref.read(videoVersionsDaoProvider);
       final db = ref.read(databaseProvider);
       final deletedSidecars = await videoDao.deleteAppleDoubleSidecarVideos();
       if (deletedSidecars > 0) {
@@ -161,8 +164,12 @@ class LibraryController extends _$LibraryController {
       final folders = await folderDao.getAllFolders();
       print('DEBUG: syncAll found ${folders.length} folders');
 
-      final toDelete = <int>[];
-      final toDeleteThumbnailPaths = <String?>[];
+      // Video id -> the primary path that was found missing.
+      final toDelete = <int, String>{};
+      final toDeleteThumbnailPaths = <int, String?>{};
+      final toPromote = <_VersionPromotion>[];
+      // Version row id -> the non-primary path that was found missing.
+      final toPruneVersions = <int, String>{};
       final toMarkOffline = <int>[];
       final toMarkOnline = <int>[];
       final toUpdateSize = <int, int>{};
@@ -170,6 +177,12 @@ class LibraryController extends _$LibraryController {
 
       for (final f in folders) {
         final folderVideos = await videoDao.getVideosByFolder(f.id);
+        final versionsByVideo = <int, List<VideoVersion>>{};
+        for (final row in await versionDao.getVersionsForVideos(
+          folderVideos.map((v) => v.id).toList(growable: false),
+        )) {
+          versionsByVideo.putIfAbsent(row.videoId, () => []).add(row);
+        }
         try {
           await ref
               .read(libraryAccessServiceProvider)
@@ -195,12 +208,51 @@ class LibraryController extends _$LibraryController {
                   for (final v in folderVideos) {
                     if (v.isOffline) toMarkOnline.add(v.id);
 
+                    // Other files of a converted video: prune rows of
+                    // missing files, remember the rest as fallbacks.
+                    final otherVersions = <VideoVersion, FileStat>{};
+                    for (final row
+                        in versionsByVideo[v.id] ?? const <VideoVersion>[]) {
+                      if (row.absolutePath == v.absolutePath) continue;
+                      final stat = await File(row.absolutePath).stat();
+                      if (stat.type == FileSystemEntityType.file) {
+                        otherVersions[row] = stat;
+                      } else {
+                        toPruneVersions[row.id] = row.absolutePath;
+                      }
+                    }
+
                     final file = File(v.absolutePath);
                     final fileExists = await file.exists();
 
                     if (!fileExists) {
-                      toDelete.add(v.id);
-                      toDeleteThumbnailPaths.add(v.thumbnailPath);
+                      if (otherVersions.isNotEmpty) {
+                        final candidates = otherVersions.keys.toList()
+                          ..sort(
+                            (a, b) => compareVideoVersionsForPromotion(
+                              videoVersionInfoFromRow(
+                                a,
+                                primaryPath: v.absolutePath,
+                              ),
+                              videoVersionInfoFromRow(
+                                b,
+                                primaryPath: v.absolutePath,
+                              ),
+                            ),
+                          );
+                        final promoted = candidates.first;
+                        toPromote.add(
+                          _VersionPromotion(
+                            videoId: v.id,
+                            missingPrimaryPath: v.absolutePath,
+                            version: promoted,
+                            size: otherVersions[promoted]!.size,
+                          ),
+                        );
+                        continue;
+                      }
+                      toDelete[v.id] = v.absolutePath;
+                      toDeleteThumbnailPaths[v.id] = v.thumbnailPath;
                       continue;
                     }
 
@@ -228,6 +280,8 @@ class LibraryController extends _$LibraryController {
       }
 
       if (toDelete.isNotEmpty ||
+          toPromote.isNotEmpty ||
+          toPruneVersions.isNotEmpty ||
           toMarkOffline.isNotEmpty ||
           toMarkOnline.isNotEmpty ||
           toUpdateSize.isNotEmpty ||
@@ -236,9 +290,30 @@ class LibraryController extends _$LibraryController {
           'DEBUG: Starting transactional maintenance (Delete: ${toDelete.length}, Offline: ${toMarkOffline.length}, Online: ${toMarkOnline.length}, Size: ${toUpdateSize.length}, Date: ${toUpdateDate.length})',
         );
 
+        final deletedIds = <int>[];
         await db.transaction(() async {
+          // Re-check every row against what was inspected so a concurrent
+          // change can never cause a wrong delete or promotion.
           if (toDelete.isNotEmpty) {
-            await videoDao.deleteVideosByIds(toDelete);
+            final current = await videoDao.getVideosByIds(
+              toDelete.keys.toList(growable: false),
+            );
+            deletedIds.addAll(
+              current
+                  .where((v) => toDelete[v.id] == v.absolutePath)
+                  .map((v) => v.id),
+            );
+            await videoDao.deleteVideosByIds(deletedIds);
+          }
+          for (final promotion in toPromote) {
+            await _applyVersionPromotion(db, promotion);
+          }
+          for (final entry in toPruneVersions.entries) {
+            final row = await versionDao.getVersionByPath(entry.value);
+            if (row == null || row.id != entry.key) continue;
+            final owner = await videoDao.getVideoById(row.videoId);
+            if (owner?.absolutePath == row.absolutePath) continue;
+            await versionDao.deleteVersionById(row.id);
           }
           if (toMarkOffline.isNotEmpty) {
             await videoDao.updateVideosOfflineStatusBatch(toMarkOffline, true);
@@ -255,11 +330,13 @@ class LibraryController extends _$LibraryController {
         });
 
         print('DEBUG: Transactional maintenance completed');
-        if (toDeleteThumbnailPaths.isNotEmpty) {
+        if (deletedIds.isNotEmpty) {
           try {
             await ref
                 .read(thumbnailServiceProvider)
-                .deleteManagedFiles(toDeleteThumbnailPaths);
+                .deleteManagedFiles(
+                  deletedIds.map((id) => toDeleteThumbnailPaths[id]),
+                );
           } catch (error) {
             print(
               'Could not remove thumbnails for stale catalog videos: $error',
@@ -380,6 +457,16 @@ class LibraryController extends _$LibraryController {
 
       final db = ref.read(databaseProvider);
       final existingVideos = await ref.read(videosDaoProvider).getAllVideos();
+      // Clearing drops every version row; remember each converted video's
+      // files so former non-primary versions are re-linked instead of being
+      // imported as separate videos.
+      final versionGroups = _snapshotVersionGroups(
+        existingVideos,
+        await ref.read(videoVersionsDaoProvider).getAllVersions(),
+      );
+      final formerVersionPaths = {
+        for (final group in versionGroups) ...group.nonPrimaryPaths,
+      };
       await db.clearAllData();
       try {
         await ref
@@ -397,6 +484,16 @@ class LibraryController extends _$LibraryController {
       final folderDao = ref.read(foldersDaoProvider);
       final folders = await folderDao.getAllFolders();
       for (final f in folders) {
+        await _scanFolder(f.path, f.id, skipPaths: formerVersionPaths);
+      }
+
+      final orphanedFolderIds = await _relinkVersionGroups(
+        versionGroups,
+        folders,
+      );
+      // Former versions whose primary was not re-imported are imported as
+      // videos of their own rather than dropped.
+      for (final f in folders.where((f) => orphanedFolderIds.contains(f.id))) {
         await _scanFolder(f.path, f.id);
       }
 
@@ -430,7 +527,11 @@ class LibraryController extends _$LibraryController {
     }
   }
 
-  Future<void> _scanFolder(String rootPath, int folderId) async {
+  Future<void> _scanFolder(
+    String rootPath,
+    int folderId, {
+    Set<String> skipPaths = const {},
+  }) async {
     final folder = await ref.read(foldersDaoProvider).getFolderById(folderId);
     if (folder == null) {
       ref
@@ -447,14 +548,22 @@ class LibraryController extends _$LibraryController {
               path: folder.path,
               bookmark: folder.securityScopedBookmark,
             ),
-            action: () => _scanFolderContents(folder.path, folder.id),
+            action: () => _scanFolderContents(
+              folder.path,
+              folder.id,
+              skipPaths: skipPaths,
+            ),
           );
     } on LibraryAccessNeedsRepairException catch (error) {
       ref.read(scanStatusProvider.notifier).setStatus(error.message);
     }
   }
 
-  Future<void> _scanFolderContents(String rootPath, int folderId) async {
+  Future<void> _scanFolderContents(
+    String rootPath,
+    int folderId, {
+    Set<String> skipPaths = const {},
+  }) async {
     if (ref.read(libraryOperationControllerProvider).isMoving) {
       ref.read(scanStatusProvider.notifier).setStatus('Move in progress');
       return;
@@ -464,11 +573,15 @@ class LibraryController extends _$LibraryController {
 
     final scanner = ref.read(scannerServiceProvider);
     final videoDao = ref.read(videosDaoProvider);
+    final versionDao = ref.read(videoVersionsDaoProvider);
 
     // 1. Get existing videos for this folder to skip them (Set for O(1) lookup)
     final existingVideos = await videoDao.getVideosByFolder(folderId);
     await _repairMissingThumbnails(existingVideos);
-    final existingPaths = existingVideos.map((v) => v.absolutePath).toSet();
+    // Version files belong to their video and are never imported on their own.
+    final existingPaths = existingVideos.map((v) => v.absolutePath).toSet()
+      ..addAll(await versionDao.getAllVersionPaths())
+      ..addAll(skipPaths);
 
     int processedCount = 0;
     final List<VideosCompanion> batchCompanions = [];
@@ -481,10 +594,18 @@ class LibraryController extends _$LibraryController {
       // 2. Consume Stream
       await for (final pathBatch in scanner.scanPaths([rootPath])) {
         // Filter new files immediately
-        final newPaths = pathBatch
+        final candidatePaths = pathBatch
             .where((p) => !existingPaths.contains(p))
             .toList();
 
+        if (candidatePaths.isEmpty) continue;
+
+        // A version may have been registered since the scan started.
+        final registered = await versionDao.registeredPaths(candidatePaths);
+        existingPaths.addAll(registered);
+        final newPaths = candidatePaths
+            .where((p) => !registered.contains(p))
+            .toList();
         if (newPaths.isEmpty) continue;
 
         ref
@@ -503,7 +624,7 @@ class LibraryController extends _$LibraryController {
 
           // Commit to DB when batch is full
           if (batchCompanions.length >= dbBatchSize) {
-            await videoDao.insertVideosBatch(batchCompanions);
+            await _insertUnregisteredVideos(batchCompanions);
             batchCompanions.clear();
             // Trigger AI worker to run in background while we continue scanning
             ref.read(aIControllerProvider.notifier).startWorker();
@@ -513,7 +634,7 @@ class LibraryController extends _$LibraryController {
 
       // 3. Commit remaining
       if (batchCompanions.isNotEmpty) {
-        await videoDao.insertVideosBatch(batchCompanions);
+        await _insertUnregisteredVideos(batchCompanions);
         batchCompanions.clear();
         ref.read(aIControllerProvider.notifier).startWorker();
       }
@@ -526,6 +647,141 @@ class LibraryController extends _$LibraryController {
     } finally {
       ref.read(scanStatusProvider.notifier).setStatus('');
     }
+  }
+
+  /// Inserts [companions] except paths that became registered (as a video
+  /// or a version) while they were being prepared.
+  Future<void> _insertUnregisteredVideos(
+    List<VideosCompanion> companions,
+  ) async {
+    final registered = await ref
+        .read(videoVersionsDaoProvider)
+        .registeredPaths(companions.map((c) => c.absolutePath.value));
+    final insertable = registered.isEmpty
+        ? companions
+        : companions
+              .where((c) => !registered.contains(c.absolutePath.value))
+              .toList(growable: false);
+    if (insertable.isEmpty) return;
+    await ref.read(videosDaoProvider).insertVideosBatch(insertable);
+  }
+
+  Future<void> _applyVersionPromotion(
+    AppDatabase db,
+    _VersionPromotion promotion,
+  ) async {
+    final video = await db.videosDao.getVideoById(promotion.videoId);
+    final row = await db.videoVersionsDao.getVersionByPath(
+      promotion.version.absolutePath,
+    );
+    if (video == null ||
+        video.absolutePath != promotion.missingPrimaryPath ||
+        row == null ||
+        row.videoId != video.id) {
+      return;
+    }
+    await (db.update(db.videos)..where((t) => t.id.equals(video.id))).write(
+      VideosCompanion(
+        absolutePath: drift.Value(row.absolutePath),
+        size: drift.Value(promotion.size),
+        duration: drift.Value(row.duration),
+        metadataJson: drift.Value(row.metadataJson),
+        isOffline: const drift.Value(false),
+      ),
+    );
+    final missingRow = await db.videoVersionsDao.getVersionByPath(
+      promotion.missingPrimaryPath,
+    );
+    if (missingRow != null && missingRow.videoId == video.id) {
+      await db.videoVersionsDao.deleteVersionById(missingRow.id);
+    }
+  }
+
+  /// Re-creates the version rows of [groups] under their re-imported primary
+  /// videos. Returns the folders whose former versions lost their primary.
+  Future<Set<int>> _relinkVersionGroups(
+    List<_VersionGroupSnapshot> groups,
+    List<Folder> folders,
+  ) async {
+    final foldersById = {for (final f in folders) f.id: f};
+    final videoDao = ref.read(videosDaoProvider);
+    final db = ref.read(databaseProvider);
+    final orphanedFolderIds = <int>{};
+    for (final group in groups) {
+      final folder = foldersById[group.folderId];
+      if (folder == null) continue;
+      try {
+        await ref
+            .read(libraryAccessServiceProvider)
+            .withAccess(
+              library: LibraryAccessRequest(
+                path: folder.path,
+                bookmark: folder.securityScopedBookmark,
+              ),
+              action: () async {
+                final video = await videoDao.getVideoByPath(group.primaryPath);
+                if (video == null) {
+                  orphanedFolderIds.add(folder.id);
+                  return;
+                }
+                final companions = <VideoVersionsCompanion>[];
+                for (final entry in group.versions) {
+                  if (entry.absolutePath != group.primaryPath &&
+                      !await File(entry.absolutePath).exists()) {
+                    continue;
+                  }
+                  companions.add(
+                    VideoVersionsCompanion.insert(
+                      videoId: video.id,
+                      absolutePath: entry.absolutePath,
+                      width: drift.Value(entry.width),
+                      height: drift.Value(entry.height),
+                      duration: drift.Value(entry.duration),
+                      size: drift.Value(entry.size),
+                      metadataJson: drift.Value(entry.metadataJson),
+                      isOriginal: drift.Value(entry.isOriginal),
+                      createdAt: drift.Value(entry.createdAt),
+                    ),
+                  );
+                }
+                final hasOthers = companions.any(
+                  (c) => c.absolutePath.value != group.primaryPath,
+                );
+                if (!hasOthers) return;
+                if (!companions.any(
+                  (c) => c.absolutePath.value == group.primaryPath,
+                )) {
+                  companions.add(
+                    VideoVersionsCompanion.insert(
+                      videoId: video.id,
+                      absolutePath: video.absolutePath,
+                      duration: drift.Value(video.duration),
+                      size: drift.Value(video.size),
+                      metadataJson: drift.Value(video.metadataJson),
+                      isOriginal: drift.Value(
+                        !companions.any((c) => c.isOriginal.value),
+                      ),
+                    ),
+                  );
+                }
+                await db.batch((b) {
+                  b.insertAll(
+                    db.videoVersions,
+                    companions,
+                    mode: drift.InsertMode.insertOrIgnore,
+                  );
+                });
+              },
+            );
+      } on LibraryAccessNeedsRepairException catch (error) {
+        debugPrint('Could not re-link versions: ${error.message}');
+      } catch (error) {
+        debugPrint(
+          'Could not re-link versions of ${group.primaryPath}: $error',
+        );
+      }
+    }
+    return orphanedFolderIds;
   }
 
   Future<VideosCompanion?> _prepareVideoCompanion(
@@ -691,9 +947,60 @@ bool _isIgnorableScanFileSystemError(FileSystemException error) {
       code == 206; // Windows ERROR_FILENAME_EXCED_RANGE
 }
 
+class _VersionPromotion {
+  const _VersionPromotion({
+    required this.videoId,
+    required this.missingPrimaryPath,
+    required this.version,
+    required this.size,
+  });
+
+  final int videoId;
+  final String missingPrimaryPath;
+  final VideoVersion version;
+  final int size;
+}
+
+class _VersionGroupSnapshot {
+  const _VersionGroupSnapshot({
+    required this.folderId,
+    required this.primaryPath,
+    required this.versions,
+  });
+
+  final int folderId;
+  final String primaryPath;
+  final List<VideoVersion> versions;
+
+  Iterable<String> get nonPrimaryPaths =>
+      versions.map((v) => v.absolutePath).where((path) => path != primaryPath);
+}
+
+List<_VersionGroupSnapshot> _snapshotVersionGroups(
+  List<Video> videos,
+  List<VideoVersion> versions,
+) {
+  final byVideo = <int, List<VideoVersion>>{};
+  for (final version in versions) {
+    byVideo.putIfAbsent(version.videoId, () => []).add(version);
+  }
+  return [
+    for (final video in videos)
+      if (byVideo[video.id] case final rows?)
+        _VersionGroupSnapshot(
+          folderId: video.folderId,
+          primaryPath: video.absolutePath,
+          versions: rows,
+        ),
+  ];
+}
+
 String _operationBlockedMessage(LibraryOperationState state) {
   if (state.isCleaning) {
     return 'Library maintenance in progress';
+  }
+  if (state.isVersioning) {
+    return 'Updating video versions';
   }
   if (state.isScanning) {
     return 'Scan already in progress';

@@ -15,6 +15,7 @@ import 'private_library_controller.dart';
 import 'settings_provider.dart';
 import 'status_message_provider.dart';
 import 'stats_provider.dart';
+import 'video_conversion_controller.dart';
 import 'video_selection_controller.dart';
 
 part 'maintenance_controller.g.dart';
@@ -255,6 +256,9 @@ class MaintenanceController extends _$MaintenanceController {
     final videos = await ref
         .read(videosDaoProvider)
         .getVideosByFolder(folderId);
+    await ref
+        .read(videoConversionControllerProvider.notifier)
+        .cancelForVideos(videos.map((video) => video.id));
     final result = await ref
         .read(managedLibraryServiceProvider)
         .remove(folderId);
@@ -275,6 +279,10 @@ class MaintenanceController extends _$MaintenanceController {
   }
 
   Future<MediaDeletionResult> deleteVideo(int videoId) async {
+    // A running conversion reads the file being deleted; stop it first.
+    await ref.read(videoConversionControllerProvider.notifier).cancelForVideos([
+      videoId,
+    ]);
     final result = await ref
         .read(mediaDeletionServiceProvider)
         .deleteVideo(videoId);
@@ -288,6 +296,9 @@ class MaintenanceController extends _$MaintenanceController {
         .runVideoAction<MediaDeletionBatchResult>(
           videoIds: videoIds,
           action: () async {
+            await ref
+                .read(videoConversionControllerProvider.notifier)
+                .cancelForVideos(videoIds);
             final result = await ref
                 .read(mediaDeletionServiceProvider)
                 .deleteVideos(videoIds);

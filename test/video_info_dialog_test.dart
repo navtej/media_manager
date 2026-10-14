@@ -7,11 +7,16 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:movie_manager/data/database.dart';
 import 'package:movie_manager/data/providers.dart';
 import 'package:movie_manager/logic/settings_provider.dart';
+import 'package:movie_manager/logic/video_conversion_controller.dart';
 import 'package:movie_manager/logic/video_summary_controller.dart';
 import 'package:movie_manager/logic/video_summary_models.dart';
+import 'package:movie_manager/logic/video_version_models.dart';
+import 'package:movie_manager/services/video_version_service.dart';
 import 'package:movie_manager/ui/widgets/video_grid.dart';
 
 void main() {
+  _queuedBadgeTest();
+
   testWidgets('video info dialog closes after grid item rebuilds', (
     tester,
   ) async {
@@ -52,6 +57,20 @@ void main() {
             _TestVideoSummariesDao(db),
           ),
           settingsProvider.overrideWith(_TestSettings.new),
+          videoVersionsProvider.overrideWith(
+            (ref, videoId) => Stream.value([
+              VideoVersionInfo(
+                id: null,
+                videoId: videoId,
+                path: video.absolutePath,
+                dimensions: const VideoDimensions(1280, 720),
+                durationSeconds: video.duration,
+                sizeBytes: video.size,
+                isOriginal: true,
+                isPrimary: true,
+              ),
+            ]),
+          ),
         ],
         child: MacosApp(
           home: MacosWindow(
@@ -83,6 +102,15 @@ void main() {
     await tester.tap(find.byIcon(CupertinoIcons.info));
     await tester.pumpAndSettle();
     expect(find.text('Video Information'), findsOneWidget);
+    expect(find.text('Versions (1)'), findsOneWidget);
+    expect(find.text('720p'), findsOneWidget);
+    expect(find.text('1280×720 · 0:12 · 1.0 KB'), findsOneWidget);
+    expect(find.text('In use'), findsOneWidget);
+    // A single version cannot be deleted from the dialog.
+    expect(
+      find.byKey(const ValueKey('video-info-delete-versions-button')),
+      findsNothing,
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -218,6 +246,94 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+}
+
+void _queuedBadgeTest() {
+  testWidgets('queued conversion badge fits the compact list row', (
+    tester,
+  ) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final now = DateTime(2026, 10, 14);
+    final folder = Folder(
+      id: 1,
+      path: '/Volumes/Test Library',
+      alias: 'Test Library',
+      isPrivate: false,
+      addedAt: now,
+    );
+    final video = Video(
+      id: 1,
+      folderId: folder.id,
+      absolutePath: '/Volumes/Test Library/clip.mp4',
+      title: 'Report filed, At odds, Co',
+      duration: 5601,
+      size: 2000000000,
+      metadataJson: '{}',
+      isOffline: false,
+      isFavorite: false,
+      addedAt: now,
+      fileCreatedAt: now,
+      aiProcessed: false,
+    );
+    final controller = _FixedConversionController(
+      const VideoConversionState(
+        jobs: [
+          VideoConversionJob(
+            id: 1,
+            videoId: 1,
+            title: 'clip',
+            preset: VideoResolutionPreset.hd720,
+            keepSource: true,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          foldersDaoProvider.overrideWithValue(_TestFoldersDao(db, [folder])),
+          tagsDaoProvider.overrideWithValue(_TestTagsDao(db)),
+          videoSummariesDaoProvider.overrideWithValue(
+            _TestVideoSummariesDao(db),
+          ),
+          settingsProvider.overrideWith(_TestSettings.new),
+          videoConversionControllerProvider.overrideWith(() => controller),
+        ],
+        child: MacosApp(
+          home: MacosWindow(
+            child: Center(
+              child: SizedBox(
+                width: 760,
+                height: 80,
+                child: VideoGridItem(
+                  video: video,
+                  presentation: CatalogPresentation.list,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Queued'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+}
+
+class _FixedConversionController extends VideoConversionController {
+  _FixedConversionController(this._initial);
+
+  final VideoConversionState _initial;
+
+  @override
+  VideoConversionState build() => _initial;
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {

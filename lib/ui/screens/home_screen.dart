@@ -16,6 +16,7 @@ import '../widgets/filter_bar.dart';
 import '../../logic/catalog_controller.dart';
 import '../../logic/catalog_selection_controller.dart';
 import '../../logic/status_message_provider.dart';
+import '../../logic/video_conversion_controller.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
 import '../../logic/youtube_url.dart';
@@ -25,6 +26,7 @@ import '../widgets/bulk_selection_toolbar.dart';
 import '../widgets/catalog_presentation.dart';
 import '../widgets/library_filter_menu.dart';
 import '../widgets/show_offline_media_control.dart';
+import '../widgets/video_conversion_dialogs.dart';
 import '../widgets/video_move_dialog.dart';
 import '../library_result_messages.dart';
 import '../movie_manager_visual_system.dart';
@@ -566,10 +568,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 onMove: () {
                                   final selectedVideoIds = _selectedVideoIds();
                                   if (selectedVideoIds.isEmpty) return;
+                                  final converting = ref
+                                      .read(videoConversionControllerProvider)
+                                      .jobs
+                                      .where(
+                                        (job) =>
+                                            job.isActive &&
+                                            selectedVideoIds.contains(
+                                              job.videoId,
+                                            ),
+                                      )
+                                      .map((job) => job.videoId)
+                                      .toSet();
+                                  if (converting.isNotEmpty) {
+                                    ref
+                                        .read(statusMessageProvider.notifier)
+                                        .set(
+                                          'Wait for or cancel the conversion '
+                                          'of ${_videoCountText(converting.length)} '
+                                          'before moving.',
+                                          duration: const Duration(seconds: 5),
+                                        );
+                                    return;
+                                  }
                                   showVideoMoveDialog(
                                     context: context,
                                     ref: ref,
                                     selectedVideoIds: selectedVideoIds,
+                                  );
+                                },
+                                onConvert: () {
+                                  final selectedVideoIds = _selectedVideoIds();
+                                  if (selectedVideoIds.isEmpty) return;
+                                  showVideoConversionDialog(
+                                    context,
+                                    videoIds: selectedVideoIds,
                                   );
                                 },
                                 onDelete: _confirmDeleteSelectedVideos,
@@ -822,7 +855,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         appIcon: const MacosIcon(CupertinoIcons.trash),
         title: const Text('Delete Selected Videos?'),
         message: Text(
-          'This will permanently delete ${_videoCountText(selectedVideoIds.length)} from disk.',
+          'This will permanently delete '
+          '${_videoCountText(selectedVideoIds.length)} from disk, including '
+          'any converted versions.',
         ),
         primaryButton: PushButton(
           controlSize: ControlSize.large,

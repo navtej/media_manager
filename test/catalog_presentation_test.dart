@@ -280,7 +280,11 @@ void main() {
 
     await tester.tap(find.byType(MacosPulldownButton));
     await tester.pumpAndSettle();
-    for (final label in ['Reveal in Finder', 'Clear Tags']) {
+    for (final label in [
+      'Convert to Lower Resolution…',
+      'Reveal in Finder',
+      'Clear Tags',
+    ]) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('Info'), findsNothing);
