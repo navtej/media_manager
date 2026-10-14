@@ -18,13 +18,17 @@ import '../../logic/playback_controller.dart';
 import '../../logic/private_library_controller.dart';
 import '../../logic/settings_provider.dart';
 import '../../logic/status_message_provider.dart';
+import '../../logic/video_conversion_controller.dart';
 import '../../logic/video_summary_controller.dart';
 import '../../logic/video_summary_models.dart';
 import '../../logic/video_selection_controller.dart';
 import '../../services/library_access_service.dart';
+import '../../services/video_version_service.dart';
 import '../movie_manager_visual_system.dart';
 import 'catalog_presentation.dart';
 import 'macos_preference_checkbox.dart';
+import 'video_conversion_dialogs.dart';
+import 'video_info_dialog.dart';
 
 enum _VideoCardContextAction {
   information,
@@ -34,6 +38,7 @@ enum _VideoCardContextAction {
   unfavorite,
   editTags,
   summary,
+  convert,
   delete,
   revealInFinder,
   clearTags,
@@ -404,6 +409,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
                                   ),
                                 ),
                               Positioned(
+                                left: 8,
+                                bottom: 8,
+                                child: _VideoConversionBadge(videoId: video.id),
+                              ),
+                              Positioned(
                                 top: 8,
                                 left: 8,
                                 child: _VideoSelectionCheckbox(
@@ -631,7 +641,9 @@ class _VideoGridItemState extends State<VideoGridItem> {
                               Text('Offline', style: TextStyle(fontSize: 10)),
                             ],
                           )
-                        : null,
+                        : Center(
+                            child: _VideoConversionBadge(videoId: video.id),
+                          ),
                   ),
                   _buildCompactActions(ref),
                 ],
@@ -745,6 +757,13 @@ class _VideoGridItemState extends State<VideoGridItem> {
                   menuAlignment: PulldownMenuAlignment.right,
                   items: [
                     MacosPulldownMenuItem(
+                      title: const Text('Convert to Lower Resolution…'),
+                      onTap: () => showVideoConversionDialog(
+                        context,
+                        videoIds: [widget.video.id],
+                      ),
+                    ),
+                    MacosPulldownMenuItem(
                       title: const Text('Reveal in Finder'),
                       onTap: () => _revealVideo(ref, widget.video),
                     ),
@@ -821,6 +840,11 @@ class _VideoGridItemState extends State<VideoGridItem> {
           ),
         ],
         _contextMenuItem(
+          _VideoCardContextAction.convert,
+          videoConversionIcon,
+          'Convert to Lower Resolution…',
+        ),
+        _contextMenuItem(
           _VideoCardContextAction.delete,
           CupertinoIcons.trash,
           'Delete',
@@ -896,6 +920,9 @@ class _VideoGridItemState extends State<VideoGridItem> {
           if (!mounted) return;
           await _showSummaryDialog(context, ref, video);
         }
+        break;
+      case _VideoCardContextAction.convert:
+        await showVideoConversionDialog(context, videoIds: videoIds);
         break;
       case _VideoCardContextAction.delete:
         if (videos.length == 1) {
@@ -994,7 +1021,8 @@ class _VideoGridItemState extends State<VideoGridItem> {
         appIcon: const MacosIcon(CupertinoIcons.trash),
         title: const Text('Delete Selected Videos?'),
         message: Text(
-          'This will permanently delete ${_videoCountText(videos.length)} from disk.',
+          'This will permanently delete ${_videoCountText(videos.length)} '
+          'from disk, including any converted versions.',
         ),
         primaryButton: PushButton(
           controlSize: ControlSize.large,
@@ -1078,7 +1106,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
     final message = videos
         .map(
           (video) =>
-              '${video.title}\nDrive: ${_getDriveName(video.absolutePath)}\n'
+              '${video.title}\nDrive: ${videoDriveName(video.absolutePath)}\n'
               'Size: ${LibraryStats.formatSize(video.size)}\n'
               'Full Path: ${video.absolutePath}',
         )
@@ -1279,9 +1307,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
       builder: (dialogContext) => MacosAlertDialog(
         appIcon: const MacosIcon(CupertinoIcons.film),
         title: const Text('Delete Video?'),
-        message: Text(
-          'This will permanently delete $videoTitle from your disk.',
-        ),
+        message: _DeleteVideoMessage(videoId: videoId, title: videoTitle),
         primaryButton: PushButton(
           controlSize: ControlSize.large,
           child: const Text('Delete'),
@@ -1331,41 +1357,7 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   void _showInfo(BuildContext context, Video video) {
-    final drive = _getDriveName(video.absolutePath);
-    final sizeStr = LibraryStats.formatSize(video.size);
-
-    showMacosAlertDialog(
-      context: context,
-      builder: (dialogContext) => Focus(
-        autofocus: true,
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.escape ||
-                  event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-            Navigator.of(dialogContext).pop();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: MacosAlertDialog(
-          appIcon: const MacosIcon(CupertinoIcons.info),
-          title: Semantics(
-            container: true,
-            header: true,
-            child: const Text('Video Information'),
-          ),
-          message: SelectableText(
-            'Drive: $drive\nSize: $sizeStr\n\nFull Path: ${video.absolutePath}',
-          ),
-          primaryButton: PushButton(
-            controlSize: ControlSize.large,
-            child: const Text('OK'),
-            onPressed: () => Navigator.of(dialogContext).pop(),
-          ),
-        ),
-      ),
-    );
+    showVideoInfoDialog(context, video: video);
   }
 
   Future<void> _showSummaryDialog(
@@ -1532,14 +1524,6 @@ class _VideoGridItemState extends State<VideoGridItem> {
     );
   }
 
-  String _getDriveName(String path) {
-    if (path.startsWith('/Volumes/')) {
-      final parts = path.split('/');
-      if (parts.length > 2) return parts[2];
-    }
-    return 'System Drive';
-  }
-
   String _formatDuration(int seconds) {
     final d = Duration(seconds: seconds);
     final h = d.inHours;
@@ -1575,6 +1559,89 @@ class _VideoThumbnailContent extends StatelessWidget {
         CupertinoIcons.play_circle,
         color: MacosColors.white,
         size: placeholderIconSize,
+      ),
+    );
+  }
+}
+
+/// Delete confirmation text that also counts the video's other versions,
+/// which are deleted with it.
+class _DeleteVideoMessage extends ConsumerWidget {
+  const _DeleteVideoMessage({required this.videoId, required this.title});
+
+  final int videoId;
+  final String title;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final versionCount =
+        ref.watch(videoVersionsProvider(videoId)).asData?.value.length ?? 0;
+    final others = versionCount - 1;
+    return Text(
+      others > 0
+          ? 'This will permanently delete $title and its $others other '
+                '${others == 1 ? 'version' : 'versions'} from your disk.'
+          : 'This will permanently delete $title from your disk.',
+    );
+  }
+}
+
+/// Shows queue position or progress while a video is being converted.
+class _VideoConversionBadge extends ConsumerWidget {
+  const _VideoConversionBadge({required this.videoId});
+
+  final int videoId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final job = ref.watch(videoConversionJobProvider(videoId));
+    if (job == null || !job.isActive) {
+      return const SizedBox.shrink();
+    }
+    final percent = job.percent;
+    final text = switch (job.status) {
+      VideoConversionStatus.queued => 'Queued',
+      VideoConversionStatus.converting when percent != null => '$percent%',
+      _ => '…',
+    };
+    return MacosTooltip(
+      message: 'Converting to ${job.preset.label}: ${job.statusText}',
+      child: Semantics(
+        label: 'Converting to ${job.preset.label}, ${job.statusText}',
+        excludeSemantics: true,
+        // The list layout gives the badge a narrow fixed column; shrink
+        // rather than overflow there.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: MacosColors.black.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(MovieManagerRadii.control),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    videoConversionIcon,
+                    size: 10,
+                    color: MacosColors.white,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: MacosColors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

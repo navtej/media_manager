@@ -135,12 +135,15 @@ class MediaDeletionService {
     required FoldersDao foldersDao,
     required LibraryAccessService libraryAccessService,
     required MediaDeletionFileSystem fileSystem,
+    VideoVersionsDao? videoVersionsDao,
   }) : _videosDao = videosDao,
        _foldersDao = foldersDao,
        _libraryAccessService = libraryAccessService,
-       _fileSystem = fileSystem;
+       _fileSystem = fileSystem,
+       _videoVersionsDao = videoVersionsDao;
 
   final VideosDao _videosDao;
+  final VideoVersionsDao? _videoVersionsDao;
   final FoldersDao _foldersDao;
   final LibraryAccessService _libraryAccessService;
   final MediaDeletionFileSystem _fileSystem;
@@ -197,6 +200,20 @@ class MediaDeletionService {
         action: () async {
           final MediaDeletionResult result;
           try {
+            // Other versions first; the primary media goes last so a partial
+            // failure leaves the catalog entry for a safe retry.
+            final versions =
+                await _videoVersionsDao?.getVersionsForVideo(videoId) ??
+                const <VideoVersion>[];
+            for (final version in versions) {
+              if (version.absolutePath == resolvedVideo.absolutePath) {
+                continue;
+              }
+              await _fileSystem.deleteArtifacts(
+                mediaPath: version.absolutePath,
+                thumbnailPath: null,
+              );
+            }
             await _fileSystem.deleteArtifacts(
               mediaPath: resolvedVideo.absolutePath,
               thumbnailPath: resolvedVideo.thumbnailPath,
@@ -269,5 +286,6 @@ final mediaDeletionServiceProvider = Provider<MediaDeletionService>((ref) {
     foldersDao: ref.watch(foldersDaoProvider),
     libraryAccessService: ref.watch(libraryAccessServiceProvider),
     fileSystem: ref.watch(mediaDeletionFileSystemProvider),
+    videoVersionsDao: ref.watch(videoVersionsDaoProvider),
   );
 });

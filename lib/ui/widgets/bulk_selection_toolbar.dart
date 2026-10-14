@@ -22,6 +22,7 @@ class BulkSelectionToolbar extends StatefulWidget {
     this.onToggleShowSelectedOnly,
     required this.onPlay,
     required this.onMove,
+    this.onConvert,
     required this.onDelete,
     required this.onFavorite,
     required this.onUnfavorite,
@@ -41,6 +42,7 @@ class BulkSelectionToolbar extends StatefulWidget {
   final VoidCallback? onToggleShowSelectedOnly;
   final VoidCallback? onPlay;
   final VoidCallback? onMove;
+  final VoidCallback? onConvert;
   final VoidCallback? onDelete;
   final VoidCallback? onFavorite;
   final VoidCallback? onUnfavorite;
@@ -351,6 +353,22 @@ class _BulkSelectionToolbarState extends State<BulkSelectionToolbar> {
               label: 'Move',
             ),
           ),
+          if (widget.onConvert != null) ...[
+            const SizedBox(width: 8),
+            PushButton(
+              key: const ValueKey('bulk-convert-button'),
+              controlSize: ControlSize.regular,
+              secondary: true,
+              onPressed: canUseSelection ? widget.onConvert : null,
+              child: const _ToolbarButtonLabel(
+                icon: Icon(
+                  CupertinoIcons.arrow_down_right_arrow_up_left,
+                  size: 16,
+                ),
+                label: 'Convert',
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           PushButton(
             controlSize: ControlSize.regular,

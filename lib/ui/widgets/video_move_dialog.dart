@@ -71,7 +71,7 @@ Future<void> showVideoMoveResultDialog({
     context: context,
     builder: (dialogContext) {
       final dialogSize = _wideCompactDialogSize(dialogContext);
-      return _WideMoveDialogFrame(
+      return WideDialogFrame(
         size: dialogSize,
         appIcon: const MacosIcon(CupertinoIcons.arrow_right_arrow_left),
         title: const Text('Move Results'),
@@ -120,14 +120,18 @@ Size _wideCompactDialogSizeForWindow(Size windowSize) {
   );
 }
 
-class _WideMoveDialogFrame extends StatelessWidget {
-  const _WideMoveDialogFrame({
+/// A macOS alert-styled dialog with a caller-chosen size, for content that
+/// does not fit [MacosAlertDialog]'s fixed 260-point width.
+class WideDialogFrame extends StatelessWidget {
+  const WideDialogFrame({
+    super.key,
     required this.size,
     required this.appIcon,
     required this.title,
     required this.content,
     required this.primaryButton,
     this.secondaryButton,
+    this.frameKey = wideMoveDialogFrameKey,
   });
 
   final Size size;
@@ -136,6 +140,7 @@ class _WideMoveDialogFrame extends StatelessWidget {
   final Widget content;
   final PushButton primaryButton;
   final PushButton? secondaryButton;
+  final Key frameKey;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +171,7 @@ class _WideMoveDialogFrame extends StatelessWidget {
       ),
       shape: const RoundedRectangleBorder(borderRadius: _dialogBorderRadius),
       child: Container(
-        key: wideMoveDialogFrameKey,
+        key: frameKey,
         width: size.width,
         height: size.height,
         padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
@@ -293,7 +298,7 @@ class _VideoMoveDialogState extends ConsumerState<_VideoMoveDialog> {
         preflight?.canMove == true;
     final dialogSize = _wideCompactDialogSize(context);
 
-    return _WideMoveDialogFrame(
+    return WideDialogFrame(
       size: dialogSize,
       appIcon: const MacosIcon(CupertinoIcons.arrow_right_arrow_left),
       title: const Text('Move Selected Videos'),

@@ -49,6 +49,7 @@ class VideoMovePlanItem {
     required this.destinationPath,
     required this.relativePath,
     this.sidecars = const <VideoMoveSidecar>[],
+    this.versions = const <VideoMoveVersionFile>[],
     this.isNoOp = false,
   });
 
@@ -59,6 +60,9 @@ class VideoMovePlanItem {
   final String destinationPath;
   final String relativePath;
   final List<VideoMoveSidecar> sidecars;
+
+  /// The video's other version files (not the primary), moved along with it.
+  final List<VideoMoveVersionFile> versions;
   final bool isNoOp;
 
   VideoMovePlanItem copyWith({List<VideoMoveSidecar>? sidecars}) {
@@ -70,6 +74,7 @@ class VideoMovePlanItem {
       destinationPath: destinationPath,
       relativePath: relativePath,
       sidecars: sidecars ?? this.sidecars,
+      versions: versions,
       isNoOp: isNoOp,
     );
   }
@@ -81,6 +86,18 @@ class VideoMoveSidecar {
     required this.destinationPath,
   });
 
+  final String sourcePath;
+  final String destinationPath;
+}
+
+class VideoMoveVersionFile {
+  const VideoMoveVersionFile({
+    required this.versionId,
+    required this.sourcePath,
+    required this.destinationPath,
+  });
+
+  final int versionId;
   final String sourcePath;
   final String destinationPath;
 }
@@ -195,6 +212,7 @@ List<VideoMovePlanItem> buildVideoMovePlan({
   required List<Video> videos,
   required Map<int, Folder> foldersById,
   required Folder destinationFolder,
+  Map<int, List<VideoVersion>> versionsByVideoId = const {},
 }) {
   return videos
       .map((video) {
@@ -225,6 +243,19 @@ List<VideoMovePlanItem> buildVideoMovePlan({
           sourcePath: video.absolutePath,
           destinationPath: p.join(destinationFolder.path, relativePath),
           relativePath: relativePath,
+          versions: [
+            for (final version
+                in versionsByVideoId[video.id] ?? const <VideoVersion>[])
+              if (version.absolutePath != video.absolutePath)
+                VideoMoveVersionFile(
+                  versionId: version.id,
+                  sourcePath: version.absolutePath,
+                  destinationPath: p.join(
+                    destinationFolder.path,
+                    _relativeVideoPath(version.absolutePath, sourceFolder),
+                  ),
+                ),
+          ],
         );
       })
       .toList(growable: false);
@@ -250,14 +281,12 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     required int destinationFolderId,
   }) async {
     final operationState = ref.read(libraryOperationControllerProvider);
-    if (operationState.isScanning || operationState.isCleaning) {
+    if (operationState.isScanning ||
+        operationState.isCleaning ||
+        operationState.isVersioning) {
       return VideoMovePreflight(
         items: [],
-        errors: [
-          operationState.isCleaning
-              ? 'Cannot move videos while Library maintenance is in progress.'
-              : 'Cannot move videos while a scan is in progress.',
-        ],
+        errors: [_blockedMoveMessage(operationState)],
       );
     }
 
@@ -289,10 +318,20 @@ class VideoMoveController extends Notifier<VideoMoveState> {
 
     late final List<VideoMovePlanItem> plannedItems;
     try {
+      final versionsByVideoId = <int, List<VideoVersion>>{};
+      for (final version
+          in await ref
+              .read(videoVersionsDaoProvider)
+              .getVersionsForVideos(
+                orderedVideos.map((v) => v.id).toList(growable: false),
+              )) {
+        versionsByVideoId.putIfAbsent(version.videoId, () => []).add(version);
+      }
       plannedItems = buildVideoMovePlan(
         videos: orderedVideos,
         foldersById: foldersById,
         destinationFolder: destinationFolder,
+        versionsByVideoId: versionsByVideoId,
       );
     } catch (error) {
       return VideoMovePreflight(items: const [], errors: [error.toString()]);
@@ -304,7 +343,10 @@ class VideoMoveController extends Notifier<VideoMoveState> {
       if (item.video.isOffline) {
         errors.add('${item.video.title} is offline.');
       }
-      if (!_isWithinOrEqual(item.sourcePath, item.sourceFolder.path)) {
+      if (!_isWithinOrEqual(item.sourcePath, item.sourceFolder.path) ||
+          item.versions.any(
+            (v) => !_isWithinOrEqual(v.sourcePath, item.sourceFolder.path),
+          )) {
         errors.add('${item.video.title} is outside its managed source folder.');
       }
     }
@@ -319,7 +361,11 @@ class VideoMoveController extends Notifier<VideoMoveState> {
             ),
             action: () async {
               items = await _attachSubtitleSidecars(items, errors);
-              conflicts = await _findConflicts(items, videoDao);
+              conflicts = await _findConflicts(
+                items,
+                videoDao,
+                ref.read(videoVersionsDaoProvider),
+              );
             },
           );
     } on FileSystemException catch (error) {
@@ -363,11 +409,7 @@ class VideoMoveController extends Notifier<VideoMoveState> {
     final operation = ref.read(libraryOperationControllerProvider.notifier);
     final operationState = ref.read(libraryOperationControllerProvider);
     if (!operation.beginMove()) {
-      final message = operationState.isScanning
-          ? 'Cannot move videos while a scan is in progress.'
-          : operationState.isCleaning
-          ? 'Cannot move videos while Library maintenance is in progress.'
-          : 'Another move is already in progress.';
+      final message = _blockedMoveMessage(operationState);
       return VideoMoveResult(
         failures: [
           VideoMoveItemResult(
@@ -466,20 +508,76 @@ class VideoMoveController extends Notifier<VideoMoveState> {
                     }
                   }
 
-                  await ref
-                      .read(videosDaoProvider)
-                      .updateVideoLocation(
-                        id: item.video.id,
-                        folderId: item.destinationFolder.id,
-                        absolutePath: item.destinationPath,
+                  // Version files go with the video. A failure keeps the
+                  // version's row pointing at wherever its file really is.
+                  final versionFailures = <String>[];
+                  final versionPaths = <int, String>{};
+                  for (final version in item.versions) {
+                    try {
+                      await _moveFile(
+                        sourcePath: version.sourcePath,
+                        destinationPath: version.destinationPath,
                       );
+                      versionPaths[version.versionId] = version.destinationPath;
+                    } catch (error) {
+                      versionFailures.add(
+                        '${p.basename(version.sourcePath)}: $error',
+                      );
+                      if (!await File(version.sourcePath).exists() &&
+                          await File(version.destinationPath).exists()) {
+                        versionPaths[version.versionId] =
+                            version.destinationPath;
+                      }
+                    }
+                  }
+
+                  final db = ref.read(databaseProvider);
+                  await db.transaction(() async {
+                    await db.videosDao.updateVideoLocation(
+                      id: item.video.id,
+                      folderId: item.destinationFolder.id,
+                      absolutePath: item.destinationPath,
+                    );
+                    final versionsDao = db.videoVersionsDao;
+                    final primaryRow = await versionsDao.getVersionByPath(
+                      item.sourcePath,
+                    );
+                    if (primaryRow != null &&
+                        primaryRow.videoId == item.video.id) {
+                      await versionsDao.updateVersionPath(
+                        primaryRow.id,
+                        item.destinationPath,
+                      );
+                    }
+                    for (final entry in versionPaths.entries) {
+                      await versionsDao.updateVersionPath(
+                        entry.key,
+                        entry.value,
+                      );
+                    }
+                  });
 
                   if (removeEmptySourceFolders) {
-                    await _removeEmptyParents(
-                      Directory(p.dirname(item.sourcePath)),
-                      Directory(item.sourceFolder.path),
-                    );
+                    final directories = {
+                      p.dirname(item.sourcePath),
+                      for (final version in item.versions)
+                        p.dirname(version.sourcePath),
+                    };
+                    for (final directory in directories) {
+                      await _removeEmptyParents(
+                        Directory(directory),
+                        Directory(item.sourceFolder.path),
+                      );
+                    }
                   }
+
+                  final problems = [
+                    if (sidecarFailures.isNotEmpty)
+                      'some sidecars failed: ${sidecarFailures.join('; ')}',
+                    if (versionFailures.isNotEmpty)
+                      'some versions stayed in place: '
+                          '${versionFailures.join('; ')}',
+                  ];
 
                   moved.add(
                     VideoMoveItemResult(
@@ -487,9 +585,9 @@ class VideoMoveController extends Notifier<VideoMoveState> {
                       title: item.video.title,
                       sourcePath: item.sourcePath,
                       destinationPath: item.destinationPath,
-                      message: sidecarFailures.isEmpty
+                      message: problems.isEmpty
                           ? 'Moved.'
-                          : 'Moved video, but some sidecars failed: ${sidecarFailures.join('; ')}',
+                          : 'Moved video, but ${problems.join('; ')}',
                     ),
                   );
                   clearFromSelection.add(item.video.id);
@@ -616,13 +714,18 @@ class VideoMoveController extends Notifier<VideoMoveState> {
   Future<List<VideoMoveConflict>> _findConflicts(
     List<VideoMovePlanItem> items,
     VideosDao videoDao,
+    VideoVersionsDao versionsDao,
   ) async {
     final conflicts = <VideoMoveConflict>[];
     final plannedDestinations = <String, int>{};
 
     for (final item in items.where((item) => !item.isNoOp)) {
-      final destinations = <String>[
+      final mediaDestinations = <String>{
         item.destinationPath,
+        ...item.versions.map((v) => v.destinationPath),
+      };
+      final destinations = <String>[
+        ...mediaDestinations,
         ...item.sidecars.map((s) => s.destinationPath),
       ];
       for (final destinationPath in destinations) {
@@ -651,9 +754,14 @@ class VideoMoveController extends Notifier<VideoMoveState> {
           continue;
         }
 
-        if (destinationPath == item.destinationPath) {
+        if (mediaDestinations.contains(destinationPath)) {
           final existing = await videoDao.getVideoByPath(destinationPath);
-          if (existing != null && existing.id != item.video.id) {
+          final existingVersion = await versionsDao.getVersionByPath(
+            destinationPath,
+          );
+          if ((existing != null && existing.id != item.video.id) ||
+              (existingVersion != null &&
+                  existingVersion.videoId != item.video.id)) {
             conflicts.add(
               VideoMoveConflict(
                 videoId: item.video.id,
@@ -673,6 +781,19 @@ final videoMoveControllerProvider =
     NotifierProvider<VideoMoveController, VideoMoveState>(
       VideoMoveController.new,
     );
+
+String _blockedMoveMessage(LibraryOperationState state) {
+  if (state.isScanning) {
+    return 'Cannot move videos while a scan is in progress.';
+  }
+  if (state.isCleaning) {
+    return 'Cannot move videos while Library maintenance is in progress.';
+  }
+  if (state.isVersioning) {
+    return 'Cannot move videos while video versions are being updated.';
+  }
+  return 'Another move is already in progress.';
+}
 
 String _relativeVideoPath(String absolutePath, Folder sourceFolder) {
   if (!_isWithinOrEqual(absolutePath, sourceFolder.path)) {

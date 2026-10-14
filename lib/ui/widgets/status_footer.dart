@@ -5,10 +5,12 @@ import '../../logic/library_controller.dart';
 import '../../logic/ai_controller.dart';
 import '../../logic/status_message_provider.dart';
 import '../../logic/catalog_controller.dart';
+import '../../logic/video_conversion_controller.dart';
 import '../../logic/video_summary_controller.dart';
 import '../../logic/video_move_controller.dart';
 import '../../logic/video_selection_controller.dart';
 import '../movie_manager_visual_system.dart';
+import 'video_conversion_dialogs.dart';
 
 class StatusFooter extends ConsumerWidget {
   const StatusFooter({super.key});
@@ -18,6 +20,13 @@ class StatusFooter extends ConsumerWidget {
     final scanStatus = ref.watch(scanStatusProvider);
     final aiStatus = ref.watch(aIStatusProvider);
     final summaryStatus = ref.watch(videoSummaryStatusProvider);
+    final conversionStatus = ref.watch(videoConversionStatusProvider);
+    final conversionJobCount = ref.watch(
+      videoConversionControllerProvider.select((state) => state.jobs.length),
+    );
+    final activeConversionCount = ref.watch(
+      videoConversionControllerProvider.select((state) => state.activeCount),
+    );
     final moveState = ref.watch(videoMoveControllerProvider);
     final statusMsg = ref.watch(statusMessageProvider);
     final selectedBulkCount = ref.watch(videoSelectionControllerProvider).count;
@@ -74,6 +83,7 @@ class StatusFooter extends ConsumerWidget {
             ] else if (scanStatus.isNotEmpty ||
                 aiStatus.isNotEmpty ||
                 summaryStatus.isNotEmpty ||
+                conversionStatus.isNotEmpty ||
                 moveState.statusMessage.isNotEmpty) ...[
               CupertinoActivityIndicator(radius: 7, color: labelColor),
               const SizedBox(width: 8),
@@ -83,6 +93,7 @@ class StatusFooter extends ConsumerWidget {
                     scanStatus,
                     aiStatus,
                     summaryStatus,
+                    conversionStatus,
                     moveState.statusMessage,
                   ].where((s) => s.isNotEmpty).join(' | '),
                   maxLines: 1,
@@ -96,6 +107,17 @@ class StatusFooter extends ConsumerWidget {
               ),
             ] else
               const Spacer(),
+
+            if (conversionJobCount > 0)
+              MovieManagerIconButton(
+                key: const ValueKey('video-conversion-queue-button'),
+                label: activeConversionCount > 0
+                    ? 'Video conversions ($activeConversionCount active)'
+                    : 'Video conversions',
+                icon: videoConversionIcon,
+                color: activeConversionCount > 0 ? theme.primaryColor : null,
+                onPressed: () => showVideoConversionQueueDialog(context),
+              ),
 
             // Right side: Video counts
             if (statusMsg == null) ...[

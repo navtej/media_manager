@@ -26,8 +26,16 @@ Iterable<List<T>> _chunkValues<T>(List<T> values) sync* {
     TagDefinitions,
     VideoTags,
     VideoSummaries,
+    VideoVersions,
   ],
-  daos: [VideosDao, FoldersDao, LibraryGroupsDao, TagsDao, VideoSummariesDao],
+  daos: [
+    VideosDao,
+    FoldersDao,
+    LibraryGroupsDao,
+    TagsDao,
+    VideoSummariesDao,
+    VideoVersionsDao,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -36,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void>? _closeFuture;
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -129,6 +137,19 @@ class AppDatabase extends _$AppDatabase {
             "WHERE group_name IS NULL OR trim(group_name) = ''",
           );
         }
+        if (from < 11) {
+          final versionTable = await customSelect(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'video_versions'",
+          ).get();
+          if (versionTable.isEmpty) {
+            await m.createTable(videoVersions);
+          }
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS video_versions_video_id '
+            'ON video_versions (video_id)',
+          );
+        }
       },
       beforeOpen: (details) async {
         await customStatement('PRAGMA foreign_keys = ON');
@@ -176,6 +197,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearAllData() async {
     await transaction(() async {
       await customStatement('DELETE FROM tags');
+      await customStatement('DELETE FROM video_versions');
       await customStatement('DELETE FROM videos');
     });
   }
@@ -1074,6 +1096,92 @@ class VideoSummariesDao extends DatabaseAccessor<AppDatabase>
     return (delete(
       videoSummaries,
     )..where((t) => t.videoId.equals(videoId))).go();
+  }
+}
+
+@DriftAccessor(tables: [Videos, VideoVersions])
+class VideoVersionsDao extends DatabaseAccessor<AppDatabase>
+    with _$VideoVersionsDaoMixin {
+  VideoVersionsDao(super.db);
+
+  Future<List<VideoVersion>> getAllVersions() => select(videoVersions).get();
+
+  Future<List<VideoVersion>> getVersionsForVideo(int videoId) {
+    return (select(
+      videoVersions,
+    )..where((t) => t.videoId.equals(videoId))).get();
+  }
+
+  Future<List<VideoVersion>> getVersionsForVideos(List<int> videoIds) async {
+    if (videoIds.isEmpty) return const [];
+    final results = <VideoVersion>[];
+    for (final chunk in _chunkValues(
+      videoIds.toSet().toList(growable: false),
+    )) {
+      results.addAll(
+        await (select(
+          videoVersions,
+        )..where((t) => t.videoId.isIn(chunk))).get(),
+      );
+    }
+    return results;
+  }
+
+  Future<VideoVersion?> getVersionByPath(String path) {
+    return (select(
+      videoVersions,
+    )..where((t) => t.absolutePath.equals(path))).getSingleOrNull();
+  }
+
+  /// Paths of every registered version file (primary or not).
+  Future<Set<String>> getAllVersionPaths() async {
+    final rows = await (selectOnly(
+      videoVersions,
+    )..addColumns([videoVersions.absolutePath])).get();
+    return rows.map((row) => row.read(videoVersions.absolutePath)!).toSet();
+  }
+
+  /// The subset of [paths] already owned by a catalog video, either as a
+  /// `videos.absolute_path` or as a registered version.
+  Future<Set<String>> registeredPaths(Iterable<String> paths) async {
+    final unique = paths.toSet().toList(growable: false);
+    final registered = <String>{};
+    for (final chunk in _chunkValues(unique)) {
+      final videoRows =
+          await (selectOnly(videos)
+                ..addColumns([videos.absolutePath])
+                ..where(videos.absolutePath.isIn(chunk)))
+              .get();
+      registered.addAll(videoRows.map((r) => r.read(videos.absolutePath)!));
+      final versionRows =
+          await (selectOnly(videoVersions)
+                ..addColumns([videoVersions.absolutePath])
+                ..where(videoVersions.absolutePath.isIn(chunk)))
+              .get();
+      registered.addAll(
+        versionRows.map((r) => r.read(videoVersions.absolutePath)!),
+      );
+    }
+    return registered;
+  }
+
+  Future<int> insertVersion(VideoVersionsCompanion version) =>
+      into(videoVersions).insert(version);
+
+  Future<void> updateVersionPath(int id, String absolutePath) {
+    return (update(videoVersions)..where((t) => t.id.equals(id))).write(
+      VideoVersionsCompanion(absolutePath: Value(absolutePath)),
+    );
+  }
+
+  Future<void> deleteVersionById(int id) =>
+      (delete(videoVersions)..where((t) => t.id.equals(id))).go();
+
+  Future<void> deleteVersionsByIds(List<int> ids) async {
+    if (ids.isEmpty) return;
+    for (final chunk in _chunkValues(ids)) {
+      await (delete(videoVersions)..where((t) => t.id.isIn(chunk))).go();
+    }
   }
 }
 

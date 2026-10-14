@@ -49,10 +49,22 @@ class PlaybackController {
     );
   }
 
+  /// Plays one specific file of [video], such as a converted version.
+  Future<bool> playFile(Video video, String path) {
+    return _withLibraryAccess(video, () => _playbackService.playVideo(path));
+  }
+
   Future<void> revealInFinder(Video video) {
     return _withLibraryAccess(
       video,
       () => _naturalLanguageService.openInFinder(video.absolutePath),
+    );
+  }
+
+  Future<void> revealFileInFinder(Video video, String path) {
+    return _withLibraryAccess(
+      video,
+      () => _naturalLanguageService.openInFinder(path),
     );
   }
 

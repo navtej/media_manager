@@ -176,6 +176,129 @@ void main() {
     },
   );
 
+  test('moves version files with their video and updates rows', () async {
+    final fixture = await _MoveFixture.create();
+    addTearDown(fixture.dispose);
+    final versionFile = File(
+      p.join(fixture.sourceVideoFile.parent.path, 'clip [720p].mp4'),
+    );
+    await versionFile.writeAsBytes(const [4, 5]);
+    // A version that cannot be moved: its destination is a directory.
+    final stuckFile = File(
+      p.join(fixture.sourceVideoFile.parent.path, 'clip [480p].mp4'),
+    );
+    await stuckFile.writeAsBytes(const [6]);
+    await Directory(
+      p.join(fixture.destination.path, 'Nested', 'clip [480p].mp4'),
+    ).create(recursive: true);
+    for (final (path, isOriginal) in [
+      (fixture.sourceVideoFile.path, true),
+      (versionFile.path, false),
+      (stuckFile.path, false),
+    ]) {
+      await fixture.db.videoVersionsDao.insertVersion(
+        VideoVersionsCompanion.insert(
+          videoId: fixture.sourceVideo.id,
+          absolutePath: path,
+          isOriginal: drift.Value(isOriginal),
+        ),
+      );
+    }
+
+    final result = (await fixture.container
+        .read(videoMoveControllerProvider.notifier)
+        .moveVideos(
+          videoIds: [fixture.sourceVideo.id],
+          destinationFolderId: fixture.destinationFolder.id,
+        ))!;
+
+    expect(result.movedCount, 1);
+    expect(result.moved.single.message, contains('clip [480p].mp4'));
+    final movedPrimary = p.join(fixture.destination.path, 'Nested', 'clip.mp4');
+    final movedVersion = p.join(
+      fixture.destination.path,
+      'Nested',
+      'clip [720p].mp4',
+    );
+    expect(await File(movedVersion).exists(), isTrue);
+    expect(await versionFile.exists(), isFalse);
+    expect(await stuckFile.exists(), isTrue);
+    final rows = await fixture.db.videoVersionsDao.getVersionsForVideo(
+      fixture.sourceVideo.id,
+    );
+    expect(rows.map((r) => r.absolutePath).toSet(), {
+      movedPrimary,
+      movedVersion,
+      stuckFile.path,
+    });
+    final moved = await fixture.db.videosDao.getVideoById(
+      fixture.sourceVideo.id,
+    );
+    expect(moved?.absolutePath, movedPrimary);
+  });
+
+  test('preflight treats version destinations as conflicts', () async {
+    final fixture = await _MoveFixture.create(addSecondVideo: true);
+    addTearDown(fixture.dispose);
+    final versionFile = File(
+      p.join(fixture.sourceVideoFile.parent.path, 'clip [720p].mp4'),
+    );
+    await versionFile.writeAsBytes(const [4, 5]);
+    await fixture.db.videoVersionsDao.insertVersion(
+      VideoVersionsCompanion.insert(
+        videoId: fixture.sourceVideo.id,
+        absolutePath: versionFile.path,
+      ),
+    );
+    // The destination is registered as a version of another video.
+    await fixture.db.videoVersionsDao.insertVersion(
+      VideoVersionsCompanion.insert(
+        videoId: fixture.secondVideo!.id,
+        absolutePath: p.join(
+          fixture.destination.path,
+          'Nested',
+          'clip [720p].mp4',
+        ),
+      ),
+    );
+
+    final preflight = await fixture.container
+        .read(videoMoveControllerProvider.notifier)
+        .preflightMove(
+          videoIds: [fixture.sourceVideo.id],
+          destinationFolderId: fixture.destinationFolder.id,
+        );
+
+    expect(preflight.canMove, isFalse);
+    expect(
+      preflight.conflicts.single.destinationPath,
+      endsWith('clip [720p].mp4'),
+    );
+    expect(
+      preflight.conflicts.single.message,
+      'Destination is already indexed in the library.',
+    );
+  });
+
+  test('blocks moves while video versions are being updated', () async {
+    final fixture = await _MoveFixture.create();
+    addTearDown(fixture.dispose);
+    final operation = fixture.container.read(
+      libraryOperationControllerProvider.notifier,
+    );
+    expect(operation.beginVersioning(), isTrue);
+
+    final result = (await fixture.container
+        .read(videoMoveControllerProvider.notifier)
+        .moveVideos(
+          videoIds: [fixture.sourceVideo.id],
+          destinationFolderId: fixture.destinationFolder.id,
+        ))!;
+
+    expect(result.failures.single.message, contains('video versions'));
+    operation.endVersioning();
+  });
+
   test('blocks moves while a scan operation is active', () async {
     final fixture = await _MoveFixture.create();
     addTearDown(fixture.dispose);
