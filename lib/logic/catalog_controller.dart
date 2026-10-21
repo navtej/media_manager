@@ -285,6 +285,22 @@ final class CatalogQueryModule {
     });
   }
 
+  /// Orders [videoIds] as the catalog displays them under [criteria].
+  ///
+  /// IDs outside the current filtered pool keep their given order and follow
+  /// the displayed ones.
+  Future<List<int>> orderVideoIds(
+    CatalogCriteria criteria,
+    Iterable<int> videoIds,
+  ) async {
+    final ids = videoIds.toSet().toList(growable: false);
+    final displayed = [
+      for (final video in await fetchSelectedVideos(criteria, ids)) video.id,
+    ];
+    final displayedSet = displayed.toSet();
+    return [...displayed, ...ids.where((id) => !displayedSet.contains(id))];
+  }
+
   Future<CatalogSnapshot> _fetch(CatalogCriteria criteria) async {
     final predicate = _CatalogPredicate(criteria);
     final rowsVariables = <Variable>[

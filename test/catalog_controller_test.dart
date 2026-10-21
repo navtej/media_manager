@@ -173,6 +173,13 @@ void main() {
       );
       final selected = await catalog.fetchSelectedVideos(criteria, [delta.id]);
       expect(selected.map((video) => video.title), ['Delta']);
+
+      final displayedIds = [for (final video in full.loadedVideos) video.id];
+      final ordered = await catalog.orderVideoIds(fixture.criteria(), [
+        -1,
+        ...displayedIds.reversed,
+      ]);
+      expect(ordered, [...displayedIds, -1]);
     },
   );
 

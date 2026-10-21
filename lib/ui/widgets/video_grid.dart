@@ -963,7 +963,12 @@ class _VideoGridItemState extends State<VideoGridItem> {
   }
 
   Future<void> _playVideos(WidgetRef ref, List<Video> videos) async {
-    final videoIds = videos.map((video) => video.id).toList(growable: false);
+    final videoIds = await ref
+        .read(catalogQueryModuleProvider)
+        .orderVideoIds(
+          ref.read(catalogBaseCriteriaProvider),
+          videos.map((video) => video.id),
+        );
     try {
       final opened = await ref
           .read(privateLibraryAccessControllerProvider.notifier)

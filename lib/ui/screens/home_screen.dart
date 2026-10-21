@@ -818,13 +818,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     await _runBulkAction(() async {
       try {
+        final orderedVideoIds = await ref
+            .read(catalogQueryModuleProvider)
+            .orderVideoIds(
+              ref.read(catalogBaseCriteriaProvider),
+              selectedVideoIds,
+            );
         final opened = await ref
             .read(privateLibraryAccessControllerProvider.notifier)
             .runVideoAction<bool>(
-              videoIds: selectedVideoIds,
+              videoIds: orderedVideoIds,
               action: () => ref
                   .read(playbackControllerProvider)
-                  .playPlaylist(selectedVideoIds),
+                  .playPlaylist(orderedVideoIds),
             );
         ref
             .read(statusMessageProvider.notifier)
