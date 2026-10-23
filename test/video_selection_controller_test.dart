@@ -38,6 +38,27 @@ void main() {
     });
   });
 
+  test('bulk selections can switch to show-selected mode', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      videoSelectionControllerProvider.notifier,
+    );
+    controller.replaceSelection([1, 2], showSelectedOnly: true);
+    expect(
+      container.read(videoSelectionControllerProvider).showSelectedOnly,
+      isTrue,
+    );
+
+    controller.clear();
+    controller.selectLoaded([3, 4], showSelectedOnly: true);
+    expect(
+      container.read(videoSelectionControllerProvider).showSelectedOnly,
+      isTrue,
+    );
+  });
+
   test('show-selected mode toggles independently and clear resets it', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);

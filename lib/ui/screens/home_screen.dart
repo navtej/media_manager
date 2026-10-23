@@ -532,7 +532,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             videoSelectionControllerProvider
                                                 .notifier,
                                           )
-                                          .selectLoaded(loadedVideoIds),
+                                          .selectLoaded(
+                                            loadedVideoIds,
+                                            showSelectedOnly: true,
+                                          ),
                                 onSelectRandom: catalogSnapshot.asData == null
                                     ? null
                                     : (count) => ref
