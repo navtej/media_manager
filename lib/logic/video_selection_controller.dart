@@ -95,13 +95,20 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     state = state.copyWith(selectedIds: next, anchorVideoId: videoId);
   }
 
-  Future<void> selectLoaded(Iterable<int> videoIds) async {
+  Future<void> selectLoaded(
+    Iterable<int> videoIds, {
+    bool showSelectedOnly = false,
+  }) async {
     final ids = videoIds.toList(growable: false);
     if (ids.isEmpty) {
       return;
     }
     final next = Set<int>.from(state.selectedIds)..addAll(ids);
-    state = state.copyWith(selectedIds: next, anchorVideoId: ids.last);
+    state = state.copyWith(
+      selectedIds: next,
+      anchorVideoId: ids.last,
+      showSelectedOnly: showSelectedOnly ? true : null,
+    );
   }
 
   void selectRandom(Iterable<int> videoIds, int count, {Random? random}) {
@@ -127,7 +134,10 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
   }
 
   /// Replaces the current selection with a bounded catalog result.
-  void replaceSelection(Iterable<int> videoIds) {
+  void replaceSelection(
+    Iterable<int> videoIds, {
+    bool showSelectedOnly = false,
+  }) {
     final ids = videoIds.toSet().toList(growable: false);
     if (ids.isEmpty) {
       state = const VideoSelectionState();
@@ -136,6 +146,7 @@ class VideoSelectionController extends Notifier<VideoSelectionState> {
     state = VideoSelectionState(
       selectedIds: ids.toSet(),
       anchorVideoId: ids.last,
+      showSelectedOnly: showSelectedOnly,
     );
   }
 

@@ -60,7 +60,9 @@ class CatalogSelectionController extends Notifier<CatalogSelectionState> {
         count: count,
       );
       if (generation != _generation) return;
-      ref.read(videoSelectionControllerProvider.notifier).replaceSelection(ids);
+      ref
+          .read(videoSelectionControllerProvider.notifier)
+          .replaceSelection(ids, showSelectedOnly: true);
       state = const CatalogSelectionState.idle();
       if (ids.length < count) {
         final metric = switch (mode) {
